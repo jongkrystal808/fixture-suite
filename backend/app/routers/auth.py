@@ -7,6 +7,7 @@ Authentication API Routes
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from backend.app.models import user
 from backend.app.models.user import (
     UserCreate,
     UserLogin,
@@ -33,15 +34,6 @@ router = APIRouter(
 
 @router.post("/login", response_model=LoginResponse, summary="使用者登入")
 async def login(user_data: UserLogin):
-    """
-    使用者登入
-
-    - **username**: 使用者工號
-    - **password**: 密碼
-
-    回傳 JWT Token 和使用者資訊
-    """
-    # 查詢使用者
     query = """
         SELECT id, username, password_hash, role, created_at
         FROM users
@@ -57,30 +49,25 @@ async def login(user_data: UserLogin):
                 detail="使用者名稱或密碼錯誤"
             )
 
-        user = result[0]
-        user_id = user[0]
-        username = user[1]
-        password_hash = user[2]
-        role = user[3]
-        created_at = user[4]
+        user = result[0]  # ✅ 正確：取得查詢結果
 
-        # 驗證密碼
+        user_id = user["id"]
+        username = user["username"]
+        password_hash = user["password_hash"]
+        role = user["role"]
+        created_at = user["created_at"]
+
+        # ✅ 驗證密碼
         if not verify_password(user_data.password, password_hash):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="使用者名稱或密碼錯誤"
             )
 
-        # 建立 JWT Token
         access_token = create_access_token(
-            data={
-                "sub": username,
-                "user_id": user_id,
-                "role": role
-            }
+            data={"sub": username, "user_id": user_id, "role": role}
         )
 
-        # 建立回應
         return LoginResponse(
             access_token=access_token,
             token_type="bearer",
@@ -92,8 +79,6 @@ async def login(user_data: UserLogin):
             )
         )
 
-    except HTTPException:
-        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -103,44 +88,31 @@ async def login(user_data: UserLogin):
 
 @router.post("/register", response_model=UserResponse, summary="使用者註冊")
 async def register(user_data: UserCreate):
-    """
-    使用者註冊
 
-    - **username**: 使用者工號 (3-50 字元)
-    - **password**: 密碼 (至少 6 字元)
-    - **role**: 角色 (admin/user，預設 user)
-
-    回傳新建立的使用者資訊
-
-    注意：實際使用時可能需要限制只有管理員可以註冊新使用者
-    """
-    # 檢查使用者名稱是否已存在
     check_query = "SELECT id FROM users WHERE username = %s"
 
     try:
         existing_user = db.execute_query(check_query, (user_data.username,))
-
         if existing_user:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="使用者名稱已存在"
             )
 
-        # 加密密碼 (使用 bcrypt)
         password_hash = get_password_hash(user_data.password)
 
-        # 插入新使用者
         insert_query = """
             INSERT INTO users (username, password_hash, role)
             VALUES (%s, %s, %s)
         """
 
-        user_id = db.insert(
+        # ✅ execute_update 只會回傳 affected_rows，不能得到新 ID
+        # 所以換成 execute_insert
+        user_id = db.execute_insert(
             insert_query,
             (user_data.username, password_hash, user_data.role.value)
         )
 
-        # 查詢新建立的使用者
         query = """
             SELECT id, username, role, created_at
             FROM users
@@ -148,27 +120,24 @@ async def register(user_data: UserCreate):
         """
 
         result = db.execute_query(query, (user_id,))
-
         if not result:
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status_code=500,
                 detail="建立使用者失敗"
             )
 
         user = result[0]
 
         return UserResponse(
-            id=user[0],
-            username=user[1],
-            role=user[2],
-            created_at=user[3]
+            id=user["id"],
+            username=user["username"],
+            role=user["role"],
+            created_at=user["created_at"]
         )
 
-    except HTTPException:
-        raise
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=500,
             detail=f"註冊失敗: {str(e)}"
         )
 

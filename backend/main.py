@@ -4,6 +4,8 @@ Fixture Management System - Main Application
 
 FastAPI 應用程式入口點
 """
+import logging
+logging.basicConfig(level=logging.DEBUG)
 
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse, HTMLResponse
@@ -21,6 +23,8 @@ from backend.app.routers.receipts import router as receipts_router
 from backend.app.routers.returns import router as returns_router
 from backend.app.routers.logs import router as logs_router
 from backend.app.routers.models import router as models_router
+from backend.app.routers.stats import router as stats_router
+from backend.app.routers.users import router as users_router
 
 
 
@@ -177,66 +181,32 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
 
 
-@app.exception_handler(Exception)
-async def general_exception_handler(request: Request, exc: Exception):
-    """
-    處理未捕獲的異常
-    """
-    return JSONResponse(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={
-            "detail": "伺服器內部錯誤",
-            "message": str(exc),
-            "path": str(request.url)
-        }
-    )
+# @app.exception_handler(Exception)
+# async def general_exception_handler(request: Request, exc: Exception):
+#     """
+#     處理未捕獲的異常
+#     """
+#     return JSONResponse(
+#         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#         content={
+#             "detail": "伺服器內部錯誤",
+#             "message": str(exc),
+#             "path": str(request.url)
+#         }
+#     )
 
 
 # ==================== 註冊路由 ====================
 
-# 認證路由
-app.include_router(
-    auth_router,
-    prefix="/api",
-    tags=["認證 Authentication"]
-)
-
-# 治具管理路由
-app.include_router(
-    fixtures_router,
-    prefix="/api",
-    tags=["治具管理 Fixtures"]
-)
-
-# 收料路由
-app.include_router(
-    receipts_router,
-    prefix="/api",
-    tags=["收料管理 Receipts"]
-)
-
-# 退料路由
-app.include_router(
-    returns_router,
-    prefix="/api",
-    tags=["退料管理 Returns"]
-)
-
-# 記錄路由
-app.include_router(
-    logs_router,
-    prefix="/api",
-    tags=["記錄管理 Logs"]
-)
-
-# 機種管理路由
-app.include_router(
-    models_router,
-    prefix="/api",
-    tags=["機種管理 Machine Models"]
-)
-
-
+# Just use /api/v2 as the base
+app.include_router(receipts_router, prefix="/api/v2")
+app.include_router(fixtures_router, prefix="/api/v2")
+app.include_router(returns_router, prefix="/api/v2")
+app.include_router(logs_router, prefix="/api/v2")
+app.include_router(models_router, prefix="/api/v2")
+app.include_router(stats_router, prefix="/api/v2")
+app.include_router(users_router, prefix="/api/v2")
+app.include_router(auth_router, prefix="/api/v2")
 # ==================== 根路由 ====================
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
@@ -402,7 +372,7 @@ async def api_info():
         "version": settings.API_VERSION,
         "status": "running",
         "database": {
-            "host": settings.DATABASE_HOST,
+            "host": settings.DB_HOST,
             "port": settings.DATABASE_PORT,
             "name": settings.DATABASE_NAME,
             "connected": db.check_connection()
@@ -464,6 +434,14 @@ async def list_routes():
             })
     return {"total": len(routes), "routes": routes}
 
+@app.middleware("http")
+async def debug_middleware(request: Request, call_next):
+    try:
+        return await call_next(request)
+    except Exception as e:
+        print("🔥 捕捉到錯誤:", e)
+        raise
+
 
 # ==================== 主程式入口 ====================
 
@@ -479,5 +457,5 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=8000,
         reload=True,  # 開發模式，自動重載
-        log_level="info"
+        log_level="debug"
     )
