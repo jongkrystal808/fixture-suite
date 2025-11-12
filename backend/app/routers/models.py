@@ -138,9 +138,12 @@ async def get_machine_model(model_id: str):
     """
     try:
         query = """
-                SELECT model_id, model_name, note, created_at
+                SELECT model_id   AS model_code, \
+                       model_name AS model_name, \
+                       note       AS note, \
+                       created_at AS created_at
                 FROM machine_models
-                WHERE model_id = %s \
+                WHERE model_id = %s
                 """
 
         result = db.execute_query(query, (model_id,))
@@ -154,11 +157,12 @@ async def get_machine_model(model_id: str):
         row = result[0]
 
         return MachineModelResponse(
-            model_id=row[0],
-            model_name=row[1],
-            note=row[2],
-            created_at=str(row[3]) if row[3] else None
+            model_id=row["model_code"],
+            model_name=row["model_name"],
+            note=row["note"],
+            created_at=str(row["created_at"]) if row["created_at"] else None
         )
+
 
     except HTTPException:
         raise
@@ -187,25 +191,35 @@ async def list_machine_models(
             search_pattern = f"%{search}%"
             params = [search_pattern, search_pattern]
 
-        query = f"""
-            SELECT model_id, model_name, note, created_at
-            FROM machine_models
-            {where_clause}
-            ORDER BY model_id
-        """
+        query = """
+                SELECT model_id AS model_code, model_name, note, created_at
+                FROM machine_models \
+                """
+        if where_clause:
+            query += " " + where_clause
+        query += " ORDER BY created_at DESC LIMIT %s OFFSET %s"
 
+        params.extend([100, 0])  # 預設 limit/offset，也可改成實際變數
         result = db.execute_query(query, tuple(params))
 
+        # ✅ 防呆：確保 result 是 list
+        if not isinstance(result, (list, tuple)):
+            raise HTTPException(status_code=500, detail="資料庫查詢回傳格式錯誤")
+
         models = []
-        for row in result:
-            models.append(MachineModelResponse(
-                model_id=row[0],
-                model_name=row[1],
-                note=row[2],
-                created_at=str(row[3]) if row[3] else None
-            ))
+        for row in result or []:
+            try:
+                models.append(MachineModelResponse(
+                    model_id=row["model_code"],
+                    model_name=row["model_name"],
+                    note=row["note"],
+                    created_at=str(row["created_at"]) if row["created_at"] else None
+                ))
+            except Exception as e:
+                print(f"⚠️ [list_machine_models] 解析行失敗: {row} - {e}")
 
         return models
+
 
     except Exception as e:
         raise HTTPException(
@@ -290,7 +304,8 @@ async def get_max_stations(model_id: str):
                 detail=f"機種 {model_id} 不存在"
             )
 
-        model_name = model_result[0][1]
+        model_name = model_result[0]["model_name"]
+
 
         # 查詢機種的所有站點
         stations_query = """
@@ -314,9 +329,9 @@ async def get_max_stations(model_id: str):
 
         # 對每個站點計算最大開站數
         for station_row in stations_result:
-            station_id = station_row[0]
-            station_code = station_row[1]
-            station_name = station_row[2]
+            station_id = station_row["station_id"]
+            station_code = station_row["station_code"]
+            station_name = station_row["station_name"]
 
             # 查詢此站點需要的所有治具及其需求量和庫存量
             requirements_query = """
@@ -353,11 +368,11 @@ async def get_max_stations(model_id: str):
 
             # 找出瓶頸治具（最大開站數最小的治具）
             bottleneck = requirements_result[0]
-            fixture_id = bottleneck[0]
-            fixture_name = bottleneck[1]
-            required_qty = bottleneck[2]
-            available_qty = bottleneck[3]
-            max_stations = int(bottleneck[4])
+            fixture_id = bottleneck["fixture_id"]
+            fixture_name = bottleneck["fixture_name"]
+            required_qty = bottleneck["required_qty"]
+            available_qty = bottleneck["available_qty"]
+            max_stations = int(bottleneck["max_stations"])
 
             stations.append(MaxStationResult(
                 station_id=station_id,
@@ -421,7 +436,7 @@ async def get_station_requirements(
                 detail=f"機種 {model_id} 或站點 {station_id} 不存在"
             )
 
-        model_name = check_result[0][0]
+        model_name = check_result[0]["model_name"]
         station_code = check_result[0][1]
         station_name = check_result[0][2]
 

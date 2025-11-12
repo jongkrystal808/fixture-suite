@@ -88,12 +88,6 @@
 
     <!-- 儀表板 -->
     <section id="tab-dashboard" class="space-y-6">
-      <div class="card p-4">
-        <div class="flex items-center justify-between">
-          <h3 class="font-semibold">快速連結</h3>
-          <button class="btn btn-ghost text-xs" onclick="openLogin()">開啟登入介面</button>
-        </div>
-      </div>
       <div class="grid md:grid-cols-3 gap-4">
         <div class="card p-5">
           <div class="flex items-center justify-between">
@@ -147,31 +141,72 @@
       </div>
     </section>
 
-    <!-- 收料登記 -->
+       <!-- 收料登記 -->
     <section id="tab-receive" class="hidden space-y-4">
       <div class="card p-5 space-y-4">
         <h3 class="font-semibold">收料表單</h3>
-        <div class="grid md:grid-cols-5 gap-3">
-          <div class="field"><label class="label-xs">治具</label><input id="rcvFixture" class="input" placeholder="例如:JIG-001 或自由輸入" /></div>
-          <div class="field"><label class="label-xs">LOT No.</label><input id="rcvLot" class="input" placeholder="例如: L240915A" /></div>
-          <div class="field"><label class="label-xs">數量</label><input id="rcvQty" type="number" class="input" placeholder="0" /></div>
-          <div class="field"><label class="label-xs">日期時間</label><input id="rcvDate" type="datetime-local" class="input" /></div>
-          <div class="flex items-end"><button class="btn btn-primary w-full" onclick="addReceipt()">確認收料</button></div>
+
+        <!-- 類型切換 -->
+        <div class="grid md:grid-cols-4 gap-3">
+          <div class="field">
+            <label class="label-xs">收料類型</label>
+            <select id="rcvType" class="input" onchange="toggleReceiptType()">
+              <option value="batch">批量收料 (使用流水號起訖)</option>
+              <option value="individual">少量收料 (輸入序號列表)</option>
+            </select>
+          </div>
+          <div class="field"><label class="label-xs">廠商</label><input id="rcvVendor" class="input" placeholder="例如：協力廠A" /></div>
+          <div class="field"><label class="label-xs">單號</label><input id="rcvOrder" class="input" placeholder="例如：PO20251101" /></div>
+          <div class="field"><label class="label-xs">治具編號</label><input id="rcvFixture" class="input" placeholder="例如：JIG-001" /></div>
         </div>
+
+        <!-- 批量模式 -->
+        <div id="batchFields" class="grid md:grid-cols-3 gap-3 mt-2">
+          <div class="field"><label class="label-xs">流水號起始</label><input id="rcvSerialStart" class="input" placeholder="例如：HF31A25900010" /></div>
+          <div class="field"><label class="label-xs">流水號結束</label><input id="rcvSerialEnd" class="input" placeholder="例如：HF31A25900050" /></div>
+          <div class="field"><label class="label-xs">備註</label><input id="rcvNote" class="input" placeholder="例如：首批測試件" /></div>
+        </div>
+
+        <!-- 少量模式 -->
+        <div id="individualFields" class="hidden mt-2">
+          <div class="field">
+            <label class="label-xs">序號列表 (以逗號分隔)</label>
+            <textarea id="rcvSerials" class="input" rows="2" placeholder="例如：HF31A25900010, HF31A25900011, HF31A25900012"></textarea>
+          </div>
+          <div class="field"><label class="label-xs">備註</label><input id="rcvNoteInd" class="input" placeholder="例如：抽樣件" /></div>
+        </div>
+
+        <div class="flex items-end justify-end mt-2">
+          <button class="btn btn-primary w-40" onclick="addReceipt()">確認收料</button>
+        </div>
+
+        <!-- 匯入/範本/搜尋區 -->
         <div class="flex items-center gap-2 pt-2">
           <label class="btn btn-ghost cursor-pointer">
             <input id="rcvCsv" type="file" accept=".xlsx,.csv" class="hidden" onchange="handleReceiptCsv(this)" /> 匯入 Excel/CSV
           </label>
           <button class="btn btn-ghost" onclick="downloadCSV('receipts_template.csv', sampleTemplateCSV('receipt'))">下載範本</button>
           <div class="ml-auto flex items-center gap-2">
-            <input id="rcvSearch" class="w-56 input text-sm" placeholder="搜尋(治具/LOT)" oninput="renderReceipts()" />
+            <input id="rcvSearch" class="w-56 input text-sm" placeholder="搜尋(治具/單號)" oninput="renderReceipts()" />
             <span class="text-xs text-gray-500">共 <span id="rcvCount">0</span> 筆</span>
           </div>
         </div>
+
+        <!-- 表格展示 -->
         <div class="overflow-auto">
           <table class="min-w-full text-sm">
             <thead class="text-left text-gray-500">
-              <tr><th class="py-2 pr-4">日期時間</th><th class="py-2 pr-4">治具</th><th class="py-2 pr-4">LOT</th><th class="py-2 pr-4">數量</th><th class="py-2 pr-4">操作</th></tr>
+              <tr>
+                <th class="py-2 pr-4">日期時間</th>
+                <th class="py-2 pr-4">類型</th>
+                <th class="py-2 pr-4">廠商</th>
+                <th class="py-2 pr-4">單號</th>
+                <th class="py-2 pr-4">治具</th>
+                <th class="py-2 pr-4">流水號起訖 / 序號列表</th>
+                <th class="py-2 pr-4">收料人員</th>
+                <th class="py-2 pr-4">備註</th>
+                <th class="py-2 pr-4">操作</th>
+              </tr>
             </thead>
             <tbody id="rcvTable"></tbody>
           </table>
@@ -179,59 +214,198 @@
       </div>
     </section>
 
-    <!-- 退料登記 -->
+
+        <!-- 退料登記 -->
     <section id="tab-return" class="hidden space-y-4">
       <div class="card p-5 space-y-4">
         <h3 class="font-semibold">退料表單</h3>
-        <div class="grid md:grid-cols-5 gap-3">
-          <div class="field"><label class="label-xs">治具</label><input id="retFixture" class="input" placeholder="例如:JIG-001 或自由輸入" /></div>
-          <div class="field"><label class="label-xs">LOT No.</label><input id="retLot" class="input" placeholder="例如: L240915A" /></div>
-          <div class="field"><label class="label-xs">數量(不可大於收料總量)</label><input id="retQty" type="number" class="input" placeholder="0" /></div>
-          <div class="field"><label class="label-xs">日期時間</label><input id="retDate" type="datetime-local" class="input" /></div>
-          <div class="flex items-end"><button class="btn btn-primary w-full" onclick="addReturn()">確認退料</button></div>
+
+        <!-- 類型切換 -->
+        <div class="grid md:grid-cols-4 gap-3">
+          <div class="field">
+            <label class="label-xs">退料類型</label>
+            <select id="retType" class="input" onchange="toggleReturnType()">
+              <option value="batch">批量退料 (使用流水號起訖)</option>
+              <option value="individual">少量退料 (輸入序號列表)</option>
+            </select>
+          </div>
+          <div class="field"><label class="label-xs">廠商</label><input id="retVendor" class="input" placeholder="例如：協力廠A" /></div>
+          <div class="field"><label class="label-xs">單號</label><input id="retOrder" class="input" placeholder="例如：PO20251101" /></div>
+          <div class="field"><label class="label-xs">治具編號</label><input id="retFixture" class="input" placeholder="例如：JIG-001" /></div>
         </div>
+
+        <!-- 批量模式 -->
+        <div id="retBatchFields" class="grid md:grid-cols-3 gap-3 mt-2">
+          <div class="field"><label class="label-xs">流水號起始</label><input id="retSerialStart" class="input" placeholder="例如：HF31A25900010" /></div>
+          <div class="field"><label class="label-xs">流水號結束</label><input id="retSerialEnd" class="input" placeholder="例如：HF31A25900050" /></div>
+          <div class="field"><label class="label-xs">備註</label><input id="retNote" class="input" placeholder="例如：批量退料" /></div>
+        </div>
+
+        <!-- 少量模式 -->
+        <div id="retIndividualFields" class="hidden mt-2">
+          <div class="field">
+            <label class="label-xs">序號列表 (以逗號分隔)</label>
+            <textarea id="retSerials" class="input" rows="2" placeholder="例如：HF31A25900010, HF31A25900011, HF31A25900012"></textarea>
+          </div>
+          <div class="field"><label class="label-xs">備註</label><input id="retNoteInd" class="input" placeholder="例如：抽樣件退回" /></div>
+        </div>
+
+        <div class="flex items-end justify-end mt-2">
+          <button class="btn btn-primary w-40" onclick="addReturn()">確認退料</button>
+        </div>
+
+        <!-- 匯入/範本/搜尋區 -->
         <div class="flex items-center gap-2 pt-2">
-          <label class="btn btn-ghost cursor-pointer"><input id="retCsv" type="file" accept=".xlsx,.csv" class="hidden" onchange="handleReturnCsv(this)" /> 匯入 Excel/CSV</label>
+          <label class="btn btn-ghost cursor-pointer">
+            <input id="retCsv" type="file" accept=".xlsx,.csv" class="hidden" onchange="handleReturnCsv(this)" /> 匯入 Excel/CSV
+          </label>
           <button class="btn btn-ghost" onclick="downloadCSV('returns_template.csv', sampleTemplateCSV('return'))">下載範本</button>
           <div class="ml-auto flex items-center gap-2">
-            <input id="retSearch" class="w-56 input text-sm" placeholder="搜尋(治具/LOT)" oninput="renderReturns()" />
+            <input id="retSearch" class="w-56 input text-sm" placeholder="搜尋(治具/單號)" oninput="renderReturns()" />
             <span class="text-xs text-gray-500">共 <span id="retCount">0</span> 筆</span>
           </div>
         </div>
+
+        <!-- 表格展示 -->
         <div class="overflow-auto">
           <table class="min-w-full text-sm">
             <thead class="text-left text-gray-500">
-              <tr><th class="py-2 pr-4">日期時間</th><th class="py-2 pr-4">治具</th><th class="py-2 pr-4">LOT</th><th class="py-2 pr-4">數量</th><th class="py-2 pr-4">操作</th></tr>
+              <tr>
+                <th class="py-2 pr-4">日期時間</th>
+                <th class="py-2 pr-4">類型</th>
+                <th class="py-2 pr-4">廠商</th>
+                <th class="py-2 pr-4">單號</th>
+                <th class="py-2 pr-4">治具</th>
+                <th class="py-2 pr-4">流水號起訖 / 序號列表</th>
+                <th class="py-2 pr-4">退料人員</th>
+                <th class="py-2 pr-4">備註</th>
+                <th class="py-2 pr-4">操作</th>
+              </tr>
             </thead>
             <tbody id="retTable"></tbody>
           </table>
         </div>
       </div>
     </section>
-
-    <!-- 查詢 -->
+        <!-- 查詢模塊 -->
     <section id="tab-query" class="hidden space-y-4">
       <div class="card p-5 space-y-4">
-        <div class="grid md:grid-cols-5 gap-3">
-          <div class="field"><label class="label-xs">治具名稱</label><input id="qFixture" class="input" placeholder="如:JIG-001" /></div>
-          <div class="field"><label class="label-xs">機種</label><select id="qModel" class="input"><option value="">全部</option></select></div>
-          <div class="field"><label class="label-xs">位置/儲位</label><input id="qLoc" class="input" placeholder="如:A-01-03" /></div>
-          <div class="field"><label class="label-xs">負責人</label><select id="qOwner" class="input"></select></div>
-          <div class="flex items-end gap-2"><button class="btn btn-primary w-full" onclick="applyQuery()">查詢</button></div>
+        <h3 class="font-semibold text-lg">治具／機種查詢</h3>
+
+        <!-- 切換查詢類型 -->
+        <div class="flex gap-4 items-center">
+          <label class="font-semibold">查詢類型：</label>
+          <select id="queryType" class="input w-60" onchange="switchQueryType()">
+            <option value="fixture">治具查詢</option>
+            <option value="model">機種查詢</option>
+          </select>
         </div>
-        <div class="overflow-auto">
-          <table class="min-w-full text-sm">
-            <thead class="text-left text-gray-500">
-              <tr><th class="py-2 pr-4">圖片</th><th class="py-2 pr-4">治具</th><th class="py-2 pr-4">機種</th><th class="py-2 pr-4">儲位</th><th class="py-2 pr-4">最大開站量</th><th class="py-2 pr-4">狀態</th><th class="py-2 pr-4">操作</th></tr>
-            </thead>
-            <tbody id="queryTable"></tbody>
-          </table>
+
+        <!-- ============================= -->
+        <!-- 🔹 治具查詢區 -->
+        <!-- ============================= -->
+        <div id="fixtureQueryArea" class="space-y-3">
+          <div class="flex gap-3">
+            <input id="fixtureSearch" class="input w-64" placeholder="輸入治具編號或名稱" oninput="loadFixturesQuery()" />
+            <select id="fixtureStatus" class="input w-40" onchange="loadFixturesQuery()">
+              <option value="">全部狀態</option>
+              <option value="正常">正常</option>
+              <option value="返還">返還</option>
+              <option value="報廢">報廢</option>
+            </select>
+            <button class="btn btn-primary" onclick="loadFixturesQuery()">查詢</button>
+          </div>
+
+          <div class="overflow-x-auto border rounded-lg shadow-sm">
+            <table class="min-w-full text-sm text-center border-collapse">
+              <thead class="text-gray-700 bg-gray-50 border-b">
+                <tr>
+                  <th class="py-2 px-4 w-24">治具編號</th>
+                  <th class="py-2 px-4 w-32">名稱</th>
+                  <th class="py-2 px-4 w-32">類型</th>
+                  <th class="py-2 px-4 w-44">庫存(自購/客供/總)</th>
+                  <th class="py-2 px-4 w-24">狀態</th>
+                  <th class="py-2 px-4 w-24">儲位</th>
+                  <th class="py-2 px-4 w-32">負責人</th>
+                  <th class="py-2 px-4 w-48">備註</th>
+                </tr>
+              </thead>
+              <tbody id="fixtureTable" class="divide-y divide-gray-100 text-gray-800"></tbody>
+            </table>
+          </div>
         </div>
-        <div class="flex justify-end gap-2">
-          <button class="btn btn-ghost" onclick="downloadCSV('fixtures_query.csv', toCSV(mockFixtures))">匯出查詢結果</button>
+
+        <!-- ============================= -->
+        <!-- 🔹 機種查詢區 -->
+        <!-- ============================= -->
+        <div id="modelQueryArea" class="hidden space-y-3">
+          <div class="flex gap-3">
+            <input id="modelSearch" class="input w-64" placeholder="輸入機種代碼或名稱" oninput="loadModelsQuery()" />
+            <button class="btn btn-primary" onclick="loadModelsQuery()">查詢</button>
+          </div>
+
+          <div class="overflow-x-auto border rounded-lg shadow-sm">
+            <table class="min-w-full text-sm text-center border-collapse">
+              <thead class="text-gray-700 bg-gray-50 border-b">
+                <tr>
+                  <th class="py-2 px-4 w-32">機種代碼</th>
+                  <th class="py-2 px-4 w-40">名稱</th>
+                  <th class="py-2 px-4 w-64">備註</th>
+                  <th class="py-2 px-4 w-24">操作</th>
+                </tr>
+              </thead>
+              <tbody id="modelTable" class="divide-y divide-gray-100 text-gray-800"></tbody>
+            </table>
+          </div>
+
+          <!-- ============================= -->
+          <!-- 🔹 顯示最大開站數 -->
+          <!-- ============================= -->
+          <div id="maxStationArea" class="hidden mt-5">
+            <h4 class="font-semibold mb-2">最大開站數</h4>
+            <div class="overflow-x-auto border rounded-lg shadow-sm">
+              <table class="min-w-full text-sm text-center border-collapse">
+                <thead class="text-gray-700 bg-gray-50 border-b">
+                  <tr>
+                    <th class="py-2 px-4 w-32">站點代碼</th>
+                    <th class="py-2 px-4 w-40">站點名稱</th>
+                    <th class="py-2 px-4 w-32">最大開站數</th>
+                    <th class="py-2 px-4 w-40">瓶頸治具</th>
+                    <th class="py-2 px-4 w-40">可用/需求數</th>
+                  </tr>
+                </thead>
+                <tbody id="maxStationTable" class="divide-y divide-gray-100 text-gray-800"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- ============================= -->
+          <!-- 🔹 顯示治具需求明細 -->
+          <!-- ============================= -->
+          <div id="stationDetailArea" class="hidden mt-5">
+            <h4 class="font-semibold mb-2">
+              治具需求明細：<span id="stationDetailTitle" class="text-indigo-600"></span>
+            </h4>
+            <div class="overflow-x-auto border rounded-lg shadow-sm">
+              <table class="min-w-full text-sm text-center border-collapse">
+                <thead class="text-gray-700 bg-gray-50 border-b">
+                  <tr>
+                    <th class="py-2 px-4 w-32">治具編號</th>
+                    <th class="py-2 px-4 w-48">治具名稱</th>
+                    <th class="py-2 px-4 w-24">需求數量</th>
+                    <th class="py-2 px-4 w-24">可用數量</th>
+                    <th class="py-2 px-4 w-32">可支援站數</th>
+                  </tr>
+                </thead>
+                <tbody id="stationDetailTable" class="divide-y divide-gray-100 text-gray-800"></tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
     </section>
+
+
 
     <!-- 治具情況統計(新增分頁) -->
     <section id="tab-stats" class="hidden space-y-4">
@@ -373,7 +547,7 @@
           <div class="field"><label class="label-xs">治具</label><select id="logFixture" class="input"></select></div>
           <div class="field"><label class="label-xs">區間(起)</label><input id="logFrom" type="date" class="input" /></div>
           <div class="field"><label class="label-xs">區間(迄)</label><input id="logTo" type="date" class="input" /></div>
-          <div class="field"><label class="label-xs">類型</label><select id="logType" class="input"><option value="all">全部</option><option value="use">使用</option><option value="replace">更換</option></select></div>
+          <div class="field"><label class="label-xs">類型</label><select id="logType" class="input"><option value="use">使用</option><option value="replace">更換</option></select></div>
           <div class="flex items-end gap-2"><button class="btn btn-primary w-full" onclick="toast('已套用篩選(模擬)')">套用</button></div>
         </div>
 
@@ -607,6 +781,7 @@
   <script src="/web/js/calculations.js"></script>
   <script src="/web/js/ui-render.js"></script>
   <script src="/web/js/auth.js"></script>
+  <script src="/web/js/api-users.js"></script>
   <script src="/web/js/admin.js"></script>
   <script src="/web/js/app-main.js"></script>
 

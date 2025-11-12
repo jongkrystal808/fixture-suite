@@ -149,10 +149,10 @@ async def get_current_user(
         user = result[0]
 
         return {
-            "id": user[0],
-            "username": user[1],
-            "role": user[2],
-            "created_at": user[3]
+            "id": user["id"],
+            "username": user["username"],
+            "role": user["role"],
+            "created_at": user["created_at"]
         }
 
     except Exception as e:
@@ -274,10 +274,10 @@ async def get_current_user_optional(
         user = result[0]
 
         return {
-            "id": user[0],
-            "username": user[1],
-            "role": user[2],
-            "created_at": user[3]
+            "id": user["id"],
+            "username": user["username"],
+            "role": user["role"],
+            "created_at": user["created_at"]
         }
 
     except Exception:

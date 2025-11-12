@@ -26,23 +26,24 @@ async function api(path, opts = {}) {
   const token = localStorage.getItem('auth_token');
   const headers = {
     'Content-Type': 'application/json',
-    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    ...(opts.headers || {})
   };
 
-  const fullPath = '/api/v2' + path;
-  const res = await fetch(String(window.API_BASE || '') + fullPath, {
-    headers,
-    ...opts
+  const res = await fetch(apiURL(path), {
+    ...opts,
+    headers
   });
-  
+
   if (!res.ok) {
     const txt = await res.text().catch(() => '');
     throw new Error(`API ${path} failed: ${res.status} ${txt}`);
   }
-  
+
   const ct = res.headers.get('content-type') || '';
   return ct.includes('json') ? res.json() : res.text();
 }
+
 
 /**
  * JSON API 請求（相容舊版）

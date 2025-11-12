@@ -5,8 +5,8 @@ Receipt API Routes
 提供收料相關的 API 端點
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Depends
+from typing import List, Dict, Any, Optional
 
 from backend.app.models.receipt import (
     ReceiptCreate,
@@ -18,6 +18,7 @@ from backend.app.dependencies import get_current_user, get_current_username
 from backend.app.database import db
 from backend.app.utils.validators import parse_serial_list
 
+
 # 建立路由器
 router = APIRouter(
     prefix="/receipts",
@@ -25,11 +26,14 @@ router = APIRouter(
 )
 
 
+
 @router.post("", response_model=ReceiptResponse, summary="建立收料記錄")
 async def create_receipt(
         receipt_data: ReceiptCreate,
         current_username: str = Depends(get_current_username)
 ):
+    print("🔍 current_username =", current_username)
+
     """
     建立收料記錄
 
@@ -89,26 +93,28 @@ async def create_receipt(
 
         # 插入收料記錄
         insert_query = """
-                       INSERT INTO receipts (type, vendor, order_no, fixture_code, \
-                                             serial_start, serial_end, serials, \
-                                             operator, note) \
+                       INSERT INTO receipts
+                       (type, vendor, order_no, fixture_code,
+                        serial_start, serial_end, serials,
+                        operator, note)
                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) \
                        """
-
-        receipt_id = db.insert(
-            insert_query,
-            (
-                receipt_data.receipt_type.value,
-                receipt_data.vendor,
-                receipt_data.order_no,
-                receipt_data.fixture_code,
-                receipt_data.serial_start,
-                receipt_data.serial_end,
-                receipt_data.serials,
-                operator,
-                receipt_data.note
-            )
+        record_data = (
+            receipt_data.receipt_type.value,
+            receipt_data.vendor,
+            receipt_data.order_no,
+            receipt_data.fixture_code,
+            receipt_data.serial_start,
+            receipt_data.serial_end,
+            receipt_data.serials,
+            operator,
+            receipt_data.note
         )
+        receipt_id = db.insert("receipts", dict(zip(
+            ["type", "vendor", "order_no", "fixture_code",
+             "serial_start", "serial_end", "serials", "operator", "note"],
+            record_data
+        )))
 
         # 查詢剛建立的收料記錄
         return await get_receipt(receipt_id)
@@ -121,8 +127,8 @@ async def create_receipt(
             detail=f"建立收料記錄失敗: {str(e)}"
         )
 
-
 @router.get("/{receipt_id}", response_model=ReceiptResponse, summary="取得收料記錄")
+
 async def get_receipt(receipt_id: int):
     """
     根據 ID 取得收料記錄
@@ -157,17 +163,17 @@ async def get_receipt(receipt_id: int):
         row = result[0]
 
         return ReceiptResponse(
-            id=row[0],
-            receipt_type=row[1],
-            vendor=row[2],
-            order_no=row[3],
-            fixture_code=row[4],
-            serial_start=row[5],
-            serial_end=row[6],
-            serials=row[7],
-            operator=row[8],
-            note=row[9],
-            created_at=row[10]
+            id=row["id"],
+            receipt_type=row["type"],
+            vendor=row["vendor"],
+            order_no=row["order_no"],
+            fixture_code=row["fixture_code"],
+            serial_start=row["serial_start"],
+            serial_end=row["serial_end"],
+            serials=row["serials"],
+            operator=row["operator"],
+            note=row["note"],
+            created_at=row["created_at"]
         )
 
     except HTTPException:
@@ -190,16 +196,16 @@ async def list_receipts(
 ):
     """
     查詢收料記錄列表
-
-    - **skip**: 略過筆數（分頁用）
-    - **limit**: 每頁筆數（最多 1000）
-    - **fixture_code**: 治具編號篩選
-    - **vendor**: 廠商篩選
-    - **order_no**: 單號篩選
-    - **receipt_type**: 收料類型篩選 (batch/individual)
-
-    回傳收料記錄列表和總筆數
     """
+    print("========== RECEIPTS DEBUG ==========")
+    print("收到請求:", {
+        "skip": skip, "limit": limit,
+        "fixture_code": fixture_code,
+        "vendor": vendor,
+        "order_no": order_no,
+        "receipt_type": receipt_type.value if receipt_type else None
+    })
+
     try:
         # 建立 WHERE 條件
         where_conditions = []
@@ -232,10 +238,15 @@ async def list_receipts(
             {where_clause}
         """
 
-        count_result = db.execute_query(count_query, tuple(params))
-        total = count_result[0][0] if count_result else 0
+        print("COUNT SQL:", count_query)
+        print("COUNT params:", params)
 
-        # 查詢收料記錄列表
+        count_result = db.execute_query(count_query, tuple(params))
+        print("COUNT 結果:", count_result)
+
+        total = count_result[0].get("COUNT(*)", 0) if count_result else 0
+
+        # 查詢清單
         query = f"""
             SELECT 
                 id, type, vendor, order_no, fixture_code,
@@ -247,24 +258,31 @@ async def list_receipts(
             LIMIT %s OFFSET %s
         """
 
-        params.extend([limit, skip])
-        result = db.execute_query(query, tuple(params))
+        params_for_list = params + [limit, skip]
+
+        print("LIST SQL:", query)
+        print("LIST params:", params_for_list)
+
+        result = db.execute_query(query, tuple(params_for_list))
+        print("LIST 結果:", result)
 
         receipts = []
         for row in result:
             receipts.append(ReceiptResponse(
-                id=row[0],
-                receipt_type=row[1],
-                vendor=row[2],
-                order_no=row[3],
-                fixture_code=row[4],
-                serial_start=row[5],
-                serial_end=row[6],
-                serials=row[7],
-                operator=row[8],
-                note=row[9],
-                created_at=row[10]
+                id=row.get("id"),
+                receipt_type=row.get("type"),
+                vendor=row.get("vendor"),
+                order_no=row.get("order_no"),
+                fixture_code=row.get("fixture_code"),
+                serial_start=row.get("serial_start"),
+                serial_end=row.get("serial_end"),
+                serials=row.get("serials"),
+                operator=row.get("operator"),
+                note=row.get("note"),
+                created_at=row.get("created_at")
             ))
+
+        print("========== END DEBUG ==========")
 
         return ReceiptListResponse(
             total=total,
@@ -272,6 +290,8 @@ async def list_receipts(
         )
 
     except Exception as e:
+        print("🔥 Receipts API 發生錯誤:", e)
+        print("========== END DEBUG (ERROR) ==========")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"查詢收料記錄列表失敗: {str(e)}"
@@ -394,17 +414,17 @@ async def get_recent_receipts(
         receipts = []
         for row in result:
             receipts.append(ReceiptResponse(
-                id=row[0],
-                receipt_type=row[1],
-                vendor=row[2],
-                order_no=row[3],
-                fixture_code=row[4],
-                serial_start=row[5],
-                serial_end=row[6],
-                serials=row[7],
-                operator=row[8],
-                note=row[9],
-                created_at=row[10]
+                id=row.get("id"),
+                receipt_type=row.get("type"),
+                vendor=row.get("vendor"),
+                order_no=row.get("order_no"),
+                fixture_code=row.get("fixture_code"),
+                serial_start=row.get("serial_start"),
+                serial_end=row.get("serial_end"),
+                serials=row.get("serials"),
+                operator=row.get("operator"),
+                note=row.get("note"),
+                created_at=row.get("created_at")
             ))
 
         return ReceiptListResponse(

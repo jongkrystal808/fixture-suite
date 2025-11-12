@@ -157,24 +157,31 @@ async function loadFixtures() {
  */
 async function loadReceipts() {
   try {
-    window.mockReceipts = await apiListReceipts();
+    const res = await apiListReceipts();
+    // 如果 API 回傳是物件，取出 data 陣列
+    window.mockReceipts = Array.isArray(res) ? res : (res.data || res.results || []);
     renderReceipts();
   } catch (error) {
     console.error('載入收料記錄失敗:', error);
+    window.mockReceipts = [];
   }
 }
+
 
 /**
  * 載入退料記錄
  */
 async function loadReturns() {
   try {
-    window.mockReturns = await apiListReturns();
+    const res = await apiListReturns();
+    window.mockReturns = Array.isArray(res) ? res : (res.data || res.results || []);
     renderReturns();
   } catch (error) {
     console.error('載入退料記錄失敗:', error);
+    window.mockReturns = [];
   }
 }
+
 
 /**
  * 載入使用記錄
@@ -242,6 +249,74 @@ function editOwner(empId) {
 }
 
 /**
+ * 收料類型切換 (批量 / 少量)
+ */
+function toggleReceiptType() {
+  const type = document.getElementById("rcvType")?.value;
+  const batchFields = document.getElementById("batchFields");
+  const individualFields = document.getElementById("individualFields");
+
+  if (type === "batch") {
+    batchFields?.classList.remove("hidden");
+    individualFields?.classList.add("hidden");
+  } else {
+    batchFields?.classList.add("hidden");
+    individualFields?.classList.remove("hidden");
+  }
+}
+
+/**
+ * 新增收料記錄
+ */
+async function addReceipt() {
+  const type = document.getElementById("rcvType")?.value || "batch";
+  const vendor = document.getElementById("rcvVendor")?.value.trim() || "";
+  const order_no = document.getElementById("rcvOrder")?.value.trim() || "";
+  const fixture_code = document.getElementById("rcvFixture")?.value.trim() || "";
+  const operator = String(window.authUser?.id || window.authUser?.username || "未登入");
+
+
+  let serial_start = null, serial_end = null, serials = null, note = "";
+
+  if (type === "batch") {
+    serial_start = document.getElementById("rcvSerialStart")?.value.trim() || "";
+    serial_end = document.getElementById("rcvSerialEnd")?.value.trim() || "";
+    note = document.getElementById("rcvNote")?.value.trim() || "";
+  } else {
+    serials = document.getElementById("rcvSerials")?.value.trim() || "";
+    note = document.getElementById("rcvNoteInd")?.value.trim() || "";
+  }
+  console.log("📦 收料 payload =>", payload);
+
+  const payload = {
+    receipt_type: type,
+    vendor,
+    order_no,
+    fixture_code,
+    serial_start,
+    serial_end,
+    serials,
+    operator,
+    note
+  };
+
+  try {
+    // 使用共用 API 函式，自動加 token
+    await api('/receipts', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+
+    toast("✅ 收料成功");
+    await loadReceipts();
+  } catch (e) {
+    toast("❌ 收料失敗：" + e.message);
+  }
+}
+
+
+
+/**
  * 刪除收料記錄
  * @param {number} id - 記錄 ID
  */
@@ -254,6 +329,68 @@ async function deleteReceipt(id) {
     toast('已刪除', 'success');
   } catch (error) {
     toast('刪除失敗', 'error');
+  }
+}
+/**
+ * 退料類型切換 (批量 / 少量)
+ */
+function toggleReturnType() {
+  const type = document.getElementById("retType")?.value;
+  const batchFields = document.getElementById("retBatchFields");
+  const individualFields = document.getElementById("retIndividualFields");
+
+  if (type === "batch") {
+    batchFields?.classList.remove("hidden");
+    individualFields?.classList.add("hidden");
+  } else {
+    batchFields?.classList.add("hidden");
+    individualFields?.classList.remove("hidden");
+  }
+}
+
+/**
+ * 新增退料記錄
+ */
+async function addReturn() {
+  const type = document.getElementById("retType")?.value || "batch";
+  const vendor = document.getElementById("retVendor")?.value.trim() || "";
+  const order_no = document.getElementById("retOrder")?.value.trim() || "";
+  const fixture_code = document.getElementById("retFixture")?.value.trim() || "";
+  const operator = String(window.authUser?.id || window.authUser?.username || "未登入");
+
+  let serial_start = null, serial_end = null, serials = null, note = "";
+
+  if (type === "batch") {
+    serial_start = document.getElementById("retSerialStart")?.value.trim() || "";
+    serial_end = document.getElementById("retSerialEnd")?.value.trim() || "";
+    note = document.getElementById("retNote")?.value.trim() || "";
+  } else {
+    serials = document.getElementById("retSerials")?.value.trim() || "";
+    note = document.getElementById("retNoteInd")?.value.trim() || "";
+  }
+
+  const payload = {
+    return_type: type,   // 注意：後端若仍用 ReceiptType，可改成 type
+    vendor,
+    order_no,
+    fixture_code,
+    serial_start,
+    serial_end,
+    serials,
+    operator,
+    note
+  };
+
+  try {
+    await api('/returns', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+
+    toast("✅ 退料成功");
+    await loadReturns();
+  } catch (e) {
+    toast("❌ 退料失敗：" + e.message);
   }
 }
 
@@ -273,37 +410,150 @@ async function deleteReturn(id) {
   }
 }
 
-window.addEventListener("hashchange", handleHashChange);
-window.addEventListener("load", handleHashChange);
 
-function handleHashChange() {
-    const hash = window.location.hash || "#/dashboard";
+/** 查詢類型切換 (治具 / 機種) */
+function switchQueryType() {
+  const type = document.getElementById("queryType").value;
+  document.getElementById("fixtureQueryArea").classList.toggle("hidden", type !== "fixture");
+  document.getElementById("modelQueryArea").classList.toggle("hidden", type !== "model");
 
-    switch (hash) {
-        case "#/dashboard":
-            loadDashboard();
-            break;
+  // 清空下方結果區
+  document.getElementById("maxStationArea").classList.add("hidden");
+  document.getElementById("stationDetailArea").classList.add("hidden");
+}
 
-        case "#/fixtures":
-            loadFixturesPage();
-            break;
+/** 載入治具查詢 */
+async function loadFixturesQuery() {
+  const search = document.getElementById("fixtureSearch")?.value || "";
+  const status = document.getElementById("fixtureStatus")?.value || "";
+  try {
+    const res = await api(`/fixtures?search=${encodeURIComponent(search)}${status ? `&status_filter=${encodeURIComponent(status)}` : ""}`);
+    const fixtures = res.fixtures || [];
+    const tbody = document.getElementById("fixtureTable");
+    tbody.innerHTML = fixtures.map(f => `
+      <tr>
+        <td class="py-2 pr-4">${f.fixture_id}</td>
+        <td class="py-2 pr-4">${f.fixture_name}</td>
+        <td class="py-2 pr-4">${f.fixture_type || ''}</td>
+        <td class="py-2 pr-4">${f.self_purchased_qty}/${f.customer_supplied_qty}/${f.total_qty}</td>
+        <td class="py-2 pr-4">${f.status}</td>
+        <td class="py-2 pr-4">${f.storage_location || ''}</td>
+        <td class="py-2 pr-4">${f.owner_name || ''}</td>
+        <td class="py-2 pr-4">${f.note || ''}</td>
+      </tr>
+    `).join("");
+  } catch (e) {
+    toast("治具查詢失敗：" + e.message);
+  }
+}
 
-        case "#/usage":
-            loadUsagePage();
-            break;
 
-        case "#/replacement":
-            loadReplacementPage();
-            break;
+/** 載入機種查詢 */
+async function loadModelsQuery() {
+  const search = document.getElementById("modelSearch").value.trim();
+  try {
+    // ✅ 修正：改用 /models
+    const res = await api(`/models?search=${encodeURIComponent(search)}`);
+    const table = document.getElementById("modelTable");
+    table.innerHTML = "";
 
-        case "#/login":
-            loadLoginPage();
-            break;
-
-        default:
-            loadDashboard();
-            break;
+    if (!res || res.length === 0) {
+      table.innerHTML = `<tr><td colspan="4" class="text-gray-400 py-3">查無資料</td></tr>`;
+      document.getElementById("maxStationArea").classList.add("hidden");
+      document.getElementById("stationDetailArea").classList.add("hidden");
+      return;
     }
+
+    // 生成機種表
+    for (const m of res) {
+      table.innerHTML += `
+        <tr>
+          <td>${m.model_code}</td>
+          <td>${m.model_name}</td>
+          <td>${m.note || ""}</td>
+          <td>
+            <button class="btn btn-ghost text-xs" 
+              onclick="showMaxStation('${m.model_id}', '${m.model_code}')">
+              查看最大開站
+            </button>
+          </td>
+        </tr>`;
+    }
+
+  } catch (err) {
+    console.error("❌ 查詢機種錯誤:", err);
+    toast("查詢機種失敗：" + err.message);
+  }
+}
+
+
+/** 顯示機種最大開站數（使用 modelId 以避免 undefined 錯誤） */
+async function showMaxStation(modelId, modelCode) {
+  try {
+    const res = await api(`/models/${modelId}/max-stations`);
+    const list = res.stations || res || [];
+    const table = document.getElementById("maxStationTable");
+    table.innerHTML = "";
+
+    if (!list.length) {
+      table.innerHTML = `<tr><td colspan="5" class="text-gray-400 py-3">無站點資料</td></tr>`;
+      return;
+    }
+
+    document.getElementById("maxStationArea").classList.remove("hidden");
+    document.getElementById("stationDetailArea").classList.add("hidden");
+
+    table.innerHTML = list.map(s => `
+      <tr>
+        <td>${s.station_code}</td>
+        <td>${s.station_name}</td>
+        <td>${s.max_open || s.max_stations || "-"}</td>
+        <td>${s.bottleneck_fixture || "-"}</td>
+        <td>
+          ${s.available || 0}/${s.required || 0}
+          <button class="btn btn-ghost text-xs ml-2"
+            onclick="viewStationRequirements('${modelId}', '${s.station_id}', '${s.station_code}', '${s.station_name}')">
+            明細
+          </button>
+        </td>
+      </tr>
+    `).join("");
+
+  } catch (err) {
+    console.error("❌ 載入最大開站數失敗:", err);
+    toast("載入最大開站數失敗：" + err.message);
+  }
+}
+
+/** 查看站點治具需求詳情（由 onclick 傳入 modelId，不從外層取） */
+async function viewStationRequirements(modelId, stationId, stationCode, stationName) {
+  try {
+    const res = await api(`/models/${modelId}/stations/${stationId}/requirements`);
+    const list = res.fixture_requirements || [];
+    const detailTitle = `${stationCode} - ${stationName}（最大開站數：${res.max_stations || ''}）`;
+
+    document.getElementById("stationDetailArea").classList.remove("hidden");
+    document.getElementById("stationDetailTitle").textContent = detailTitle;
+
+    const tbody = document.getElementById("stationDetailTable");
+    if (!list.length) {
+      tbody.innerHTML = `<tr><td colspan="5" class="py-2 text-center text-gray-400">無治具需求資料</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = list.map(f => `
+      <tr>
+        <td class="py-2 pr-4">${f.fixture_id}</td>
+        <td class="py-2 pr-4">${f.fixture_name}</td>
+        <td class="py-2 pr-4">${f.required_qty}</td>
+        <td class="py-2 pr-4">${f.available_qty}</td>
+        <td class="py-2 pr-4">${f.max_stations}</td>
+      </tr>
+    `).join("");
+  } catch (e) {
+    console.error("❌ 查詢治具需求失敗:", e);
+    toast("查詢治具需求失敗：" + e.message);
+  }
 }
 
 
@@ -370,3 +620,12 @@ window.viewFixtureDetail = viewFixtureDetail;
 window.editOwner = editOwner;
 window.deleteReceipt = deleteReceipt;
 window.deleteReturn = deleteReturn;
+window.addReceipt = addReceipt;
+window.toggleReceiptType = toggleReceiptType;
+window.addReturn = addReturn;
+window.toggleReturnType = toggleReturnType;
+window.switchQueryType = switchQueryType;
+window.loadFixturesQuery = loadFixturesQuery;
+window.loadModelsQuery = loadModelsQuery;
+window.viewMaxStations = viewMaxStations;
+window.viewStationRequirements = viewStationRequirements;

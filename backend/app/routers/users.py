@@ -1,10 +1,14 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, status
 
-router = APIRouter()
+router = APIRouter(
+    prefix="/users",
+    tags=["使用者管理 Users"]
+)
 
-@router.get("/")
+@router.get("/", summary="取得使用者清單")
 async def list_users():
-    return []
+    return [{"id": 1, "username": "admin", "role": "admin"}]
+
 
 @router.post("/")
 async def create_user(user: dict):
