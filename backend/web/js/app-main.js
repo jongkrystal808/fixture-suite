@@ -2,6 +2,48 @@
  * 主應用程式初始化與事件處理
  * app-main.js
  */
+// ============================================
+// 後台管理 - 子頁切換系統
+// ============================================
+
+document.addEventListener('click', function (e) {
+  const btn = e.target.closest('[data-subtab]');
+  if (!btn) return;
+
+  // 讀取 subtab 名稱
+  const subtab = btn.getAttribute('data-subtab');
+
+  // 所有子頁 tab 按鈕取消 active
+  document.querySelectorAll('#tab-admin [data-subtab]').forEach(b => {
+    b.classList.remove('subtab-active');
+  });
+
+  // 點擊的 tab 標記 active
+  btn.classList.add('subtab-active');
+
+  // 隱藏所有子頁內容
+  document.querySelectorAll('#tab-admin > div[id^="subtab-"]').forEach(div => {
+    div.classList.add('hidden');
+  });
+
+  // 顯示對應子頁
+  const target = document.getElementById(`subtab-${subtab}`);
+  if (target) {
+    target.classList.remove('hidden');
+  }
+
+  // 📌 額外行為：如果切到治具維護 → 自動載入清單
+  if (subtab === 'fixture') {
+    if (typeof loadFixtureList === 'function') {
+      loadFixtureList();
+    }
+  }
+    if (subtab === 'model') {
+    loadModelList();
+    }
+
+  // 📌 切到機種維護時如需載入清單，也可在這裡補充
+});
 
 // ============================================
 // 時鐘
@@ -194,6 +236,322 @@ async function loadLogs() {
     console.error('載入記錄失敗:', error);
   }
 }
+
+// ============================================
+// 後台管理 - 治具資料維護
+// ============================================
+
+let fxPage = 1;
+let fxPageSize = 8;
+let fxTotal = 0;
+let fxTotalPages = 1;
+let fxCurrentFixtures = [];
+let fixtureModalMode = 'create'; // 'create' or 'edit'
+let fixtureEditingId = null;
+
+/**
+ * 載入治具列表
+ */
+async function loadFixtureList() {
+  try {
+    const search = document.getElementById('fxSearch')?.value?.trim() || '';
+    const statusFilter = document.getElementById('fxStatusFilter')?.value || '';
+    const ownerFilterRaw = document.getElementById('fxOwnerFilter')?.value?.trim() || '';
+    const ownerId = ownerFilterRaw ? Number(ownerFilterRaw) : '';
+    const pageSizeSelect = document.getElementById('fxPageSize');
+    fxPageSize = pageSizeSelect ? Number(pageSizeSelect.value) : 8;
+
+    const res = await apiListFixtures({
+      page: fxPage,
+      pageSize: fxPageSize,
+      statusFilter,
+      ownerId,
+      search
+    });
+
+    fxTotal = res.total || 0;
+    fxCurrentFixtures = res.fixtures || [];
+    fxTotalPages = fxTotal === 0 ? 1 : Math.max(1, Math.ceil(fxTotal / fxPageSize));
+
+    renderFixtureTable();
+  } catch (err) {
+    console.error('loadFixtureList error', err);
+    toast('載入治具列表失敗');
+  }
+}
+
+/**
+ * 渲染治具列表表格
+ */
+function renderFixtureTable() {
+  const tbody = document.getElementById('fxTable');
+  const countSpan = document.getElementById('fxCount');
+  const pageNowSpan = document.getElementById('fxPageNow');
+  const pageMaxSpan = document.getElementById('fxPageMax');
+
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  if (countSpan) countSpan.textContent = String(fxTotal);
+  if (pageNowSpan) pageNowSpan.textContent = String(fxPage);
+  if (pageMaxSpan) pageMaxSpan.textContent = String(fxTotalPages);
+
+  if (!fxCurrentFixtures.length) {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = 10;
+    td.className = 'py-3 text-center text-gray-400';
+    td.textContent = '目前沒有資料';
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+
+  fxCurrentFixtures.forEach(row => {
+    const tr = document.createElement('tr');
+    tr.className = 'border-b last:border-b-0';
+
+    const totalQty = (row.total_qty != null)
+      ? row.total_qty
+      : (row.self_purchased_qty || 0) + (row.customer_supplied_qty || 0);
+
+    const cycleText = row.replacement_cycle != null
+      ? `${row.replacement_cycle} ${row.cycle_unit || ''}`
+      : '';
+
+    const ownerText = row.owner_name || (row.owner_id != null ? `#${row.owner_id}` : '');
+
+    tr.innerHTML = `
+      <td class="py-1.5 pr-4 whitespace-nowrap font-mono">${row.fixture_id || ''}</td>
+      <td class="py-1.5 pr-4">${row.fixture_name || ''}</td>
+      <td class="py-1.5 pr-4">${row.fixture_type || ''}</td>
+      <td class="py-1.5 pr-4 whitespace-nowrap">
+        ${(row.self_purchased_qty ?? 0)} / ${(row.customer_supplied_qty ?? 0)} / <span class="font-semibold">${totalQty}</span>
+      </td>
+      <td class="py-1.5 pr-4">${row.storage_location || ''}</td>
+      <td class="py-1.5 pr-4">${row.status || ''}</td>
+      <td class="py-1.5 pr-4 whitespace-nowrap">${cycleText}</td>
+      <td class="py-1.5 pr-4">${ownerText || ''}</td>
+      <td class="py-1.5 pr-4 max-w-xs truncate" title="${row.note || ''}">${row.note || ''}</td>
+      <td class="py-1.5 pr-4 whitespace-nowrap">
+        <button class="btn btn-ghost btn-xs" onclick="openFixtureModal('edit', '${row.fixture_id}')">編輯</button>
+        <button class="btn btn-ghost btn-xs text-red-600" onclick="confirmDeleteFixture('${row.fixture_id}')">刪除</button>
+      </td>
+    `;
+
+    tbody.appendChild(tr);
+  });
+}
+
+/**
+ * 分頁操作
+ */
+function goFixturePage(action) {
+  if (fxTotalPages <= 1) return;
+
+  if (action === 'first') fxPage = 1;
+  else if (action === 'prev') fxPage = Math.max(1, fxPage - 1);
+  else if (action === 'next') fxPage = Math.min(fxTotalPages, fxPage + 1);
+  else if (action === 'last') fxPage = fxTotalPages;
+
+  loadFixtureList();
+}
+
+/**
+ * 開啟新增/編輯治具 modal
+ * @param {'create'|'edit'} mode
+ * @param {string} [fixtureId]
+ */
+async function openFixtureModal(mode, fixtureId) {
+  fixtureModalMode = mode;
+  fixtureEditingId = mode === 'edit' ? fixtureId : null;
+
+  const modal = document.getElementById('fixtureModal');
+  const titleEl = document.getElementById('fixtureModalTitle');
+  const idInput = document.getElementById('fmFixtureId');
+
+  // 先清空表單
+  document.getElementById('fixtureForm').reset();
+
+  if (mode === 'create') {
+    if (titleEl) titleEl.textContent = '新增治具';
+    if (idInput) {
+      idInput.disabled = false;
+      idInput.value = '';
+    }
+  } else {
+    if (titleEl) titleEl.textContent = `編輯治具 - ${fixtureId}`;
+    if (idInput) {
+      idInput.disabled = true;
+      idInput.value = fixtureId || '';
+    }
+
+    try {
+      const data = await apiGetFixture(fixtureId);
+      // 填入欄位
+      document.getElementById('fmFixtureName').value = data.fixture_name || '';
+      document.getElementById('fmFixtureType').value = data.fixture_type || '';
+      document.getElementById('fmSerialNumber').value = data.serial_number || '';
+      document.getElementById('fmSelfQty').value = data.self_purchased_qty ?? 0;
+      document.getElementById('fmCustomerQty').value = data.customer_supplied_qty ?? 0;
+      document.getElementById('fmStorage').value = data.storage_location || '';
+      document.getElementById('fmCycle').value = data.replacement_cycle ?? '';
+      document.getElementById('fmCycleUnit').value = data.cycle_unit || 'uses';
+      document.getElementById('fmStatus').value = data.status || '正常';
+      document.getElementById('fmOwnerId').value = data.owner_id ?? '';
+      document.getElementById('fmNote').value = data.note || '';
+    } catch (err) {
+      console.error('openFixtureModal(load) error', err);
+      toast('載入治具資料失敗');
+      return;
+    }
+  }
+
+  if (modal) {
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+  }
+}
+
+/**
+ * 關閉 modal
+ */
+function closeFixtureModal() {
+  const modal = document.getElementById('fixtureModal');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
+}
+
+/**
+ * 提交新增/編輯
+ */
+async function submitFixtureForm(e) {
+  e.preventDefault();
+
+  const fixtureId = document.getElementById('fmFixtureId').value.trim();
+  const fixtureName = document.getElementById('fmFixtureName').value.trim();
+  const fixtureType = document.getElementById('fmFixtureType').value.trim();
+  const serialNumber = document.getElementById('fmSerialNumber').value.trim();
+  const selfQty = Number(document.getElementById('fmSelfQty').value || '0');
+  const custQty = Number(document.getElementById('fmCustomerQty').value || '0');
+  const storage = document.getElementById('fmStorage').value.trim();
+  const cycleValRaw = document.getElementById('fmCycle').value;
+  const cycleVal = cycleValRaw === '' ? null : Number(cycleValRaw);
+  const cycleUnit = document.getElementById('fmCycleUnit').value;
+  const status = document.getElementById('fmStatus').value;
+  const ownerIdRaw = document.getElementById('fmOwnerId').value;
+  const ownerId = ownerIdRaw === '' ? null : Number(ownerIdRaw);
+  const note = document.getElementById('fmNote').value.trim() || null;
+
+  if (fixtureModalMode === 'create' && !fixtureId) {
+    toast('請輸入治具編號');
+    return;
+  }
+  if (!fixtureName) {
+    toast('請輸入治具名稱');
+    return;
+  }
+
+  const payloadBase = {
+    fixture_name: fixtureName,
+    fixture_type: fixtureType || null,
+    serial_number: serialNumber || null,
+    self_purchased_qty: selfQty,
+    customer_supplied_qty: custQty,
+    storage_location: storage || null,
+    replacement_cycle: cycleVal,
+    cycle_unit: cycleUnit,
+    status,
+    owner_id: ownerId,
+    note
+  };
+
+  try {
+    if (fixtureModalMode === 'create') {
+      const payload = {
+        fixture_id: fixtureId,
+        ...payloadBase
+      };
+      await apiCreateFixture(payload);
+      toast('已新增治具');
+    } else {
+      // 更新時不傳 fixture_id（在 URL）
+      await apiUpdateFixture(fixtureEditingId, payloadBase);
+      toast('已更新治具');
+    }
+
+    closeFixtureModal();
+    loadFixtureList();
+  } catch (err) {
+    console.error('submitFixtureForm error', err);
+    toast('儲存治具失敗');
+  }
+}
+
+/**
+ * 刪除治具（確認）
+ */
+function confirmDeleteFixture(fixtureId) {
+  if (!confirm(`確定要刪除治具 ${fixtureId} 嗎？此動作會刪除相關部署/需求/紀錄。`)) return;
+
+  apiDeleteFixture(fixtureId)
+    .then(() => {
+      toast('已刪除治具');
+      loadFixtureList();
+    })
+    .catch(err => {
+      console.error('deleteFixture error', err);
+      toast('刪除治具失敗');
+    });
+}
+
+/**
+ * 匯出目前查詢結果為 CSV
+ * 需要你原本已有的 downloadCSV / toCSV 工具
+ */
+function exportFixturesCsv() {
+  if (!fxCurrentFixtures || !fxCurrentFixtures.length) {
+    toast('目前沒有資料可匯出');
+    return;
+  }
+
+  const rows = fxCurrentFixtures.map(row => ({
+    fixture_id: row.fixture_id,
+    fixture_name: row.fixture_name,
+    fixture_type: row.fixture_type,
+    serial_number: row.serial_number,
+    self_purchased_qty: row.self_purchased_qty,
+    customer_supplied_qty: row.customer_supplied_qty,
+    total_qty:
+      row.total_qty != null
+        ? row.total_qty
+        : (row.self_purchased_qty || 0) + (row.customer_supplied_qty || 0),
+    storage_location: row.storage_location,
+    replacement_cycle: row.replacement_cycle,
+    cycle_unit: row.cycle_unit,
+    status: row.status,
+    owner_id: row.owner_id,
+    owner_name: row.owner_name,
+    owner_email: row.owner_email,
+    note: row.note
+  }));
+
+  downloadCSV('fixtures_export.csv', toCSV(rows));
+}
+
+/**
+ * 初次載入：如果頁面上有 subtab-fixture，就先載入一次
+ */
+document.addEventListener('DOMContentLoaded', () => {
+  const fixtureTab = document.getElementById('subtab-fixture');
+  if (fixtureTab) {
+    // 可視需要改成在切換子頁時再呼叫
+    loadFixtureList();
+  }
+});
+
 
 /**
  * 刷新所有資料

@@ -128,18 +128,18 @@ CREATE TABLE fixture_requirements (
     FOREIGN KEY (fixture_id) REFERENCES fixtures(fixture_id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='治具-機種需求表';
 
--- =====================================
--- 8. 治具-站點部署表 (fixture_deployments)
--- =====================================
-CREATE TABLE fixture_deployments (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    fixture_id VARCHAR(50) NOT NULL COMMENT '治具編號',
-    station_id INT NOT NULL COMMENT '站點ID',
-    deployed_qty INT DEFAULT 0 COMMENT '部署數量',
-    UNIQUE KEY uk_fixture_station (fixture_id, station_id),
-    FOREIGN KEY (fixture_id) REFERENCES fixtures(fixture_id) ON DELETE CASCADE,
-    FOREIGN KEY (station_id) REFERENCES stations(station_id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='治具-站點部署表';
+    -- =====================================
+    -- 8. 治具-站點部署表 (fixture_deployments)
+    -- =====================================
+    CREATE TABLE fixture_deployments (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        fixture_id VARCHAR(50) NOT NULL COMMENT '治具編號',
+        station_id INT NOT NULL COMMENT '站點ID',
+        deployed_qty INT DEFAULT 0 COMMENT '部署數量',
+        UNIQUE KEY uk_fixture_station (fixture_id, station_id),
+        FOREIGN KEY (fixture_id) REFERENCES fixtures(fixture_id) ON DELETE CASCADE,
+        FOREIGN KEY (station_id) REFERENCES stations(station_id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='治具-站點部署表';
 
 -- =====================================
 -- 9. 使用記錄表 (usage_logs)

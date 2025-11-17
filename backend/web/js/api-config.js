@@ -7,6 +7,11 @@
 window.API_BASE = window.API_BASE || '';
 const API_PREFIX = '/api/v2';
 
+function getToken() {
+  return localStorage.getItem('jwt_token');
+}
+
+
 /**
  * 生成完整的 API URL
  * @param {string} path - API 路徑
@@ -23,7 +28,7 @@ function apiURL(path) {
  * @returns {Promise} API 回應
  */
 async function api(path, opts = {}) {
-  const token = localStorage.getItem('auth_token');
+  const token = getToken();
   const headers = {
     'Content-Type': 'application/json',
     ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
@@ -52,7 +57,7 @@ async function api(path, opts = {}) {
  * @returns {Promise} API 回應
  */
 async function apiJson(path, opts = {}) {
-  const token = localStorage.getItem('jwt_token');
+  const token = getToken();
   const headers = {
     'Content-Type': 'application/json',
     ...(token ? { 'Authorization': `Bearer ${token}` } : {}),

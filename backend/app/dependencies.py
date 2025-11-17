@@ -12,7 +12,8 @@ from backend.app.auth import verify_token
 from backend.app.database import db
 
 # OAuth2 密鑰方案 (對應 /auth/login)
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v2/auth/login")
+
 
 
 # ==================== 取得 Token ====================

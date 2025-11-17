@@ -70,11 +70,10 @@
     <!-- 功能分頁 -->
     <nav class="grid grid-cols-2 md:grid-cols-7 gap-2">
       <button data-tab="dashboard" class="tab tab-active">儀表板</button>
-      <button data-tab="receive"  class="tab">收料登記</button>
-      <button data-tab="return"   class="tab">退料登記</button>
+      <button data-tab="receipts"  class="tab">收料/退料登記</button>
       <button data-tab="query"    class="tab">治具/機種查詢</button>
-      <button data-tab="stats"    class="tab">治具情況統計</button>
       <button data-tab="logs"     class="tab">使用/更換記錄</button>
+      <button data-tab="stats"    class="tab">治具情況統計</button>
       <button data-tab="admin"    class="tab">後台管理</button>
     </nav>
 
@@ -141,152 +140,271 @@
       </div>
     </section>
 
-       <!-- 收料登記 -->
-    <section id="tab-receive" class="hidden space-y-4">
-      <div class="card p-5 space-y-4">
-        <h3 class="font-semibold">收料表單</h3>
+       <!-- 收料 / 退料 -->
+    <section id="tab-receipts" class="hidden space-y-4">
 
-        <!-- 類型切換 -->
-        <div class="grid md:grid-cols-4 gap-3">
-          <div class="field">
-            <label class="label-xs">收料類型</label>
-            <select id="rcvType" class="input" onchange="toggleReceiptType()">
-              <option value="batch">批量收料 (使用流水號起訖)</option>
-              <option value="individual">少量收料 (輸入序號列表)</option>
-            </select>
+      <!-- 子分頁 -->
+      <div class="flex gap-2">
+        <button class="subtab subtab-active" data-rtab="receipts">收料登記</button>
+        <button class="subtab" data-rtab="returns">退料登記</button>
+      </div>
+
+      <!-- ============================================================= -->
+      <!-- 🔵 收料 TAB -->
+      <!-- ============================================================= -->
+      <div id="rtab-receipts" class="space-y-4">
+
+        <div class="card p-5 space-y-4">
+          <h3 class="font-semibold text-lg">收料登記</h3>
+
+          <!-- 查詢 -->
+          <div class="grid md:grid-cols-6 gap-3">
+            <div class="field">
+              <label class="label-xs">治具編號</label>
+              <input id="receiptSearchFixture" class="input" placeholder="治具編號">
+            </div>
+
+            <div class="field">
+              <label class="label-xs">單號</label>
+              <input id="receiptSearchOrder" class="input" placeholder="單號">
+            </div>
+
+            <div class="field">
+              <label class="label-xs">廠商</label>
+              <input id="receiptSearchVendor" class="input" placeholder="廠商">
+            </div>
+
+            <div class="field">
+              <label class="label-xs">操作人員</label>
+              <input id="receiptSearchOperator" class="input" placeholder="員工號">
+            </div>
+
+            <div class="flex items-end">
+              <button class="btn btn-primary w-full" onclick="loadReceipts()">查詢</button>
+            </div>
           </div>
-          <div class="field"><label class="label-xs">廠商</label><input id="rcvVendor" class="input" placeholder="例如：協力廠A" /></div>
-          <div class="field"><label class="label-xs">單號</label><input id="rcvOrder" class="input" placeholder="例如：PO20251101" /></div>
-          <div class="field"><label class="label-xs">治具編號</label><input id="rcvFixture" class="input" placeholder="例如：JIG-001" /></div>
-        </div>
 
-        <!-- 批量模式 -->
-        <div id="batchFields" class="grid md:grid-cols-3 gap-3 mt-2">
-          <div class="field"><label class="label-xs">流水號起始</label><input id="rcvSerialStart" class="input" placeholder="例如：HF31A25900010" /></div>
-          <div class="field"><label class="label-xs">流水號結束</label><input id="rcvSerialEnd" class="input" placeholder="例如：HF31A25900050" /></div>
-          <div class="field"><label class="label-xs">備註</label><input id="rcvNote" class="input" placeholder="例如：首批測試件" /></div>
-        </div>
+          <!-- 新增 / 匯入按鈕 -->
+          <div class="flex gap-2 flex-wrap">
+            <button class="btn btn-primary" onclick="toggleReceiptAdd(true)">新增收料記錄</button>
 
-        <!-- 少量模式 -->
-        <div id="individualFields" class="hidden mt-2">
-          <div class="field">
-            <label class="label-xs">序號列表 (以逗號分隔)</label>
-            <textarea id="rcvSerials" class="input" rows="2" placeholder="例如：HF31A25900010, HF31A25900011, HF31A25900012"></textarea>
+            <label class="btn btn-ghost cursor-pointer">
+              <input id="receiptXlsx" type="file" accept=".xlsx" class="hidden"
+                     onchange="handleReceiptImport(this)" />
+              匯入 Excel(.xlsx)
+            </label>
+
+            <button class="btn btn-ghost" onclick="downloadReceiptTemplate()">下載範本</button>
           </div>
-          <div class="field"><label class="label-xs">備註</label><input id="rcvNoteInd" class="input" placeholder="例如：抽樣件" /></div>
-        </div>
 
-        <div class="flex items-end justify-end mt-2">
-          <button class="btn btn-primary w-40" onclick="addReceipt()">確認收料</button>
-        </div>
+          <!-- 新增表單 -->
+          <div id="receiptAddForm" class="hidden border rounded-2xl p-4 bg-gray-50 space-y-3">
 
-        <!-- 匯入/範本/搜尋區 -->
-        <div class="flex items-center gap-2 pt-2">
-          <label class="btn btn-ghost cursor-pointer">
-            <input id="rcvCsv" type="file" accept=".xlsx,.csv" class="hidden" onchange="handleReceiptCsv(this)" /> 匯入 Excel/CSV
-          </label>
-          <button class="btn btn-ghost" onclick="downloadCSV('receipts_template.csv', sampleTemplateCSV('receipt'))">下載範本</button>
-          <div class="ml-auto flex items-center gap-2">
-            <input id="rcvSearch" class="w-56 input text-sm" placeholder="搜尋(治具/單號)" oninput="renderReceipts()" />
-            <span class="text-xs text-gray-500">共 <span id="rcvCount">0</span> 筆</span>
+            <div class="grid md:grid-cols-5 gap-3">
+              <div class="field">
+                <label class="label-xs">廠商</label>
+                <input id="receiptAddVendor" class="input">
+              </div>
+
+              <div class="field">
+                <label class="label-xs">單號</label>
+                <input id="receiptAddOrder" class="input">
+              </div>
+
+              <div class="field">
+                <label class="label-xs">治具編號</label>
+                <input id="receiptAddFixture" class="input">
+              </div>
+
+              <div class="field">
+                <label class="label-xs">類型</label>
+                <select id="receiptAddType" class="input">
+                  <option value="batch">批量（serial_start ~ serial_end）</option>
+                  <option value="individual">少量序號（serials）</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- 批量：流水號起訖 -->
+            <div id="receiptBatchArea" class="grid md:grid-cols-5 gap-3">
+              <div class="field">
+                <label class="label-xs">序號起始</label>
+                <input id="receiptAddStart" class="input">
+              </div>
+              <div class="field">
+                <label class="label-xs">序號結束</label>
+                <input id="receiptAddEnd" class="input">
+              </div>
+            </div>
+
+            <!-- 少量序號 -->
+            <div id="receiptIndividualArea" class="hidden">
+              <label class="label-xs">序號（逗號分隔）</label>
+              <input id="receiptAddSerials" class="input">
+            </div>
+
+            <div class="field">
+              <label class="label-xs">備註</label>
+              <input id="receiptAddNote" class="input">
+            </div>
+
+            <div class="flex justify-end gap-2">
+              <button class="btn btn-ghost" onclick="toggleReceiptAdd(false)">取消</button>
+              <button class="btn btn-primary" onclick="submitReceipt()">提交</button>
+            </div>
           </div>
-        </div>
 
-        <!-- 表格展示 -->
-        <div class="overflow-auto">
-          <table class="min-w-full text-sm">
-            <thead class="text-left text-gray-500">
+          <!-- 收料表格 -->
+          <div class="overflow-auto">
+            <table class="min-w-full text-sm">
+              <thead class="text-left text-gray-500">
               <tr>
-                <th class="py-2 pr-4">日期時間</th>
-                <th class="py-2 pr-4">類型</th>
+                <th class="py-2 pr-4">日期</th>
+                <th class="py-2 pr-4">治具</th>
                 <th class="py-2 pr-4">廠商</th>
                 <th class="py-2 pr-4">單號</th>
-                <th class="py-2 pr-4">治具</th>
-                <th class="py-2 pr-4">流水號起訖 / 序號列表</th>
-                <th class="py-2 pr-4">收料人員</th>
+                <th class="py-2 pr-4">序號</th>
+                <th class="py-2 pr-4">操作人員</th>
                 <th class="py-2 pr-4">備註</th>
-                <th class="py-2 pr-4">操作</th>
+                <th class="py-2 pr-4">刪除</th>
               </tr>
-            </thead>
-            <tbody id="rcvTable"></tbody>
-          </table>
+              </thead>
+              <tbody id="receiptTable"></tbody>
+            </table>
+          </div>
         </div>
+
       </div>
-    </section>
 
+      <!-- ============================================================= -->
+      <!-- 🟠 退料 TAB -->
+      <!-- ============================================================= -->
+      <div id="rtab-returns" class="hidden space-y-4">
 
-        <!-- 退料登記 -->
-    <section id="tab-return" class="hidden space-y-4">
-      <div class="card p-5 space-y-4">
-        <h3 class="font-semibold">退料表單</h3>
+        <div class="card p-5 space-y-4">
+          <h3 class="font-semibold text-lg">退料登記</h3>
 
-        <!-- 類型切換 -->
-        <div class="grid md:grid-cols-4 gap-3">
-          <div class="field">
-            <label class="label-xs">退料類型</label>
-            <select id="retType" class="input" onchange="toggleReturnType()">
-              <option value="batch">批量退料 (使用流水號起訖)</option>
-              <option value="individual">少量退料 (輸入序號列表)</option>
-            </select>
+          <!-- 查詢 -->
+          <div class="grid md:grid-cols-6 gap-3">
+            <div class="field">
+              <label class="label-xs">治具編號</label>
+              <input id="returnSearchFixture" class="input" placeholder="治具編號">
+            </div>
+
+            <div class="field">
+              <label class="label-xs">單號</label>
+              <input id="returnSearchOrder" class="input" placeholder="單號">
+            </div>
+
+            <div class="field">
+              <label class="label-xs">廠商</label>
+              <input id="returnSearchVendor" class="input" placeholder="廠商">
+            </div>
+
+            <div class="field">
+              <label class="label-xs">操作人員</label>
+              <input id="returnSearchOperator" class="input" placeholder="員工號">
+            </div>
+
+            <div class="flex items-end">
+              <button class="btn btn-primary w-full" onclick="loadReturns()">查詢</button>
+            </div>
           </div>
-          <div class="field"><label class="label-xs">廠商</label><input id="retVendor" class="input" placeholder="例如：協力廠A" /></div>
-          <div class="field"><label class="label-xs">單號</label><input id="retOrder" class="input" placeholder="例如：PO20251101" /></div>
-          <div class="field"><label class="label-xs">治具編號</label><input id="retFixture" class="input" placeholder="例如：JIG-001" /></div>
-        </div>
 
-        <!-- 批量模式 -->
-        <div id="retBatchFields" class="grid md:grid-cols-3 gap-3 mt-2">
-          <div class="field"><label class="label-xs">流水號起始</label><input id="retSerialStart" class="input" placeholder="例如：HF31A25900010" /></div>
-          <div class="field"><label class="label-xs">流水號結束</label><input id="retSerialEnd" class="input" placeholder="例如：HF31A25900050" /></div>
-          <div class="field"><label class="label-xs">備註</label><input id="retNote" class="input" placeholder="例如：批量退料" /></div>
-        </div>
+          <!-- 新增 / 匯入 -->
+          <div class="flex gap-2 flex-wrap">
+            <button class="btn btn-primary" onclick="toggleReturnAdd(true)">新增退料記錄</button>
 
-        <!-- 少量模式 -->
-        <div id="retIndividualFields" class="hidden mt-2">
-          <div class="field">
-            <label class="label-xs">序號列表 (以逗號分隔)</label>
-            <textarea id="retSerials" class="input" rows="2" placeholder="例如：HF31A25900010, HF31A25900011, HF31A25900012"></textarea>
+            <label class="btn btn-ghost cursor-pointer">
+              <input id="returnXlsx" type="file" accept=".xlsx" class="hidden"
+                     onchange="handleReturnImport(this)" />
+              匯入 Excel(.xlsx)
+            </label>
+
+            <button class="btn btn-ghost" onclick="downloadReturnTemplate()">下載範本</button>
           </div>
-          <div class="field"><label class="label-xs">備註</label><input id="retNoteInd" class="input" placeholder="例如：抽樣件退回" /></div>
-        </div>
 
-        <div class="flex items-end justify-end mt-2">
-          <button class="btn btn-primary w-40" onclick="addReturn()">確認退料</button>
-        </div>
+          <!-- 新增表單 -->
+          <div id="returnAddForm" class="hidden border rounded-2xl p-4 bg-gray-50 space-y-3">
 
-        <!-- 匯入/範本/搜尋區 -->
-        <div class="flex items-center gap-2 pt-2">
-          <label class="btn btn-ghost cursor-pointer">
-            <input id="retCsv" type="file" accept=".xlsx,.csv" class="hidden" onchange="handleReturnCsv(this)" /> 匯入 Excel/CSV
-          </label>
-          <button class="btn btn-ghost" onclick="downloadCSV('returns_template.csv', sampleTemplateCSV('return'))">下載範本</button>
-          <div class="ml-auto flex items-center gap-2">
-            <input id="retSearch" class="w-56 input text-sm" placeholder="搜尋(治具/單號)" oninput="renderReturns()" />
-            <span class="text-xs text-gray-500">共 <span id="retCount">0</span> 筆</span>
+            <div class="grid md:grid-cols-5 gap-3">
+              <div class="field">
+                <label class="label-xs">廠商</label>
+                <input id="returnAddVendor" class="input">
+              </div>
+
+              <div class="field">
+                <label class="label-xs">單號</label>
+                <input id="returnAddOrder" class="input">
+              </div>
+
+              <div class="field">
+                <label class="label-xs">治具編號</label>
+                <input id="returnAddFixture" class="input">
+              </div>
+
+              <div class="field">
+                <label class="label-xs">類型</label>
+                <select id="returnAddType" class="input">
+                  <option value="batch">批量（serial_start ~ serial_end）</option>
+                  <option value="individual">少量序號（serials）</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- 批量：流水號起訖 -->
+            <div id="returnBatchArea" class="grid md:grid-cols-5 gap-3">
+              <div class="field">
+                <label class="label-xs">序號起始</label>
+                <input id="returnAddStart" class="input">
+              </div>
+              <div class="field">
+                <label class="label-xs">序號結束</label>
+                <input id="returnAddEnd" class="input">
+              </div>
+            </div>
+
+            <!-- 少量序號 -->
+            <div id="returnIndividualArea" class="hidden">
+              <label class="label-xs">序號（逗號分隔）</label>
+              <input id="returnAddSerials" class="input">
+            </div>
+
+            <div class="field">
+              <label class="label-xs">備註</label>
+              <input id="returnAddNote" class="input">
+            </div>
+
+            <div class="flex justify-end gap-2">
+              <button class="btn btn-ghost" onclick="toggleReturnAdd(false)">取消</button>
+              <button class="btn btn-primary" onclick="submitReturn()">提交</button>
+            </div>
           </div>
-        </div>
 
-        <!-- 表格展示 -->
-        <div class="overflow-auto">
-          <table class="min-w-full text-sm">
-            <thead class="text-left text-gray-500">
+          <!-- 退料表格 -->
+          <div class="overflow-auto">
+            <table class="min-w-full text-sm">
+              <thead class="text-left text-gray-500">
               <tr>
-                <th class="py-2 pr-4">日期時間</th>
-                <th class="py-2 pr-4">類型</th>
+                <th class="py-2 pr-4">日期</th>
+                <th class="py-2 pr-4">治具</th>
                 <th class="py-2 pr-4">廠商</th>
                 <th class="py-2 pr-4">單號</th>
-                <th class="py-2 pr-4">治具</th>
-                <th class="py-2 pr-4">流水號起訖 / 序號列表</th>
-                <th class="py-2 pr-4">退料人員</th>
+                <th class="py-2 pr-4">序號</th>
+                <th class="py-2 pr-4">操作人員</th>
                 <th class="py-2 pr-4">備註</th>
-                <th class="py-2 pr-4">操作</th>
+                <th class="py-2 pr-4">刪除</th>
               </tr>
-            </thead>
-            <tbody id="retTable"></tbody>
-          </table>
+              </thead>
+              <tbody id="returnTable"></tbody>
+            </table>
+          </div>
         </div>
+
       </div>
+
     </section>
+
         <!-- 查詢模塊 -->
     <section id="tab-query" class="hidden space-y-4">
       <div class="card p-5 space-y-4">
@@ -540,64 +658,244 @@
       </div>
     </section>
 
-    <!-- 使用/更換記錄 -->
+       <!-- 使用 / 更換記錄 -->
     <section id="tab-logs" class="hidden space-y-4">
-      <div class="card p-5 space-y-4">
-        <div class="grid md:grid-cols-5 gap-3">
-          <div class="field"><label class="label-xs">治具</label><select id="logFixture" class="input"></select></div>
-          <div class="field"><label class="label-xs">區間(起)</label><input id="logFrom" type="date" class="input" /></div>
-          <div class="field"><label class="label-xs">區間(迄)</label><input id="logTo" type="date" class="input" /></div>
-          <div class="field"><label class="label-xs">類型</label><select id="logType" class="input"><option value="use">使用</option><option value="replace">更換</option></select></div>
-          <div class="flex items-end gap-2"><button class="btn btn-primary w-full" onclick="toast('已套用篩選(模擬)')">套用</button></div>
-        </div>
 
-        <div class="flex flex-wrap items-center gap-2">
-          <button class="btn btn-primary" onclick="toggleAddLog(true)">新增記錄</button>
-          <label class="btn btn-ghost cursor-pointer"><input id="logCsv" type="file" accept=".csv" class="hidden" onchange="handleLogCsv(this)" /> 匯入 CSV</label>
-          <button class="btn btn-ghost" onclick="downloadCSV('usage_replace_template.csv', sampleLogTemplate())">下載範本</button>
-          <span class="text-xs text-gray-500">(欄位: 日期、治具、站點/原因、人員、備註)</span>
-        </div>
+      <!-- 子分頁 -->
+      <div class="flex gap-2">
+        <button class="subtab subtab-active" data-logtab="usage">使用記錄</button>
+        <button class="subtab" data-logtab="replacement">更換記錄</button>
+      </div>
 
-        <div id="addLogForm" class="hidden border rounded-2xl p-4 bg-gray-50">
+      <!-- ================================ -->
+      <!-- 🔵 使用記錄 TAB -->
+      <!-- ================================ -->
+      <div id="logtab-usage" class="space-y-4">
+
+        <div class="card p-5 space-y-4">
+          <h3 class="font-semibold text-lg">使用記錄</h3>
+
+          <!-- 查詢區 -->
           <div class="grid md:grid-cols-6 gap-3">
-            <div class="field"><label class="label-xs">日期</label><input id="addLogDate" type="date" class="input" /></div>
-            <div class="field"><label class="label-xs">治具編號</label><select id="addLogFixture" class="input"></select></div>
-            <div class="field"><label class="label-xs">站點/原因</label><input id="addLogLoc" class="input" placeholder="站點或更換原因" /></div>
-            <div class="field"><label class="label-xs">操作人員</label><input id="addLogOperator" class="input" /></div>
-            <div class="field"><label class="label-xs">類型</label>
-              <select id="addLogType" class="input">
-                <option value="usage">使用</option>
-                <option value="replacement">更換</option>
-              </select>
+            <div class="field">
+              <label class="label-xs">治具</label>
+              <input id="usageSearchFixture" class="input" placeholder="治具編號" />
             </div>
-            <div class="field"><label class="label-xs">備註/異常</label><input id="addLogNote" class="input" /></div>
+            <div class="field">
+              <label class="label-xs">站點 ID</label>
+              <input id="usageSearchStation" class="input" type="number" placeholder="站點 ID" />
+            </div>
+            <div class="field">
+              <label class="label-xs">操作人員</label>
+              <input id="usageSearchOperator" class="input" placeholder="員工號" />
+            </div>
+            <div class="field">
+              <label class="label-xs">日期起</label>
+              <input id="usageSearchFrom" type="datetime-local" class="input" />
+            </div>
+            <div class="field">
+              <label class="label-xs">日期迄</label>
+              <input id="usageSearchTo" type="datetime-local" class="input" />
+            </div>
+            <div class="flex items-end">
+              <button class="btn btn-primary w-full" onclick="loadUsageLogs()">查詢</button>
+            </div>
           </div>
-          <div class="flex justify-end gap-2 pt-3">
-            <button class="btn btn-ghost" onclick="toggleAddLog(false)">取消</button>
-            <button class="btn btn-primary" onclick="addLog()">新增</button>
-          </div>
-        </div>
 
-        <div class="overflow-auto">
-          <table class="min-w-full text-sm">
-            <thead class="text-left text-gray-500">
+          <!-- 新增 / 批量 / 匯入按鈕 -->
+          <div class="flex gap-2 flex-wrap">
+            <button class="btn btn-primary" onclick="toggleUsageAdd(true)">新增使用記錄</button>
+
+            <label class="btn btn-ghost cursor-pointer">
+              <input id="usageXlsx" type="file" accept=".xlsx" class="hidden"
+                     onchange="handleUsageImport(this)" />
+              匯入 Excel(.xlsx)
+            </label>
+
+            <button class="btn btn-ghost" onclick="downloadUsageTemplate()">下載範本</button>
+          </div>
+
+          <!-- 新增表單 -->
+          <div id="usageAddForm" class="hidden border rounded-2xl p-4 bg-gray-50 space-y-3">
+
+            <div class="grid md:grid-cols-6 gap-3">
+              <div class="field">
+                <label class="label-xs">治具編號</label>
+                <input id="usageAddFixture" class="input" />
+              </div>
+
+              <div class="field">
+                <label class="label-xs">站點 ID</label>
+                <input id="usageAddStation" class="input" type="number" />
+              </div>
+
+              <div class="field">
+                <label class="label-xs">使用次數</label>
+                <input id="usageAddCount" type="number" class="input" value="1" />
+              </div>
+
+              <div class="field">
+                <label class="label-xs">異常狀態</label>
+                <input id="usageAddAbnormal" class="input" />
+              </div>
+
+              <div class="field">
+                <label class="label-xs">操作人員</label>
+                <input id="usageAddOperator" class="input" />
+              </div>
+
+              <div class="field">
+                <label class="label-xs">使用時間</label>
+                <input id="usageAddTime" type="datetime-local" class="input" />
+              </div>
+            </div>
+
+            <div class="field">
+              <label class="label-xs">備註</label>
+              <input id="usageAddNote" class="input" />
+            </div>
+
+            <div class="grid md:grid-cols-6 gap-3">
+              <div class="field">
+                <label class="label-xs">批量筆數（如不批量留空）</label>
+                <input id="usageAddBatch" type="number" class="input" />
+              </div>
+            </div>
+
+            <div class="flex justify-end gap-2">
+              <button class="btn btn-ghost" onclick="toggleUsageAdd(false)">取消</button>
+              <button class="btn btn-primary" onclick="submitUsageLog()">提交</button>
+            </div>
+          </div>
+
+          <!-- 使用記錄表格 -->
+          <div class="overflow-auto">
+            <table class="min-w-full text-sm">
+              <thead class="text-left text-gray-500">
               <tr>
                 <th class="py-2 pr-4">日期</th>
                 <th class="py-2 pr-4">治具</th>
-                <th class="py-2 pr-4">站點/原因</th>
+                <th class="py-2 pr-4">站點</th>
+                <th class="py-2 pr-4">次數</th>
+                <th class="py-2 pr-4">異常</th>
                 <th class="py-2 pr-4">操作人員</th>
-                <th class="py-2 pr-4">備註/異常</th>
-                <th class="py-2 pr-4">類型</th>
+                <th class="py-2 pr-4">備註</th>
+                <th class="py-2 pr-4">刪除</th>
               </tr>
-            </thead>
-            <tbody id="logTable"></tbody>
-          </table>
-        </div>
-        <div class="flex justify-end gap-2">
-          <button class="btn btn-ghost" onclick="downloadCSV('usage_replace_logs.csv', toCSV(mockLogs))">匯出</button>
+              </thead>
+              <tbody id="usageTable"></tbody>
+            </table>
+          </div>
+
         </div>
       </div>
+
+      <!-- ================================ -->
+      <!-- 🟠 更換記錄 TAB -->
+      <!-- ================================ -->
+      <div id="logtab-replacement" class="hidden space-y-4">
+
+        <div class="card p-5 space-y-4">
+          <h3 class="font-semibold text-lg">更換記錄</h3>
+
+          <!-- 查詢 -->
+          <div class="grid md:grid-cols-6 gap-3">
+            <div class="field">
+              <label class="label-xs">治具</label>
+              <input id="replaceSearchFixture" class="input" />
+            </div>
+            <div class="field">
+              <label class="label-xs">執行人員</label>
+              <input id="replaceSearchExec" class="input" />
+            </div>
+            <div class="field">
+              <label class="label-xs">更換日期起</label>
+              <input id="replaceSearchFrom" type="date" class="input" />
+            </div>
+            <div class="field">
+              <label class="label-xs">更換日期迄</label>
+              <input id="replaceSearchTo" type="date" class="input" />
+            </div>
+            <div class="flex items-end">
+              <button class="btn btn-primary w-full" onclick="loadReplacementLogs()">查詢</button>
+            </div>
+          </div>
+
+          <!-- 新增 / 批量 / 匯入 -->
+          <div class="flex gap-2 flex-wrap">
+            <button class="btn btn-primary" onclick="toggleReplaceAdd(true)">新增更換記錄</button>
+
+            <label class="btn btn-ghost cursor-pointer">
+              <input id="replaceXlsx" type="file" accept=".xlsx" class="hidden"
+                     onchange="handleReplaceImport(this)" />
+              匯入 Excel(.xlsx)
+            </label>
+
+            <button class="btn btn-ghost" onclick="downloadReplaceTemplate()">下載範本</button>
+          </div>
+
+          <!-- 新增表單 -->
+          <div id="replaceAddForm" class="hidden border rounded-2xl p-4 bg-gray-50 space-y-3">
+
+            <div class="grid md:grid-cols-5 gap-3">
+              <div class="field">
+                <label class="label-xs">治具編號</label>
+                <input id="replaceAddFixture" class="input" />
+              </div>
+              <div class="field">
+                <label class="label-xs">更換日期</label>
+                <input id="replaceAddDate" type="date" class="input" />
+              </div>
+              <div class="field">
+                <label class="label-xs">原因</label>
+                <input id="replaceAddReason" class="input" />
+              </div>
+              <div class="field">
+                <label class="label-xs">執行人員</label>
+                <input id="replaceAddExecutor" class="input" />
+              </div>
+            </div>
+
+            <div class="field">
+              <label class="label-xs">備註</label>
+              <input id="replaceAddNote" class="input" />
+            </div>
+
+            <div class="grid md:grid-cols-5 gap-3">
+              <div class="field">
+                <label class="label-xs">批量筆數（如不批量留空）</label>
+                <input id="replaceAddBatch" type="number" class="input" />
+              </div>
+            </div>
+
+            <div class="flex justify-end gap-2">
+              <button class="btn btn-ghost" onclick="toggleReplaceAdd(false)">取消</button>
+              <button class="btn btn-primary" onclick="submitReplacementLog()">提交</button>
+            </div>
+          </div>
+
+          <!-- 表格 -->
+          <div class="overflow-auto">
+            <table class="min-w-full text-sm">
+              <thead class="text-left text-gray-500">
+              <tr>
+                <th class="py-2 pr-4">日期</th>
+                <th class="py-2 pr-4">治具</th>
+                <th class="py-2 pr-4">原因</th>
+                <th class="py-2 pr-4">執行人員</th>
+                <th class="py-2 pr-4">備註</th>
+                <th class="py-2 pr-4">刪除</th>
+              </tr>
+              </thead>
+              <tbody id="replaceTable"></tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+
     </section>
+
 
     <!-- 後台管理(新增:子頁層) -->
     <section id="tab-admin" class="hidden space-y-4">
@@ -692,47 +990,173 @@
         </div>
       </div>
 
-      <!-- 治具資料維護 -->
+            <!-- 治具資料維護 -->
       <div id="subtab-fixture" class="card p-5 space-y-3 hidden">
         <div class="flex items-center justify-between">
           <h3 class="font-semibold">治具資料維護</h3>
           <div class="flex items-center gap-2">
-            <button class="btn btn-ghost" onclick="downloadCSV('fixtures_export.csv', toCSV(mockFixtures))">匯出</button>
+            <button class="btn btn-ghost" onclick="exportFixturesCsv()">匯出</button>
             <button class="btn btn-ghost" onclick="downloadCSV('fixtures_template.csv', fixtureTemplate())">下載範本</button>
+            <label class="btn btn-ghost cursor-pointer">
+              <input id="fxCsv" type="file" accept=".xlsx,.csv" class="hidden" onchange="handleFixtureCsv(this)" />
+              匯入 Excel/CSV
+            </label>
+            <button class="btn btn-primary" onclick="openFixtureModal('create')">新增治具</button>
           </div>
         </div>
+
+        <!-- 篩選條件 -->
         <div class="grid md:grid-cols-5 gap-3">
-          <div class="field"><label class="label-xs">治具名稱</label><input id="fxName" class="input" placeholder="名稱" /></div>
-          <div class="field"><label class="label-xs">對應使用機種</label><input id="fxModel" class="input" placeholder="機種" /></div>
-          <div class="field"><label class="label-xs">儲位</label><input id="fxLoc" class="input" placeholder="儲位" /></div>
-          <div class="field"><label class="label-xs">狀態</label><input id="fxStatus" class="input" placeholder="active/inactive" /></div>
-          <div class="field"><label class="label-xs">更換週期</label><input id="fxCycle" type="number" class="input" placeholder="次數" /></div>
+          <div class="field">
+            <label class="label-xs">關鍵字</label>
+            <input id="fxSearch" class="input" placeholder="治具編號 / 名稱" onkeydown="if(event.key==='Enter'){fxPage=1;loadFixtureList();}" />
+          </div>
+          <div class="field">
+            <label class="label-xs">狀態</label>
+            <select id="fxStatusFilter" class="input" onchange="fxPage=1;loadFixtureList();">
+              <option value="">全部</option>
+              <option value="正常">正常</option>
+              <option value="返還">返還</option>
+              <option value="報廢">報廢</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="label-xs">負責人 (owner_id)</label>
+            <input id="fxOwnerFilter" class="input" placeholder="ID (選填，可留空)" onkeydown="if(event.key==='Enter'){fxPage=1;loadFixtureList();}" />
+          </div>
+          <div class="field">
+            <label class="label-xs">每頁筆數</label>
+            <select id="fxPageSize" class="input" onchange="fxPage=1;loadFixtureList();">
+              <option value="8">8</option>
+              <option value="20">20</option>
+              <option value="50">50</option>
+            </select>
+          </div>
+          <div class="field flex items-end">
+            <button class="btn btn-ghost w-full" onclick="fxPage=1;loadFixtureList();">重新整理</button>
+          </div>
         </div>
-        <div class="flex items-center gap-2">
-          <button class="btn btn-primary" onclick="addFixture()">新增</button>
-          <label class="btn btn-ghost cursor-pointer"><input id="fxCsv" type="file" accept=".xlsx,.csv" class="hidden" onchange="handleFixtureCsv(this)" /> 匯入 Excel/CSV</label>
-        </div>
+
+        <!-- 列表 + 分頁 -->
         <div class="border-t pt-3">
           <div class="flex items-center justify-between">
-            <div class="text-sm text-gray-600">共 <span id="fxCount">0</span> 筆</div>
+            <div class="text-sm text-gray-600">
+              共 <span id="fxCount">0</span> 筆，
+              顯示第 <span id="fxPageNow">1</span> / <span id="fxPageMax">1</span> 頁
+            </div>
             <div class="pagination flex items-center gap-2">
-              <button class="btn btn-ghost text-xs" id="fxFirst" onclick="fxPage=1; renderFixtureList()">«</button>
-              <button class="btn btn-ghost text-xs" id="fxPrev"  onclick="fxPage=Math.max(1,fxPage-1); renderFixtureList()">上一頁</button>
-              <span class="text-xs">第 <span id="fxPageNow">1</span> / <span id="fxPageMax">1</span> 頁(每頁 8 筆)</span>
-              <button class="btn btn-ghost text-xs" id="fxNext"  onclick="fxPage=Math.min(fxTotalPages,fxPage+1); renderFixtureList()">下一頁</button>
-              <button class="btn btn-ghost text-xs" id="fxLast"  onclick="fxPage=fxTotalPages; renderFixtureList()">»</button>
+              <button class="btn btn-ghost text-xs" onclick="goFixturePage('first')">«</button>
+              <button class="btn btn-ghost text-xs" onclick="goFixturePage('prev')">上一頁</button>
+              <button class="btn btn-ghost text-xs" onclick="goFixturePage('next')">下一頁</button>
+              <button class="btn btn-ghost text-xs" onclick="goFixturePage('last')">»</button>
             </div>
           </div>
+
           <div class="overflow-auto mt-2">
-            <table class="min-w-full text-sm">
+            <table class="min-w-full text-xs md:text-sm">
               <thead class="text-left text-gray-500">
-                <tr><th class="py-2 pr-4">治具名稱</th><th class="py-2 pr-4">機種</th><th class="py-2 pr-4">儲位</th><th class="py-2 pr-4">狀態</th><th class="py-2 pr-4">更換週期</th><th class="py-2 pr-4">操作</th></tr>
+                <tr>
+                  <th class="py-2 pr-4">治具編號</th>
+                  <th class="py-2 pr-4">治具名稱</th>
+                  <th class="py-2 pr-4">類型</th>
+                  <th class="py-2 pr-4">自購 / 客供 / 總數</th>
+                  <th class="py-2 pr-4">儲位</th>
+                  <th class="py-2 pr-4">狀態</th>
+                  <th class="py-2 pr-4">更換週期</th>
+                  <th class="py-2 pr-4">負責人</th>
+                  <th class="py-2 pr-4">備註</th>
+                  <th class="py-2 pr-4">操作</th>
+                </tr>
               </thead>
               <tbody id="fxTable"></tbody>
             </table>
           </div>
         </div>
       </div>
+
+      <!-- 治具 新增/編輯 Modal -->
+      <div id="fixtureModal" class="fixed inset-0 bg-black/30 backdrop-blur-sm items-center justify-center hidden z-40">
+        <div class="bg-white rounded-2xl shadow-xl max-w-3xl w-full mx-4 p-5 space-y-4">
+          <div class="flex items-center justify-between">
+            <h3 id="fixtureModalTitle" class="font-semibold text-lg">新增治具</h3>
+            <button class="btn btn-ghost text-sm" onclick="closeFixtureModal()">✕</button>
+          </div>
+
+          <form id="fixtureForm" class="space-y-3" onsubmit="submitFixtureForm(event)">
+            <div class="grid md:grid-cols-3 gap-3">
+              <div class="field">
+                <label class="label-xs">治具編號 (fixture_id)</label>
+                <input id="fmFixtureId" class="input" placeholder="L-00017" />
+              </div>
+              <div class="field">
+                <label class="label-xs">治具名稱</label>
+                <input id="fmFixtureName" class="input" placeholder="主板測試治具 A" />
+              </div>
+              <div class="field">
+                <label class="label-xs">治具類型</label>
+                <input id="fmFixtureType" class="input" placeholder="測試治具" />
+              </div>
+            </div>
+
+            <div class="grid md:grid-cols-4 gap-3">
+              <div class="field">
+                <label class="label-xs">序號 (serial_number)</label>
+                <input id="fmSerialNumber" class="input" placeholder="SN2025..." />
+              </div>
+              <div class="field">
+                <label class="label-xs">自購數量</label>
+                <input id="fmSelfQty" type="number" min="0" class="input" />
+              </div>
+              <div class="field">
+                <label class="label-xs">客供數量</label>
+                <input id="fmCustomerQty" type="number" min="0" class="input" />
+              </div>
+              <div class="field">
+                <label class="label-xs">儲存位置</label>
+                <input id="fmStorage" class="input" placeholder="倉庫 A-01" />
+              </div>
+            </div>
+
+            <div class="grid md:grid-cols-4 gap-3">
+              <div class="field">
+                <label class="label-xs">更換週期 (數值)</label>
+                <input id="fmCycle" type="number" min="0" step="0.01" class="input" />
+              </div>
+              <div class="field">
+                <label class="label-xs">週期單位 (cycle_unit)</label>
+                <select id="fmCycleUnit" class="input">
+                  <option value="uses">使用次數</option>
+                  <option value="days">天數</option>
+                  <option value="none">無</option>
+                </select>
+              </div>
+              <div class="field">
+                <label class="label-xs">狀態</label>
+                <select id="fmStatus" class="input">
+                  <option value="正常">正常</option>
+                  <option value="返還">返還</option>
+                  <option value="報廢">報廢</option>
+                </select>
+              </div>
+              <div class="field">
+                <label class="label-xs">負責人 ID (owner_id)</label>
+                <input id="fmOwnerId" type="number" min="0" class="input" />
+              </div>
+            </div>
+
+            <div class="field">
+              <label class="label-xs">備註</label>
+              <textarea id="fmNote" class="input" rows="2"></textarea>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-2 border-t">
+              <button type="button" class="btn btn-ghost" onclick="closeFixtureModal()">取消</button>
+              <button type="submit" class="btn btn-primary">儲存</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
 
       <!-- 機種資料維護 -->
       <div id="subtab-model" class="card p-5 space-y-3 hidden">
@@ -783,19 +1207,89 @@
   </div>
 
     <!-- 引入 JavaScript -->
-  <script src="/web/js/api-config.js"></script>
-  <script src="/web/js/api-fixtures.js"></script>
-  <script src="/web/js/api-receipts.js"></script>
-  <script src="/web/js/api-logs.js"></script>
-  <script src="/web/js/api-stats-auth.js"></script>
-  <script src="/web/js/storage.js"></script>
-  <script src="/web/js/utils.js"></script>
-  <script src="/web/js/calculations.js"></script>
-  <script src="/web/js/ui-render.js"></script>
-  <script src="/web/js/auth.js"></script>
-  <script src="/web/js/api-users.js"></script>
-  <script src="/web/js/admin.js"></script>
-  <script src="/web/js/app-main.js"></script>
+<!-- ================================ -->
+<!-- 💡 基礎核心：必須最先載入        -->
+<!-- ================================ -->
+
+<!-- Excel 匯入（必須最上，以便後續所有匯入功能使用） -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+<!-- API 基本設定，如 api()、API_PREFIX 等 -->
+<script src="/web/js/api-config.js"></script>
+
+<!-- 共通工具、LocalStorage、UI 工具、計算邏輯 -->
+<script src="/web/js/storage.js"></script>
+<script src="/web/js/utils.js"></script>
+<script src="/web/js/calculations.js"></script>
+<script src="/web/js/ui-render.js"></script>
+
+
+<!-- ================================ -->
+<!-- 🔐 使用者登入認證 / 帳戶管理      -->
+<!-- ================================ -->
+
+<script src="/web/js/auth.js"></script>
+<script src="/web/js/api-users.js"></script>
+<script src="/web/js/admin.js"></script>
+<script src="/web/js/api-stats-auth.js"></script>
+
+
+<!-- ================================ -->
+<!-- 🧱 基礎資料（治具 Fixtures）      -->
+<!-- ================================ -->
+
+<script src="/web/js/api-fixtures.js"></script>
+
+
+<!-- ================================ -->
+<!-- 📦 收料 / 退料（新拆分的兩頁）     -->
+<!-- ================================ -->
+
+<!-- 你的原有 api-receipts.js（已經加 Excel 解讀） -->
+<script src="/web/js/api-receipts.js"></script>
+
+<!-- 新增：退料 API -->
+<script src="/web/js/api-returns.js"></script>
+
+<!-- 新增：前端 UI 控制（收料） -->
+<script src="/web/js/app-receipts.js"></script>
+
+<!-- 新增：前端 UI 控制（退料） -->
+<script src="/web/js/app-returns.js"></script>
+
+
+<!-- ================================ -->
+<!-- 🔧 使用 / 更換 記錄               -->
+<!-- ================================ -->
+
+<!-- 使用記錄 API -->
+<script src="/web/js/api-usage.js"></script>
+
+<!-- 更換記錄 API -->
+<script src="/web/js/api-replacement.js"></script>
+
+<!-- 使用/更換 記錄的 UI 控制程式 -->
+<script src="/web/js/app-logs.js"></script>
+
+
+<!-- ================================ -->
+<!-- 🏠 主控制（頁面切換/初始化）       -->
+<!-- ================================ -->
+<script src="/web/js/app-main.js"></script>
+
+
+<!-- ================================ -->
+<!-- 🚀 初始化（可選，建議加）         -->
+<!-- ================================ -->
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  // 自動載入各表格（避免空白頁）
+  if (typeof loadUsageLogs === 'function') loadUsageLogs();
+  if (typeof loadReplacementLogs === 'function') loadReplacementLogs();
+  if (typeof loadReceipts === 'function') loadReceipts();
+  if (typeof loadReturns === 'function') loadReturns();
+});
+</script>
 
 
 </body>

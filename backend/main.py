@@ -26,6 +26,13 @@ from backend.app.routers.usage import router as usage_router
 from backend.app.routers.models import router as models_router
 from backend.app.routers.stats import router as stats_router
 from backend.app.routers.users import router as users_router
+from backend.app.routers.stations import router as stations_router
+from backend.app.routers import (
+    models,
+    stations,
+    model_stations,
+    fixture_requirements,
+)
 
 
 
@@ -144,16 +151,16 @@ app.add_middleware(
 
 # ==================== 請求計時中間件 ====================
 
-@app.middleware("http")
-async def add_process_time_header(request: Request, call_next):
-    """
-    記錄每個請求的處理時間
-    """
-    start_time = time.time()
-    response = await call_next(request)
-    process_time = time.time() - start_time
-    response.headers["X-Process-Time"] = str(process_time)
-    return response
+# @app.middleware("http")
+# async def add_process_time_header(request: Request, call_next):
+#     """
+#     記錄每個請求的處理時間
+#     """
+#     start_time = time.time()
+#     response = await call_next(request)
+#     process_time = time.time() - start_time
+#     response.headers["X-Process-Time"] = str(process_time)
+#     return response
 
 
 # ==================== 全域異常處理 ====================
@@ -209,6 +216,14 @@ app.include_router(models_router, prefix="/api/v2")
 app.include_router(stats_router, prefix="/api/v2")
 app.include_router(users_router, prefix="/api/v2")
 app.include_router(auth_router, prefix="/api/v2")
+app.include_router(stations_router, prefix="/api/v2")
+
+app.include_router(models.router, prefix="/api/v2")
+app.include_router(stations.router, prefix="/api/v2")
+app.include_router(model_stations.router, prefix="/api/v2")
+app.include_router(fixture_requirements.router, prefix="/api/v2")
+
+
 # ==================== 根路由 ====================
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
