@@ -6,8 +6,13 @@ Authentication and Password Utilities
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from fastapi import HTTPException, status
+
+# 使用 SHA256 密碼工具
+from backend.app.utils.password import (
+    hash_password,      # SHA256
+    verify_password     # SHA256 驗證
+)
 
 # ============================================
 # JWT 基本設定
@@ -15,32 +20,6 @@ from fastapi import HTTPException, status
 SECRET_KEY = "your-secret-key-here-please-change-in-production"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 天
-
-# 密碼加密設定
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-
-# ============================================
-# 密碼處理
-# ============================================
-def get_password_hash(password: str) -> str:
-    """取得密碼雜湊值 (bcrypt)"""
-    return pwd_context.hash(password)
-
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """驗證密碼（同時支援 bcrypt 與舊版 SHA256）"""
-    try:
-        return pwd_context.verify(plain_password, hashed_password)
-    except Exception:
-        # 舊版兼容：使用 SHA256
-        from backend.app.utils.password import verify_password as verify_sha256
-        return verify_sha256(plain_password, hashed_password)
-
-
-# ✅ 向後相容名稱，讓其他模組可 import hash_password
-hash_password = get_password_hash
-
 
 # ============================================
 # JWT Token 生成與驗證
@@ -81,28 +60,19 @@ def get_token_user(token: str) -> Optional[Dict[str, Any]]:
     }
 
 
-# ============================================
-# Admin 權限檢查
-# ============================================
 def get_token_user_role(token: str) -> Optional[str]:
     """從 Token 中取得角色"""
     payload = verify_token(token)
-    if payload:
-        return payload.get("role")
-    return None
+    return payload.get("role") if payload else None
 
 
 def is_admin(token: str) -> bool:
     """檢查是否為管理員"""
-    role = get_token_user_role(token)
-    return role == "admin"
+    return get_token_user_role(token) == "admin"
 
 
 def require_admin(token: str) -> bool:
-    """
-    檢查 Token 是否具管理員權限
-    非 admin 時會直接 raise HTTP 403
-    """
+    """檢查 Token 是否具管理員權限"""
     if not is_admin(token):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -112,7 +82,7 @@ def require_admin(token: str) -> bool:
 
 
 # ============================================
-# 工具：檢查 Token 是否過期
+# Token 過期檢查
 # ============================================
 def is_token_expired(token: str) -> bool:
     """檢查 Token 是否過期"""
@@ -128,18 +98,14 @@ def is_token_expired(token: str) -> bool:
 
 
 # ============================================
-# 範例測試
+# 測試用（開發期間）
 # ============================================
 if __name__ == "__main__":
-    password = "admin123"
-    hashed = get_password_hash(password)
-    print(f"密碼雜湊: {hashed}")
-    print(f"驗證結果: {verify_password(password, hashed)}")
+    pwd = "admin123"
+    hashed = hash_password(pwd)
+    print(f"SHA256 雜湊: {hashed}")
+    print(f"驗證結果: {verify_password(pwd, hashed)}")
 
     token = create_access_token({"sub": "admin", "user_id": 1, "role": "admin"})
-    print(f"\nToken: {token}")
-
-    payload = verify_token(token)
-    print(f"\nToken Payload: {payload}")
-
-    print(f"\n是否為管理員: {is_admin(token)}")
+    print("\nToken:", token)
+    print("\nPayload:", verify_token(token))

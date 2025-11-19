@@ -27,12 +27,8 @@ from backend.app.routers.models import router as models_router
 from backend.app.routers.stats import router as stats_router
 from backend.app.routers.users import router as users_router
 from backend.app.routers.stations import router as stations_router
-from backend.app.routers import (
-    models,
-    stations,
-    model_stations,
-    fixture_requirements,
-)
+from backend.app.routers.model_stations import router as model_stations_router
+from backend.app.routers.fixture_requirements import router as fixture_requirements_router
 
 
 
@@ -218,10 +214,9 @@ app.include_router(users_router, prefix="/api/v2")
 app.include_router(auth_router, prefix="/api/v2")
 app.include_router(stations_router, prefix="/api/v2")
 
-app.include_router(models.router, prefix="/api/v2")
-app.include_router(stations.router, prefix="/api/v2")
-app.include_router(model_stations.router, prefix="/api/v2")
-app.include_router(fixture_requirements.router, prefix="/api/v2")
+app.include_router(model_stations_router, prefix="/api/v2")
+
+app.include_router(fixture_requirements_router, prefix="/api/v2")
 
 
 # ==================== 根路由 ====================

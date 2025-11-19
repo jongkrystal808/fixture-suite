@@ -42,7 +42,7 @@
       <div class="grid gap-3">
         <div class="field"><label class="label-xs">帳號</label><input id="loginId" class="input" placeholder="輸入帳號"/></div>
         <div class="field"><label class="label-xs">密碼</label><input id="loginPwd" type="password" class="input" placeholder="輸入密碼"/></div>
-        <button class="btn btn-primary" onclick="mockLogin()">登入</button>
+        <button class="btn btn-primary" onclick="doLogin()">登入</button>
         <p id="loginMsg" class="text-xs text-gray-500"></p>
       </div>
     </div>
@@ -440,6 +440,7 @@
                 <tr>
                   <th class="py-2 px-4 w-24">治具編號</th>
                   <th class="py-2 px-4 w-32">名稱</th>
+                  <th class="py-2 px-4 w-24">客戶</th>
                   <th class="py-2 px-4 w-32">類型</th>
                   <th class="py-2 px-4 w-44">庫存(自購/客供/總)</th>
                   <th class="py-2 px-4 w-24">狀態</th>
@@ -468,6 +469,7 @@
                 <tr>
                   <th class="py-2 px-4 w-32">機種代碼</th>
                   <th class="py-2 px-4 w-40">名稱</th>
+                  <th class="py-2 px-4 w-24">客戶</th>
                   <th class="py-2 px-4 w-64">備註</th>
                   <th class="py-2 px-4 w-24">操作</th>
                 </tr>
@@ -1158,139 +1160,340 @@
       </div>
 
 
-      <!-- 機種資料維護 -->
+      <!-- 機種資料維護（三段式） -->
       <div id="subtab-model" class="card p-5 space-y-3 hidden">
         <div class="flex items-center justify-between">
-          <h3 class="font-semibold">機種資料維護</h3>
+          <h3 class="font-semibold">機種資料維護（三段式）</h3>
           <div class="flex items-center gap-2">
-            <button class="btn btn-ghost" onclick="downloadCSV('models_export.csv', toCSV(mockModels))">匯出</button>
-            <button class="btn btn-ghost" onclick="downloadCSV('models_template.csv', modelTemplate())">下載範本</button>
+            <button class="btn btn-ghost" onclick="mmExportModelsCsv()">匯出機種</button>
+            <button class="btn btn-primary" onclick="mmOpenModelModal('create')">新增機種</button>
           </div>
         </div>
-        <div class="grid md:grid-cols-4 gap-3">
-          <div class="field"><label class="label-xs">治具名稱</label><input id="mdFxName" class="input" placeholder="對應治具名稱" /></div>
-          <div class="field"><label class="label-xs">對應使用機種</label><input id="mdModelName" class="input" placeholder="機種名稱" /></div>
-          <div class="field"><label class="label-xs">站點</label><input id="mdPos" class="input" placeholder="站點/位置" /></div>
-          <div class="field"><label class="label-xs">數量</label><input id="mdQty" type="number" class="input" placeholder="數量" /></div>
-        </div>
-        <div class="flex items-center gap-2">
-          <button class="btn btn-primary" onclick="addModel()">新增</button>
-          <label class="btn btn-ghost cursor-pointer"><input id="mdCsv" type="file" accept=".xlsx,.csv" class="hidden" onchange="handleModelCsv(this)" /> 匯入 Excel/CSV</label>
-        </div>
-        <div class="border-t pt-3">
-          <div class="flex items-center justify-between">
-            <div class="text-sm text-gray-600">共 <span id="mdCount">0</span> 筆</div>
-            <div class="pagination flex items-center gap-2">
-              <button class="btn btn-ghost text-xs" id="mdFirst" onclick="mdPage=1; renderModelList()">«</button>
-              <button class="btn btn-ghost text-xs" id="mdPrev"  onclick="mdPage=Math.max(1,mdPage-1); renderModelList()">上一頁</button>
-              <span class="text-xs">第 <span id="mdPageNow">1</span> / <span id="mdPageMax">1</span> 頁(每頁 8 筆)</span>
-              <button class="btn btn-ghost text-xs" id="mdNext"  onclick="mdPage=Math.min(mdTotalPages,mdPage+1); renderModelList()">下一頁</button>
-              <button class="btn btn-ghost text-xs" id="mdLast"  onclick="mdPage=mdTotalPages; renderModelList()">»</button>
+
+        <!-- 三欄 Layout -->
+        <div class="grid md:grid-cols-3 gap-3 mt-2">
+          <!-- 左：機種清單 -->
+          <div class="border rounded-2xl p-3 flex flex-col gap-2">
+            <div class="flex items-center justify-between gap-2">
+              <div class="font-semibold text-sm">機種清單</div>
+            </div>
+            <div class="field">
+              <label class="label-xs">搜尋</label>
+              <input id="mmSearch" class="input" placeholder="輸入機種代碼/名稱" onkeydown="if(event.key==='Enter'){ mmLoadModelList(); }" />
+            </div>
+            <button class="btn btn-ghost btn-xs self-start" onclick="mmLoadModelList()">重新整理</button>
+            <div class="text-xs text-gray-500">共 <span id="mmCount">0</span> 筆</div>
+            <div class="overflow-auto border rounded-xl max-h-72">
+              <table class="min-w-full text-xs">
+                <thead class="bg-gray-50 text-gray-500">
+                  <tr>
+                    <th class="py-1.5 px-2 text-left">機種代碼</th>
+                    <th class="py-1.5 px-2 text-left">機種名稱</th>
+                    <th class="py-1.5 px-2 text-left">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="mmTable"></tbody>
+              </table>
             </div>
           </div>
-          <div class="overflow-auto mt-2">
-            <table class="min-w-full text-sm">
-              <thead class="text-left text-gray-500">
-                <tr><th class="py-2 pr-4">治具名稱</th><th class="py-2 pr-4">機種</th><th class="py-2 pr-4">站點</th><th class="py-2 pr-4">數量</th><th class="py-2 pr-4">操作</th></tr>
-              </thead>
-              <tbody id="mdTable"></tbody>
-            </table>
+
+          <!-- 中：機種 ↔ 站點 綁定 + 站點 CRUD -->
+          <div class="border rounded-2xl p-3 flex flex-col gap-2">
+            <div class="flex items-center justify-between gap-2">
+              <div class="font-semibold text-sm">
+                機種站點綁定
+                <span id="msSelectedModelLabel" class="text-xs text-gray-500"></span>
+              </div>
+              <button class="btn btn-ghost btn-xs" onclick="stOpenStationMasterModal()">站點主檔維護</button>
+            </div>
+
+            <div id="msNoModelHint" class="text-xs text-gray-500">
+              請先在左側選擇一個機種。
+            </div>
+
+            <div id="msContent" class="space-y-2 hidden">
+              <!-- 已綁定站點 -->
+              <div>
+                <div class="flex items-center justify-between">
+                  <div class="text-xs font-semibold">已綁定站點</div>
+                  <button class="btn btn-ghost btn-xs" onclick="msReloadForCurrentModel()">重新整理</button>
+                </div>
+                <div class="overflow-auto border rounded-xl max-h-32 mt-1">
+                  <table class="min-w-full text-xs">
+                    <thead class="bg-gray-50 text-gray-500">
+                      <tr>
+                        <th class="py-1 px-2 text-left">代碼</th>
+                        <th class="py-1 px-2 text-left">名稱</th>
+                        <th class="py-1 px-2 text-left">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody id="msBoundTable"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- 可綁定站點 -->
+              <div>
+                <div class="flex items-center justify-between">
+                  <div class="text-xs font-semibold">可綁定站點</div>
+                </div>
+                <div class="overflow-auto border rounded-xl max-h-32 mt-1">
+                  <table class="min-w-full text-xs">
+                    <thead class="bg-gray-50 text-gray-500">
+                      <tr>
+                        <th class="py-1 px-2 text-left">代碼</th>
+                        <th class="py-1 px-2 text-left">名稱</th>
+                        <th class="py-1 px-2 text-left">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody id="msAvailableTable"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 右：治具需求 -->
+          <div class="border rounded-2xl p-3 flex flex-col gap-2">
+            <div class="font-semibold text-sm">
+              治具需求設定
+              <div class="text-xs text-gray-500">
+                機種：<span id="frSelectedModelLabel">-</span> /
+                站點：<span id="frSelectedStationLabel">-</span>
+              </div>
+            </div>
+
+            <div id="frNoModelStationHint" class="text-xs text-gray-500">
+              請先選擇左側機種，再在中間選擇一個「已綁定站點」。
+            </div>
+
+            <div id="frContent" class="space-y-2 hidden">
+              <!-- 新增治具需求 -->
+              <div class="grid grid-cols-5 gap-2 items-end">
+                <div class="col-span-3 field">
+                  <label class="label-xs">治具</label>
+                  <select id="frFixtureSelect" class="input">
+                    <option value="">選擇治具...</option>
+                  </select>
+                </div>
+                <div class="col-span-1 field">
+                  <label class="label-xs">需求數量</label>
+                  <input id="frQtyInput" type="number" min="1" class="input" value="1" />
+                </div>
+                <div class="col-span-1">
+                  <button class="btn btn-primary w-full" onclick="frAddRequirement()">新增</button>
+                </div>
+              </div>
+
+              <!-- 需求清單 -->
+              <div class="overflow-auto border rounded-xl max-h-64 mt-1">
+                <table class="min-w-full text-xs">
+                  <thead class="bg-gray-50 text-gray-500">
+                    <tr>
+                      <th class="py-1 px-2 text-left">治具編號</th>
+                      <th class="py-1 px-2 text-left">治具名稱</th>
+                      <th class="py-1 px-2 text-left">需求數量</th>
+                      <th class="py-1 px-2 text-left">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="frTable"></tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
       </div>
-    </section>
-  </main>
+
+      <!-- 機種 Modal -->
+      <div id="mmModelModal" class="fixed inset-0 bg-black/30 backdrop-blur-sm items-center justify-center hidden z-40">
+        <div class="bg-white rounded-2xl shadow-xl max-w-lg w-full mx-4 p-5 space-y-4">
+          <div class="flex items-center justify-between">
+            <h3 id="mmModelModalTitle" class="font-semibold text-lg">新增機種</h3>
+            <button class="btn btn-ghost text-sm" onclick="mmCloseModelModal()">✕</button>
+          </div>
+          <form id="mmModelForm" class="space-y-3" onsubmit="mmSubmitModelForm(event)">
+            <div class="grid md:grid-cols-2 gap-3">
+              <div class="field">
+                <label class="label-xs">機種代碼 (model_id)</label>
+                <input id="mmModelId" class="input" placeholder="如 EDS-518A-SS-SC-80" />
+              </div>
+              <div class="field">
+                <label class="label-xs">機種名稱</label>
+                <input id="mmModelName" class="input" placeholder="機種顯示名稱" />
+              </div>
+            </div>
+            <div class="field">
+              <label class="label-xs">備註</label>
+              <textarea id="mmModelNote" class="input" rows="2"></textarea>
+            </div>
+            <div class="flex items-center justify-end gap-2 pt-2 border-t">
+              <button type="button" class="btn btn-ghost" onclick="mmCloseModelModal()">取消</button>
+              <button type="submit" class="btn btn-primary">儲存</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- 站點 Master Modal -->
+      <div id="stStationModal" class="fixed inset-0 bg-black/30 backdrop-blur-sm items-center justify-center hidden z-40">
+        <div class="bg-white rounded-2xl shadow-xl max-w-3xl w-full mx-4 p-5 space-y-4">
+          <div class="flex items-center justify-between">
+            <h3 class="font-semibold text-lg">站點主檔維護</h3>
+            <button class="btn btn-ghost text-sm" onclick="stCloseStationMasterModal()">✕</button>
+          </div>
+          <div class="grid md:grid-cols-3 gap-3">
+            <div class="field">
+              <label class="label-xs">站點代碼 (station_code)</label>
+              <input id="stCode" class="input" placeholder="如 T1_MP" />
+            </div>
+            <div class="field">
+              <label class="label-xs">站點名稱</label>
+              <input id="stName" class="input" placeholder="如 T1 量產" />
+            </div>
+            <div class="field">
+              <label class="label-xs">備註</label>
+              <input id="stNote" class="input" />
+            </div>
+          </div>
+          <div class="flex items-center justify-between">
+            <div class="text-xs text-gray-500">
+              編輯模式：<span id="stModeLabel">新增</span>
+            </div>
+            <div class="flex gap-2">
+              <button class="btn btn-ghost btn-xs" onclick="stResetForm()">清空</button>
+              <button class="btn btn-primary btn-xs" onclick="stSubmitForm()">儲存</button>
+            </div>
+          </div>
+
+          <div class="border-t pt-3">
+            <div class="flex items-center justify-between mb-1">
+              <div class="text-sm font-semibold">站點列表</div>
+              <button class="btn btn-ghost btn-xs" onclick="stLoadStationMasterList()">重新整理</button>
+            </div>
+            <div class="overflow-auto max-h-64 border rounded-xl">
+              <table class="min-w-full text-xs">
+                <thead class="bg-gray-50 text-gray-500">
+                  <tr>
+                    <th class="py-1 px-2 text-left">ID</th>
+                    <th class="py-1 px-2 text-left">代碼</th>
+                    <th class="py-1 px-2 text-left">名稱</th>
+                    <th class="py-1 px-2 text-left">備註</th>
+                    <th class="py-1 px-2 text-left">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="stTable"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
 
   <!-- Toast -->
   <div id="toast" class="fixed bottom-4 left-1/2 -translate-x-1/2 hidden">
     <div class="bg-gray-900 text-white px-4 py-2 rounded-xl shadow-lg">訊息</div>
   </div>
 
-    <!-- 引入 JavaScript -->
-<!-- ================================ -->
-<!-- 💡 基礎核心：必須最先載入        -->
-<!-- ================================ -->
-
-<!-- Excel 匯入（必須最上，以便後續所有匯入功能使用） -->
-<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
-
-<!-- API 基本設定，如 api()、API_PREFIX 等 -->
-<script src="/web/js/api-config.js"></script>
-
-<!-- 共通工具、LocalStorage、UI 工具、計算邏輯 -->
-<script src="/web/js/storage.js"></script>
-<script src="/web/js/utils.js"></script>
-<script src="/web/js/calculations.js"></script>
-<script src="/web/js/ui-render.js"></script>
 
 
-<!-- ================================ -->
-<!-- 🔐 使用者登入認證 / 帳戶管理      -->
-<!-- ================================ -->
+            <!-- 引入 JavaScript -->
+        <!-- ================================ -->
+        <!-- 💡 基礎核心：必須最先載入        -->
+        <!-- ================================ -->
 
-<script src="/web/js/auth.js"></script>
-<script src="/web/js/api-users.js"></script>
-<script src="/web/js/admin.js"></script>
-<script src="/web/js/api-stats-auth.js"></script>
+        <!-- Excel 匯入（必須最上，以便後續所有匯入功能使用） -->
+        <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 
+        <!-- API 基本設定，如 api()、API_PREFIX 等 -->
+        <script src="/web/js/api-config.js"></script>
 
-<!-- ================================ -->
-<!-- 🧱 基礎資料（治具 Fixtures）      -->
-<!-- ================================ -->
-
-<script src="/web/js/api-fixtures.js"></script>
-
-
-<!-- ================================ -->
-<!-- 📦 收料 / 退料（新拆分的兩頁）     -->
-<!-- ================================ -->
-
-<!-- 你的原有 api-receipts.js（已經加 Excel 解讀） -->
-<script src="/web/js/api-receipts.js"></script>
-
-<!-- 新增：退料 API -->
-<script src="/web/js/api-returns.js"></script>
-
-<!-- 新增：前端 UI 控制（收料） -->
-<script src="/web/js/app-receipts.js"></script>
-
-<!-- 新增：前端 UI 控制（退料） -->
-<script src="/web/js/app-returns.js"></script>
+        <!-- 共通工具、LocalStorage、UI 工具、計算邏輯 -->
+        <script src="/web/js/storage.js"></script>
+        <script src="/web/js/utils.js"></script>
+        <script src="/web/js/calculations.js"></script>
+        <script src="/web/js/ui-render.js"></script>
 
 
-<!-- ================================ -->
-<!-- 🔧 使用 / 更換 記錄               -->
-<!-- ================================ -->
+        <!-- ================================ -->
+        <!-- 🔐 使用者登入認證 / 帳戶管理      -->
+        <!-- ================================ -->
 
-<!-- 使用記錄 API -->
-<script src="/web/js/api-usage.js"></script>
-
-<!-- 更換記錄 API -->
-<script src="/web/js/api-replacement.js"></script>
-
-<!-- 使用/更換 記錄的 UI 控制程式 -->
-<script src="/web/js/app-logs.js"></script>
+        <script src="/web/js/api-auth.js"></script>
+        <script src="/web/js/auth.js"></script>
+        <script src="/web/js/api-users.js"></script>
+        <script src="/web/js/admin.js"></script>
+        <script src="/web/js/api-stats-auth.js"></script>
 
 
-<!-- ================================ -->
-<!-- 🏠 主控制（頁面切換/初始化）       -->
-<!-- ================================ -->
-<script src="/web/js/app-main.js"></script>
+        <!-- ================================ -->
+        <!-- 🧱 基礎資料（治具 Fixtures）      -->
+        <!-- ================================ -->
+
+        <script src="/web/js/api-fixtures.js"></script>
 
 
-<!-- ================================ -->
-<!-- 🚀 初始化（可選，建議加）         -->
-<!-- ================================ -->
-<script>
-document.addEventListener("DOMContentLoaded", () => {
-  // 自動載入各表格（避免空白頁）
-  if (typeof loadUsageLogs === 'function') loadUsageLogs();
-  if (typeof loadReplacementLogs === 'function') loadReplacementLogs();
-  if (typeof loadReceipts === 'function') loadReceipts();
-  if (typeof loadReturns === 'function') loadReturns();
-});
-</script>
+        <!-- ================================ -->
+        <!-- 📦 收料 / 退料（新拆分的兩頁）     -->
+        <!-- ================================ -->
+
+        <!-- 你的原有 api-receipts.js（已經加 Excel 解讀） -->
+        <script src="/web/js/api-receipts.js"></script>
+
+        <!-- 新增：退料 API -->
+        <script src="/web/js/api-returns.js"></script>
+
+        <!-- 新增：前端 UI 控制（收料） -->
+        <script src="/web/js/app-receipts.js"></script>
+
+        <!-- 新增：前端 UI 控制（退料） -->
+        <script src="/web/js/app-returns.js"></script>
 
 
-</body>
+        <!-- ================================ -->
+        <!-- 🔧 使用 / 更換 記錄               -->
+        <!-- ================================ -->
+
+        <!-- 使用記錄 API -->
+        <script src="/web/js/api-usage.js"></script>
+
+        <!-- 更換記錄 API -->
+        <script src="/web/js/api-replacement.js"></script>
+
+        <!-- 使用/更換 記錄的 UI 控制程式 -->
+        <script src="/web/js/app-logs.js"></script>
+
+        <!-- 治具資料 API -->
+        <script src="js/api-fixtures.js"></script>
+
+        <!-- 機種資料 API -->
+        <script src="js/api-models.js"></script>
+
+        <!-- ================================ -->
+        <!-- 🏠 主控制（頁面切換/初始化）       -->
+        <!-- ================================ -->
+        <script src="/web/js/app-main.js"></script>
+
+
+        <!-- ================================ -->
+        <!-- 🚀 初始化（可選，建議加）         -->
+        <!-- ================================ -->
+        <script>
+        document.addEventListener("DOMContentLoaded", () => {
+          // 自動載入各表格（避免空白頁）
+          if (typeof loadUsageLogs === 'function') loadUsageLogs();
+          if (typeof loadReplacementLogs === 'function') loadReplacementLogs();
+          if (typeof loadReceipts === 'function') loadReceipts();
+          if (typeof loadReturns === 'function') loadReturns();
+        });
+
+        document.addEventListener('DOMContentLoaded', async () => {
+          await checkAuthStatus();
+          startClock();
+          initTabs();
+        });
+        </script>
+
+     </body>
+
 </html>

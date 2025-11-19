@@ -17,18 +17,28 @@ async function apiListUsers() {
 
 /** 建立使用者 */
 async function apiCreateUser(data) {
-  return await apiJson("/users", { method: "POST", body: JSON.stringify(data) });
+  return await apiJson("/users", {
+    method: "POST",
+    body: JSON.stringify(data)
+  });
 }
 
-/** 更新使用者資料（角色 / 信箱 / 密碼等） */
+/** 更新使用者資料（角色 / Email） */
 async function apiUpdateUser(id, data) {
-  return await apiJson(`/users/${id}`, { method: "PUT", body: JSON.stringify(data) });
+  return await apiJson(`/users/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data)
+  });
 }
 
-/** 刪除使用者（以密碼驗證） */
+/** 刪除使用者（需密碼確認） */
 async function apiDeleteUser(id, password) {
-  // DELETE 通常不允許 body，因此改以 query string 傳遞密碼
-  return await api(`/users/${id}?password=${encodeURIComponent(password)}`, "DELETE");
+  return await api(
+    `/users/${id}?password=${encodeURIComponent(password)}`,
+    {
+      method: "DELETE"
+    }
+  );
 }
 
 /** 管理員重設使用者密碼 */

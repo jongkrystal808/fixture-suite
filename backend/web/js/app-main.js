@@ -43,7 +43,13 @@ document.addEventListener('click', function (e) {
     }
 
   // 📌 切到機種維護時如需載入清單，也可在這裡補充
+    if (subtab === 'model') {
+        if (typeof initModelTab === 'function')
+            initModelTab();
+  }
+
 });
+
 
 // ============================================
 // 時鐘
@@ -576,6 +582,694 @@ async function refreshAll() {
 }
 
 // ============================================
+// 機種資料維護（三段式）
+// Models + Stations + Fixture Requirements
+// ============================================
+
+let mmModels = [];
+let mmCurrentModelId = null;
+
+let msBoundStations = [];
+let msAvailableStations = [];
+let msCurrentStationId = null;
+
+let frRequirements = [];
+let frFixtureOptionsLoaded = false;
+
+let stMasterList = [];
+let stEditingId = null;
+
+let mmTabInitialized = false;
+
+// ---------- 初始化：切到「機種資料維護」時呼叫 ----------
+function initModelTab() {
+  if (mmTabInitialized) {
+    mmLoadModelList();
+    return;
+  }
+  mmTabInitialized = true;
+  mmLoadModelList();
+  stLoadStationMasterList();
+  frInitFixtureOptions();
+}
+
+// 你在 subtab 點擊 handler 裡，可以加：
+// if (subtab === 'model' && typeof initModelTab === 'function') initModelTab();
+
+window.initModelTab = initModelTab;
+
+// ---------- 機種：列表 / 新增 / 編輯 / 刪除 ----------
+
+async function mmLoadModelList() {
+  try {
+    const q = (document.getElementById('mmSearch')?.value || '').trim();
+    const data = await apiListModels(q);
+    mmModels = data || [];
+    mmRenderModelTable();
+  } catch (err) {
+    console.error('mmLoadModelList error', err);
+    toast('載入機種清單失敗');
+  }
+}
+
+function mmRenderModelTable() {
+  const tbody = document.getElementById('mmTable');
+  const countEl = document.getElementById('mmCount');
+  if (!tbody) return;
+
+  tbody.innerHTML = '';
+  if (countEl) countEl.textContent = String(mmModels.length);
+
+  if (!mmModels.length) {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = 3;
+    td.className = 'py-2 text-center text-gray-400';
+    td.textContent = '目前沒有機種資料';
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+
+  mmModels.forEach(m => {
+    const tr = document.createElement('tr');
+    const isSelected = m.model_id === mmCurrentModelId;
+    tr.className = 'border-b last:border-b-0 cursor-pointer ' + (isSelected ? 'bg-blue-50' : 'hover:bg-gray-50');
+    tr.onclick = () => mmSelectModel(m.model_id);
+
+    tr.innerHTML = `
+      <td class="py-1.5 px-2 font-mono text-xs whitespace-nowrap">${m.model_id}</td>
+      <td class="py-1.5 px-2 text-xs">${m.model_name || ''}</td>
+      <td class="py-1.5 px-2 whitespace-nowrap">
+        <button class="btn btn-ghost btn-2xs" onclick="event.stopPropagation(); mmOpenModelModal('edit', '${m.model_id}')">編輯</button>
+        <button class="btn btn-ghost btn-2xs text-red-600" onclick="event.stopPropagation(); mmDeleteModel('${m.model_id}')">刪除</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function mmSelectModel(modelId) {
+  mmCurrentModelId = modelId;
+  msCurrentStationId = null;
+  mmRenderModelTable();
+  msUpdateSelectedModelLabel();
+  msReloadForCurrentModel();
+  frUpdateSelectionLabels();
+  frClearContent();
+}
+
+async function mmDeleteModel(modelId) {
+  if (!confirm(`確定要刪除機種 ${modelId} 嗎？\n(會連帶刪除站點關聯與治具需求)`)) return;
+  try {
+    await apiDeleteModel(modelId);
+    toast('已刪除機種');
+    if (mmCurrentModelId === modelId) {
+      mmCurrentModelId = null;
+      msBoundStations = [];
+      msAvailableStations = [];
+      msCurrentStationId = null;
+    }
+    mmLoadModelList();
+    msRenderBoundStations();
+    msRenderAvailableStations();
+    frClearContent();
+  } catch (err) {
+    console.error('mmDeleteModel error', err);
+    toast('刪除機種失敗');
+  }
+}
+
+function mmOpenModelModal(mode, modelId) {
+  const modal = document.getElementById('mmModelModal');
+  const titleEl = document.getElementById('mmModelModalTitle');
+  const idInput = document.getElementById('mmModelId');
+  const nameInput = document.getElementById('mmModelName');
+  const noteInput = document.getElementById('mmModelNote');
+
+  if (!modal) return;
+
+  document.getElementById('mmModelForm').reset();
+
+  if (mode === 'create') {
+    modal.dataset.mode = 'create';
+    modal.dataset.modelId = '';
+    if (titleEl) titleEl.textContent = '新增機種';
+    if (idInput) {
+      idInput.disabled = false;
+      idInput.value = '';
+    }
+    nameInput.value = '';
+    noteInput.value = '';
+  } else {
+    modal.dataset.mode = 'edit';
+    modal.dataset.modelId = modelId;
+    if (titleEl) titleEl.textContent = `編輯機種 - ${modelId}`;
+    if (idInput) {
+      idInput.disabled = true;
+      idInput.value = modelId;
+    }
+    const m = mmModels.find(x => x.model_id === modelId);
+    nameInput.value = m?.model_name || '';
+    noteInput.value = m?.note || '';
+  }
+
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+}
+
+function mmCloseModelModal() {
+  const modal = document.getElementById('mmModelModal');
+  if (!modal) return;
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
+}
+
+async function mmSubmitModelForm(e) {
+  e.preventDefault();
+  const modal = document.getElementById('mmModelModal');
+  if (!modal) return;
+
+  const mode = modal.dataset.mode || 'create';
+  const idInput = document.getElementById('mmModelId');
+  const nameInput = document.getElementById('mmModelName');
+  const noteInput = document.getElementById('mmModelNote');
+
+  const modelId = idInput.value.trim();
+  const modelName = nameInput.value.trim();
+  const note = noteInput.value.trim() || null;
+
+  if (!modelId && mode === 'create') {
+    toast('請輸入機種代碼');
+    return;
+  }
+  if (!modelName) {
+    toast('請輸入機種名稱');
+    return;
+  }
+
+  try {
+    if (mode === 'create') {
+      await apiCreateModel({ model_id: modelId, model_name: modelName, note });
+      toast('已新增機種');
+      mmCurrentModelId = modelId;
+    } else {
+      const editId = modal.dataset.modelId;
+      await apiUpdateModel(editId, { model_name: modelName, note });
+      toast('已更新機種');
+      mmCurrentModelId = editId;
+    }
+    mmCloseModelModal();
+    await mmLoadModelList();
+    msUpdateSelectedModelLabel();
+    msReloadForCurrentModel();
+  } catch (err) {
+    console.error('mmSubmitModelForm error', err);
+    toast('儲存機種失敗');
+  }
+}
+
+function mmExportModelsCsv() {
+  if (!mmModels || !mmModels.length) {
+    toast('目前沒有機種資料可匯出');
+    return;
+  }
+  const rows = mmModels.map(m => ({
+    model_id: m.model_id,
+    model_name: m.model_name,
+    note: m.note,
+    created_at: m.created_at
+  }));
+  downloadCSV('machine_models_export.csv', toCSV(rows));
+}
+
+// ---------- 機種 ↔ 站點 綁定 ----------
+
+function msUpdateSelectedModelLabel() {
+  const label = document.getElementById('msSelectedModelLabel');
+  const noHint = document.getElementById('msNoModelHint');
+  const content = document.getElementById('msContent');
+  if (!label || !noHint || !content) return;
+
+  if (!mmCurrentModelId) {
+    label.textContent = '';
+    noHint.classList.remove('hidden');
+    content.classList.add('hidden');
+  } else {
+    const m = mmModels.find(x => x.model_id === mmCurrentModelId);
+    label.textContent = m ? `(${m.model_id} - ${m.model_name || ''})` : `(${mmCurrentModelId})`;
+    noHint.classList.add('hidden');
+    content.classList.remove('hidden');
+  }
+}
+
+async function msReloadForCurrentModel() {
+  if (!mmCurrentModelId) {
+    msBoundStations = [];
+    msAvailableStations = [];
+    msRenderBoundStations();
+    msRenderAvailableStations();
+    return;
+  }
+  try {
+    msBoundStations = await apiListModelStations(mmCurrentModelId) || [];
+    msAvailableStations = await apiListAvailableStationsForModel(mmCurrentModelId) || [];
+    msRenderBoundStations();
+    msRenderAvailableStations();
+  } catch (err) {
+    console.error('msReloadForCurrentModel error', err);
+    toast('載入站點綁定資訊失敗');
+  }
+}
+
+function msRenderBoundStations() {
+  const tbody = document.getElementById('msBoundTable');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  if (!mmCurrentModelId) {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = 3;
+    td.className = 'py-2 text-center text-gray-400';
+    td.textContent = '請先選擇機種';
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+
+  if (!msBoundStations.length) {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = 3;
+    td.className = 'py-2 text-center text-gray-400';
+    td.textContent = '尚未綁定任何站點';
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+
+  msBoundStations.forEach(s => {
+    const isSelected = msCurrentStationId === s.station_id;
+    const tr = document.createElement('tr');
+    tr.className = 'border-b last:border-b-0 cursor-pointer ' + (isSelected ? 'bg-blue-50' : 'hover:bg-gray-50');
+    tr.onclick = () => msSelectStation(s.station_id);
+
+    tr.innerHTML = `
+      <td class="py-1 px-2 font-mono text-xs whitespace-nowrap">${s.station_code}</td>
+      <td class="py-1 px-2 text-xs">${s.station_name || ''}</td>
+      <td class="py-1 px-2 whitespace-nowrap">
+        <button class="btn btn-ghost btn-2xs text-red-600" onclick="event.stopPropagation(); msUnbindStation(${s.station_id})">移除</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function msRenderAvailableStations() {
+  const tbody = document.getElementById('msAvailableTable');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  if (!mmCurrentModelId) {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = 3;
+    td.className = 'py-2 text-center text-gray-400';
+    td.textContent = '請先選擇機種';
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+
+  if (!msAvailableStations.length) {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = 3;
+    td.className = 'py-2 text-center text-gray-400';
+    td.textContent = '所有站點皆已綁定，或暫無站點資料';
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+
+  msAvailableStations.forEach(s => {
+    const tr = document.createElement('tr');
+    tr.className = 'border-b last:border-b-0 hover:bg-gray-50';
+
+    tr.innerHTML = `
+      <td class="py-1 px-2 font-mono text-xs whitespace-nowrap">${s.station_code}</td>
+      <td class="py-1 px-2 text-xs">${s.station_name || ''}</td>
+      <td class="py-1 px-2 whitespace-nowrap">
+        <button class="btn btn-ghost btn-2xs" onclick="msBindStation(${s.station_id})">綁定</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function msSelectStation(stationId) {
+  msCurrentStationId = stationId;
+  msRenderBoundStations();
+  frUpdateSelectionLabels();
+  frLoadRequirements();
+}
+
+async function msBindStation(stationId) {
+  if (!mmCurrentModelId) {
+    toast('請先選擇機種');
+    return;
+  }
+  try {
+    await apiBindStationToModel(mmCurrentModelId, stationId);
+    toast('已綁定站點');
+    msCurrentStationId = stationId;
+    msReloadForCurrentModel();
+    frUpdateSelectionLabels();
+    frLoadRequirements();
+  } catch (err) {
+    console.error('msBindStation error', err);
+    toast('綁定站點失敗');
+  }
+}
+
+async function msUnbindStation(stationId) {
+  if (!mmCurrentModelId) return;
+  if (!confirm('確定要移除此站點綁定嗎？對應治具需求也會失效。')) return;
+  try {
+    await apiUnbindStationFromModel(mmCurrentModelId, stationId);
+    toast('已移除綁定');
+    if (msCurrentStationId === stationId) {
+      msCurrentStationId = null;
+      frClearContent();
+      frUpdateSelectionLabels();
+    }
+    msReloadForCurrentModel();
+  } catch (err) {
+    console.error('msUnbindStation error', err);
+    toast('移除站點綁定失敗');
+  }
+}
+
+// ---------- 治具需求 ----------
+
+function frUpdateSelectionLabels() {
+  const mLabel = document.getElementById('frSelectedModelLabel');
+  const sLabel = document.getElementById('frSelectedStationLabel');
+  const hint = document.getElementById('frNoModelStationHint');
+  const content = document.getElementById('frContent');
+
+  if (!mLabel || !sLabel || !hint || !content) return;
+
+  if (!mmCurrentModelId) {
+    mLabel.textContent = '-';
+    sLabel.textContent = '-';
+    hint.classList.remove('hidden');
+    content.classList.add('hidden');
+    return;
+  }
+
+  const m = mmModels.find(x => x.model_id === mmCurrentModelId);
+  mLabel.textContent = m ? `${m.model_id}` : mmCurrentModelId;
+
+  if (!msCurrentStationId) {
+    sLabel.textContent = '-';
+    hint.classList.remove('hidden');
+    content.classList.add('hidden');
+    return;
+  }
+
+  const s = msBoundStations.find(x => x.station_id === msCurrentStationId);
+  sLabel.textContent = s ? `${s.station_code}` : `ID ${msCurrentStationId}`;
+
+  hint.classList.add('hidden');
+  content.classList.remove('hidden');
+}
+
+function frClearContent() {
+  const tbody = document.getElementById('frTable');
+  if (tbody) tbody.innerHTML = '';
+}
+
+async function frInitFixtureOptions() {
+  if (frFixtureOptionsLoaded) return;
+  try {
+    // 從 fixtures 簡易列表載入正常狀態的治具
+    const list = await apiGetFixturesSimple('正常');
+    const select = document.getElementById('frFixtureSelect');
+    if (!select) return;
+    select.innerHTML = '<option value="">選擇治具...</option>';
+    (list || []).forEach(fx => {
+      const opt = document.createElement('option');
+      opt.value = fx.fixture_id;
+      opt.textContent = `${fx.fixture_id} - ${fx.fixture_name || ''}`;
+      select.appendChild(opt);
+    });
+    frFixtureOptionsLoaded = true;
+  } catch (err) {
+    console.error('frInitFixtureOptions error', err);
+    // 不 toast，避免一進來就跳錯
+  }
+}
+
+async function frLoadRequirements() {
+  if (!mmCurrentModelId || !msCurrentStationId) {
+    frClearContent();
+    frUpdateSelectionLabels();
+    return;
+  }
+  try {
+    const res = await apiListFixtureRequirements(mmCurrentModelId, msCurrentStationId);
+    frRequirements = res || [];
+    frUpdateSelectionLabels();
+    frRenderRequirements();
+  } catch (err) {
+    console.error('frLoadRequirements error', err);
+    toast('載入治具需求失敗');
+  }
+}
+
+function frRenderRequirements() {
+  const tbody = document.getElementById('frTable');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  if (!frRequirements.length) {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = 4;
+    td.className = 'py-2 text-center text-gray-400';
+    td.textContent = '尚未設定任何治具需求';
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+
+  frRequirements.forEach(r => {
+    const tr = document.createElement('tr');
+    tr.className = 'border-b last:border-b-0';
+
+    tr.innerHTML = `
+      <td class="py-1 px-2 font-mono text-xs whitespace-nowrap">${r.fixture_id}</td>
+      <td class="py-1 px-2 text-xs">${r.fixture_name || ''}</td>
+      <td class="py-1 px-2 text-xs">${r.required_qty}</td>
+      <td class="py-1 px-2 whitespace-nowrap">
+        <button class="btn btn-ghost btn-2xs" onclick="frEditRequirement(${r.id}, ${r.required_qty})">修改</button>
+        <button class="btn btn-ghost btn-2xs text-red-600" onclick="frDeleteRequirement(${r.id})">刪除</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+async function frAddRequirement() {
+  if (!mmCurrentModelId || !msCurrentStationId) {
+    toast('請先選擇機種與站點');
+    return;
+  }
+  const select = document.getElementById('frFixtureSelect');
+  const qtyInput = document.getElementById('frQtyInput');
+  const fixtureId = select.value;
+  const qty = Number(qtyInput.value || '0');
+
+  if (!fixtureId) {
+    toast('請選擇治具');
+    return;
+  }
+  if (!qty || qty <= 0) {
+    toast('請輸入正確的需求數量');
+    return;
+  }
+
+  try {
+    await apiCreateFixtureRequirement(mmCurrentModelId, msCurrentStationId, {
+      fixture_id: fixtureId,
+      required_qty: qty
+    });
+    toast('已新增治具需求');
+    frLoadRequirements();
+  } catch (err) {
+    console.error('frAddRequirement error', err);
+    toast('新增治具需求失敗');
+  }
+}
+
+async function frEditRequirement(reqId, oldQty) {
+  const newQtyStr = prompt('請輸入新的需求數量：', String(oldQty));
+  if (newQtyStr === null) return;
+  const newQty = Number(newQtyStr);
+  if (!newQty || newQty <= 0) {
+    toast('請輸入大於 0 的數字');
+    return;
+  }
+  try {
+    await apiUpdateFixtureRequirement(reqId, { required_qty: newQty });
+    toast('已更新需求數量');
+    frLoadRequirements();
+  } catch (err) {
+    console.error('frEditRequirement error', err);
+    toast('更新需求失敗');
+  }
+}
+
+async function frDeleteRequirement(reqId) {
+  if (!confirm('確定要刪除此治具需求嗎？')) return;
+  try {
+    await apiDeleteFixtureRequirement(reqId);
+    toast('已刪除治具需求');
+    frLoadRequirements();
+  } catch (err) {
+    console.error('frDeleteRequirement error', err);
+    toast('刪除治具需求失敗');
+  }
+}
+
+// ---------- 站點 Master Modal (CRUD) ----------
+
+function stOpenStationMasterModal() {
+  const modal = document.getElementById('stStationModal');
+  if (!modal) return;
+  stResetForm();
+  stLoadStationMasterList();
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+}
+
+function stCloseStationMasterModal() {
+  const modal = document.getElementById('stStationModal');
+  if (!modal) return;
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
+}
+
+function stResetForm() {
+  stEditingId = null;
+  document.getElementById('stCode').value = '';
+  document.getElementById('stName').value = '';
+  document.getElementById('stNote').value = '';
+  const modeLabel = document.getElementById('stModeLabel');
+  if (modeLabel) modeLabel.textContent = '新增';
+}
+
+async function stLoadStationMasterList() {
+  try {
+    const data = await apiListStations('');
+    stMasterList = data || [];
+    stRenderStationMasterTable();
+  } catch (err) {
+    console.error('stLoadStationMasterList error', err);
+    toast('載入站點列表失敗');
+  }
+}
+
+function stRenderStationMasterTable() {
+  const tbody = document.getElementById('stTable');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  if (!stMasterList.length) {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = 5;
+    td.className = 'py-2 text-center text-gray-400';
+    td.textContent = '尚無站點資料';
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+
+  stMasterList.forEach(s => {
+    const tr = document.createElement('tr');
+    tr.className = 'border-b last:border-b-0';
+
+    tr.innerHTML = `
+      <td class="py-1 px-2 text-xs">${s.station_id}</td>
+      <td class="py-1 px-2 font-mono text-xs">${s.station_code}</td>
+      <td class="py-1 px-2 text-xs">${s.station_name || ''}</td>
+      <td class="py-1 px-2 text-xs">${s.note || ''}</td>
+      <td class="py-1 px-2 whitespace-nowrap">
+        <button class="btn btn-ghost btn-2xs" onclick="stEditStation(${s.station_id})">編輯</button>
+        <button class="btn btn-ghost btn-2xs text-red-600" onclick="stDeleteStation(${s.station_id})">刪除</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function stEditStation(stationId) {
+  const s = stMasterList.find(x => x.station_id === stationId);
+  if (!s) return;
+  stEditingId = stationId;
+  document.getElementById('stCode').value = s.station_code || '';
+  document.getElementById('stName').value = s.station_name || '';
+  document.getElementById('stNote').value = s.note || '';
+  const modeLabel = document.getElementById('stModeLabel');
+  if (modeLabel) modeLabel.textContent = `編輯 #${stationId}`;
+}
+
+async function stSubmitForm() {
+  const code = document.getElementById('stCode').value.trim();
+  const name = document.getElementById('stName').value.trim();
+  const note = document.getElementById('stNote').value.trim() || null;
+
+  if (!code) {
+    toast('請輸入站點代碼');
+    return;
+  }
+
+  try {
+    if (!stEditingId) {
+      await apiCreateStation({ station_code: code, station_name: name, note });
+      toast('已新增站點');
+    } else {
+      await apiUpdateStation(stEditingId, { station_code: code, station_name: name, note });
+      toast('已更新站點');
+    }
+    stResetForm();
+    stLoadStationMasterList();
+    if (mmCurrentModelId) msReloadForCurrentModel();
+  } catch (err) {
+    console.error('stSubmitForm error', err);
+    toast('儲存站點失敗');
+  }
+}
+
+async function stDeleteStation(stationId) {
+  if (!confirm(`確定要刪除站點 #${stationId} 嗎？`)) return;
+  try {
+    await apiDeleteStation(stationId);
+    toast('已刪除站點');
+    if (stEditingId === stationId) stResetForm();
+    stLoadStationMasterList();
+    if (mmCurrentModelId) msReloadForCurrentModel();
+  } catch (err) {
+    console.error('stDeleteStation error', err);
+    toast('刪除站點失敗');
+  }
+}
+
+
+// ============================================
 // 事件處理
 // ============================================
 
@@ -792,6 +1486,7 @@ async function loadFixturesQuery() {
       <tr>
         <td class="py-2 pr-4">${f.fixture_id}</td>
         <td class="py-2 pr-4">${f.fixture_name}</td>
+        <td class="py-2 pr-4">${f.customer || ''}</td> 
         <td class="py-2 pr-4">${f.fixture_type || ''}</td>
         <td class="py-2 pr-4">${f.self_purchased_qty}/${f.customer_supplied_qty}/${f.total_qty}</td>
         <td class="py-2 pr-4">${f.status}</td>
@@ -827,11 +1522,12 @@ async function loadModelsQuery() {
       table.innerHTML += `
         <tr>
           <td>${m.model_code}</td>
+          <td>${f.customer || ''}</td>
           <td>${m.model_name}</td>
           <td>${m.note || ""}</td>
           <td>
             <button class="btn btn-ghost text-xs" 
-              onclick="showMaxStation('${m.model_id}', '${m.model_code}')">
+              onclick="showMaxStation('${m.model_id}', '${m.model_code}', '${f.customer || ''}')">
               查看最大開站
             </button>
           </td>
@@ -913,6 +1609,7 @@ async function viewStationRequirements(modelId, stationId, stationCode, stationN
     toast("查詢治具需求失敗：" + e.message);
   }
 }
+
 
 /** 根據登入者角色顯示或隱藏後台分頁 */
 function updateAdminTabVisibility(userRole) {

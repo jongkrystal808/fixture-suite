@@ -123,6 +123,7 @@ async def get_fixture(fixture_id: str):
             SELECT 
                 f.fixture_id,
                 f.fixture_name,
+                f.customer,
                 f.fixture_type,
                 f.serial_number,
                 f.self_purchased_qty,
@@ -152,6 +153,7 @@ async def get_fixture(fixture_id: str):
         return FixtureWithOwner(
             fixture_id=row["fixture_id"],
             fixture_name=row["fixture_name"],
+            customer=row["customer"],
             fixture_type=row["fixture_type"],
             serial_number=row["serial_number"],
             self_purchased_qty=row["self_purchased_qty"],
@@ -231,6 +233,7 @@ async def list_fixtures(
             SELECT 
                 f.fixture_id,
                 f.fixture_name,
+                f.customer,
                 f.fixture_type,
                 f.serial_number,
                 f.self_purchased_qty,
@@ -262,6 +265,7 @@ async def list_fixtures(
             fixtures.append(FixtureWithOwner(
                 fixture_id=row["fixture_id"],
                 fixture_name=row["fixture_name"],
+                customer=row["customer"],
                 fixture_type=row["fixture_type"],
                 serial_number=row["serial_number"],
                 self_purchased_qty=row["self_purchased_qty"],
@@ -502,6 +506,7 @@ async def get_fixtures_status_view(
             SELECT 
                 fixture_id,
                 fixture_name,
+                customer,
                 serial_number,
                 storage_location,
                 status,
@@ -527,6 +532,7 @@ async def get_fixtures_status_view(
             fixtures.append(FixtureStatus_View(
                 fixture_id=row["fixture_id"],
                 fixture_name=row["fixture_name"],
+                customer=row["customer"],
                 serial_number=row["serial_number"],
                 storage_location=row["storage_location"],
                 status=row["status"],

@@ -1,30 +1,63 @@
 -- =====================================
--- 治具管理系統 - 資料庫初始化腳本
+-- 治具管理系統 - 資料庫重構腳本 v3.0
+-- =====================================
+-- 執行前請務必備份資料庫!
+--
+-- 主要調整:
+-- 1. 所有業務主鍵改為 VARCHAR(50)
+-- 2. 新增客戶總表,所有表按客戶分類
+-- 3. 統一使用代理主鍵 (id) + 簡單外鍵
+-- 4. 收料/退料的廠商欄位統一為 customer_id
 -- =====================================
 
--- 設定字元集
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
--- 防止重複執行時出錯
+-- =====================================
+-- 清理舊結構
+-- =====================================
+DROP VIEW IF EXISTS view_serial_status;
 DROP VIEW IF EXISTS view_fixture_status;
 DROP VIEW IF EXISTS view_model_max_stations;
 
+DROP TABLE IF EXISTS deployment_history;
+DROP TABLE IF EXISTS inventory_snapshots;
+DROP TABLE IF EXISTS material_transaction_details;
+DROP TABLE IF EXISTS material_transactions;
 DROP TABLE IF EXISTS fixture_deployments;
 DROP TABLE IF EXISTS fixture_requirements;
 DROP TABLE IF EXISTS model_stations;
-DROP TABLE IF EXISTS stations;
+DROP TABLE IF EXISTS fixture_serials;
 DROP TABLE IF EXISTS usage_logs;
 DROP TABLE IF EXISTS replacement_logs;
 DROP TABLE IF EXISTS receipts;
 DROP TABLE IF EXISTS returns_table;
 DROP TABLE IF EXISTS fixtures;
+DROP TABLE IF EXISTS stations;
 DROP TABLE IF EXISTS machine_models;
 DROP TABLE IF EXISTS owners;
 DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS customers;
 
 -- =====================================
--- 1. 使用者表 (users)
+-- 1. 客戶總表 (新增)
+-- =====================================
+CREATE TABLE customers (
+    id VARCHAR(50) PRIMARY KEY COMMENT '客戶名稱 (直接使用客戶名稱作為主鍵)',
+    customer_abbr VARCHAR(20) COMMENT '客戶簡稱',
+    contact_person VARCHAR(100) COMMENT '聯絡人',
+    contact_phone VARCHAR(20) COMMENT '聯絡電話',
+    contact_email VARCHAR(100) COMMENT 'Email',
+    address TEXT COMMENT '地址',
+    is_active BOOLEAN DEFAULT TRUE COMMENT '是否啟用',
+    note TEXT COMMENT '備註',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_is_active (is_active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='客戶總表';
+
+-- =====================================
+-- 2. 使用者表
 -- =====================================
 CREATE TABLE users (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -41,7 +74,7 @@ CREATE TABLE users (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='使用者表';
 
 -- =====================================
--- 2. 負責人表 (owners)
+-- 3. 負責人表
 -- =====================================
 CREATE TABLE owners (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -52,19 +85,50 @@ CREATE TABLE owners (
     note TEXT COMMENT '備註',
     is_active BOOLEAN DEFAULT TRUE COMMENT '是否啟用',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='負責人表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='負責人表 (可跨客戶)';
 
 -- =====================================
--- 3. 治具主表 (fixtures)
+-- 4. 機種表
+-- =====================================
+CREATE TABLE machine_models (
+    id VARCHAR(50) PRIMARY KEY COMMENT '機種代碼 (如: EDS-2008-LSFG)',
+    customer_id VARCHAR(50) NOT NULL COMMENT '客戶名稱',
+    model_name VARCHAR(255) NOT NULL COMMENT '機種名稱',
+    note TEXT COMMENT '備註',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT,
+    INDEX idx_customer (customer_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='機種表';
+
+-- =====================================
+-- 5. 站點表
+-- =====================================
+CREATE TABLE stations (
+    id VARCHAR(50) PRIMARY KEY COMMENT '站點代碼 (如: T1_MP)',
+    customer_id VARCHAR(50) NOT NULL COMMENT '客戶名稱',
+    station_name VARCHAR(100) COMMENT '站點名稱',
+    note TEXT COMMENT '備註',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT,
+    INDEX idx_customer (customer_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='站點表';
+
+-- =====================================
+-- 6. 治具主表
 -- =====================================
 CREATE TABLE fixtures (
-    fixture_id VARCHAR(50) PRIMARY KEY COMMENT '治具編號',
+    id VARCHAR(50) PRIMARY KEY COMMENT '治具編號 (如: L-3000-STD)',
+    customer_id VARCHAR(50) NOT NULL COMMENT '客戶名稱',
     fixture_name VARCHAR(255) NOT NULL COMMENT '治具名稱',
     fixture_type VARCHAR(50) COMMENT '治具類型',
-    serial_number VARCHAR(100) UNIQUE COMMENT '序號',
+    serial_number VARCHAR(100) COMMENT '序號 (已廢棄,建議使用 fixture_serials 表)',
     self_purchased_qty INT DEFAULT 0 COMMENT '自購數量',
     customer_supplied_qty INT DEFAULT 0 COMMENT '客供數量',
-    total_qty INT GENERATED ALWAYS AS (self_purchased_qty + customer_supplied_qty) STORED COMMENT '總數量',
+    available_qty INT DEFAULT 0 COMMENT '可用數量',
+    deployed_qty INT DEFAULT 0 COMMENT '已部署數量',
+    maintenance_qty INT DEFAULT 0 COMMENT '維護中數量',
+    scrapped_qty INT DEFAULT 0 COMMENT '報廢數量',
+    returned_qty INT DEFAULT 0 COMMENT '已返還數量',
     storage_location VARCHAR(100) COMMENT '儲存位置',
     replacement_cycle DECIMAL(10,2) COMMENT '更換週期',
     cycle_unit ENUM('days', 'uses', 'none') DEFAULT 'uses' COMMENT '週期單位',
@@ -75,145 +139,227 @@ CREATE TABLE fixtures (
     note TEXT COMMENT '備註',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT,
     FOREIGN KEY (owner_id) REFERENCES owners(id) ON DELETE SET NULL,
-    INDEX idx_fixture_status (status),
-    INDEX idx_fixture_owner (owner_id),
-    INDEX idx_fixture_type (fixture_type)
+    INDEX idx_customer (customer_id),
+    INDEX idx_customer_status (customer_id, status),
+    INDEX idx_fixture_type (fixture_type),
+    INDEX idx_owner (owner_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='治具主表';
 
 -- =====================================
--- 4. 機種表 (machine_models)
+-- 7. 序號表 (新增)
 -- =====================================
-CREATE TABLE machine_models (
-    model_id VARCHAR(50) PRIMARY KEY COMMENT '機種代碼',
-    model_name VARCHAR(255) NOT NULL COMMENT '機種名稱',
+CREATE TABLE fixture_serials (
+    id INT AUTO_INCREMENT PRIMARY KEY COMMENT '序號記錄ID',
+    customer_id VARCHAR(50) NOT NULL COMMENT '客戶名稱',
+    fixture_id VARCHAR(50) NOT NULL COMMENT '治具編號',
+    serial_number VARCHAR(100) UNIQUE NOT NULL COMMENT '序號',
+    source_type ENUM('self_purchased', 'customer_supplied') NOT NULL COMMENT '來源類型',
+    status ENUM('available', 'deployed', 'maintenance', 'scrapped', 'returned')
+        DEFAULT 'available' COMMENT '狀態',
+    current_station_id VARCHAR(50) COMMENT '當前部署站點',
+    receipt_date DATE COMMENT '收料日期',
+    last_use_date DATE COMMENT '最後使用日期',
+    total_uses INT DEFAULT 0 COMMENT '累計使用次數',
     note TEXT COMMENT '備註',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='機種表';
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT,
+    FOREIGN KEY (fixture_id) REFERENCES fixtures(id) ON DELETE CASCADE,
+    FOREIGN KEY (current_station_id) REFERENCES stations(id) ON DELETE SET NULL,
+    INDEX idx_customer (customer_id),
+    INDEX idx_fixture_status (fixture_id, status),
+    INDEX idx_serial_status (serial_number, status),
+    INDEX idx_station (current_station_id),
+    INDEX idx_source (source_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='序號表';
 
 -- =====================================
--- 5. 站點表 (stations)
--- =====================================
-CREATE TABLE stations (
-    station_id INT AUTO_INCREMENT PRIMARY KEY,
-    station_code VARCHAR(50) UNIQUE NOT NULL COMMENT '站點代碼',
-    station_name VARCHAR(100) COMMENT '站點名稱',
-    note TEXT COMMENT '備註'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='站點表';
-
--- =====================================
--- 6. 機種-站點關聯表 (model_stations)
+-- 8. 機種-站點關聯表
 -- =====================================
 CREATE TABLE model_stations (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    model_id VARCHAR(50) NOT NULL,
-    station_id INT NOT NULL,
-    UNIQUE KEY uk_model_station (model_id, station_id),
-    FOREIGN KEY (model_id) REFERENCES machine_models(model_id) ON DELETE CASCADE,
-    FOREIGN KEY (station_id) REFERENCES stations(station_id) ON DELETE CASCADE
+    id INT AUTO_INCREMENT PRIMARY KEY COMMENT '關聯記錄ID',
+    customer_id VARCHAR(50) NOT NULL COMMENT '客戶名稱',
+    model_id VARCHAR(50) NOT NULL COMMENT '機種代碼',
+    station_id VARCHAR(50) NOT NULL COMMENT '站點代碼',
+    note TEXT COMMENT '備註',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_customer_model_station (customer_id, model_id, station_id),
+    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT,
+    FOREIGN KEY (model_id) REFERENCES machine_models(id) ON DELETE CASCADE,
+    FOREIGN KEY (station_id) REFERENCES stations(id) ON DELETE CASCADE,
+    INDEX idx_customer (customer_id),
+    INDEX idx_model (model_id),
+    INDEX idx_station (station_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='機種-站點關聯表';
 
 -- =====================================
--- 7. 治具-機種需求表 (fixture_requirements)
+-- 9. 治具-機種需求表
 -- =====================================
 CREATE TABLE fixture_requirements (
-    id INT AUTO_INCREMENT PRIMARY KEY,
+    id INT AUTO_INCREMENT PRIMARY KEY COMMENT '需求記錄ID',
+    customer_id VARCHAR(50) NOT NULL COMMENT '客戶名稱',
     model_id VARCHAR(50) NOT NULL COMMENT '機種代碼',
-    station_id INT NOT NULL COMMENT '站點ID',
+    station_id VARCHAR(50) NOT NULL COMMENT '站點代碼',
     fixture_id VARCHAR(50) NOT NULL COMMENT '治具編號',
     required_qty INT DEFAULT 1 COMMENT '需求數量',
-    UNIQUE KEY uk_model_station_fixture (model_id, station_id, fixture_id),
-    FOREIGN KEY (model_id) REFERENCES machine_models(model_id) ON DELETE CASCADE,
-    FOREIGN KEY (station_id) REFERENCES stations(station_id) ON DELETE CASCADE,
-    FOREIGN KEY (fixture_id) REFERENCES fixtures(fixture_id) ON DELETE CASCADE
+    note TEXT COMMENT '備註',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_customer_model_station_fixture (customer_id, model_id, station_id, fixture_id),
+    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT,
+    FOREIGN KEY (model_id) REFERENCES machine_models(id) ON DELETE CASCADE,
+    FOREIGN KEY (station_id) REFERENCES stations(id) ON DELETE CASCADE,
+    FOREIGN KEY (fixture_id) REFERENCES fixtures(id) ON DELETE CASCADE,
+    INDEX idx_customer (customer_id),
+    INDEX idx_model (model_id),
+    INDEX idx_station (station_id),
+    INDEX idx_fixture (fixture_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='治具-機種需求表';
 
-    -- =====================================
-    -- 8. 治具-站點部署表 (fixture_deployments)
-    -- =====================================
-    CREATE TABLE fixture_deployments (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        fixture_id VARCHAR(50) NOT NULL COMMENT '治具編號',
-        station_id INT NOT NULL COMMENT '站點ID',
-        deployed_qty INT DEFAULT 0 COMMENT '部署數量',
-        UNIQUE KEY uk_fixture_station (fixture_id, station_id),
-        FOREIGN KEY (fixture_id) REFERENCES fixtures(fixture_id) ON DELETE CASCADE,
-        FOREIGN KEY (station_id) REFERENCES stations(station_id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='治具-站點部署表';
+-- =====================================
+-- 10. 治具-站點部署表
+-- =====================================
+CREATE TABLE fixture_deployments (
+    id INT AUTO_INCREMENT PRIMARY KEY COMMENT '部署記錄ID',
+    customer_id VARCHAR(50) NOT NULL COMMENT '客戶名稱',
+    fixture_id VARCHAR(50) NOT NULL COMMENT '治具編號',
+    station_id VARCHAR(50) NOT NULL COMMENT '站點代碼',
+    deployed_qty INT DEFAULT 0 COMMENT '部署數量',
+    note TEXT COMMENT '備註',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_customer_fixture_station (customer_id, fixture_id, station_id),
+    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT,
+    FOREIGN KEY (fixture_id) REFERENCES fixtures(id) ON DELETE CASCADE,
+    FOREIGN KEY (station_id) REFERENCES stations(id) ON DELETE CASCADE,
+    INDEX idx_customer (customer_id),
+    INDEX idx_fixture (fixture_id),
+    INDEX idx_station (station_id),
+    INDEX idx_station_fixture (station_id, fixture_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='治具-站點部署表';
 
 -- =====================================
--- 9. 使用記錄表 (usage_logs)
+-- 11. 使用記錄表
 -- =====================================
 CREATE TABLE usage_logs (
-    log_id INT AUTO_INCREMENT PRIMARY KEY,
+    id INT AUTO_INCREMENT PRIMARY KEY COMMENT '使用記錄ID',
+    customer_id VARCHAR(50) NOT NULL COMMENT '客戶名稱',
     fixture_id VARCHAR(50) NOT NULL COMMENT '治具編號',
-    station_id INT COMMENT '站點ID',
+    serial_id INT COMMENT '序號ID',
+    station_id VARCHAR(50) COMMENT '站點代碼',
     use_count INT DEFAULT 1 COMMENT '使用次數',
     abnormal_status VARCHAR(255) COMMENT '異常狀態',
     operator VARCHAR(100) COMMENT '操作人員',
     note TEXT COMMENT '備註',
     used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '使用時間',
-    FOREIGN KEY (fixture_id) REFERENCES fixtures(fixture_id) ON DELETE CASCADE,
-    FOREIGN KEY (station_id) REFERENCES stations(station_id) ON DELETE SET NULL,
+    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT,
+    FOREIGN KEY (fixture_id) REFERENCES fixtures(id) ON DELETE CASCADE,
+    FOREIGN KEY (serial_id) REFERENCES fixture_serials(id) ON DELETE SET NULL,
+    FOREIGN KEY (station_id) REFERENCES stations(id) ON DELETE SET NULL,
+    INDEX idx_customer (customer_id),
     INDEX idx_fixture_time (fixture_id, used_at),
+    INDEX idx_serial (serial_id),
     INDEX idx_station (station_id),
-    INDEX idx_operator (operator)
+    INDEX idx_operator (operator),
+    INDEX idx_date_range (used_at, fixture_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='使用記錄表';
 
 -- =====================================
--- 10. 更換記錄表 (replacement_logs)
+-- 12. 更換記錄表
 -- =====================================
 CREATE TABLE replacement_logs (
-    replacement_id INT AUTO_INCREMENT PRIMARY KEY,
+    id INT AUTO_INCREMENT PRIMARY KEY COMMENT '更換記錄ID',
+    customer_id VARCHAR(50) NOT NULL COMMENT '客戶名稱',
     fixture_id VARCHAR(50) NOT NULL COMMENT '治具編號',
     replacement_date DATE NOT NULL COMMENT '更換日期',
     reason TEXT COMMENT '更換原因',
     executor VARCHAR(100) COMMENT '執行人員',
     note TEXT COMMENT '備註',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (fixture_id) REFERENCES fixtures(fixture_id) ON DELETE CASCADE,
+    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT,
+    FOREIGN KEY (fixture_id) REFERENCES fixtures(id) ON DELETE CASCADE,
+    INDEX idx_customer (customer_id),
     INDEX idx_fixture_date (fixture_id, replacement_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='更換記錄表';
 
 -- =====================================
--- 11. 收料記錄表 (receipts)
+-- 13. 物料異動主表 (取代 receipts 和 returns_table)
 -- =====================================
-CREATE TABLE receipts (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    type ENUM('batch', 'individual') DEFAULT 'batch' COMMENT '類型: batch=批量, individual=少量',
-    vendor VARCHAR(100) COMMENT '廠商',
+CREATE TABLE material_transactions (
+    id INT AUTO_INCREMENT PRIMARY KEY COMMENT '異動記錄ID',
+    transaction_type ENUM('receipt', 'return', 'adjustment') NOT NULL COMMENT '異動類型',
+    transaction_date DATE NOT NULL COMMENT '異動日期',
+    customer_id VARCHAR(50) NOT NULL COMMENT '客戶名稱 (廠商=客戶)',
     order_no VARCHAR(100) COMMENT '單號',
-    fixture_code VARCHAR(50) COMMENT '治具編號',
-    serial_start VARCHAR(100) COMMENT '流水號起始',
-    serial_end VARCHAR(100) COMMENT '流水號結束',
-    serials TEXT COMMENT '序號列表(逗號分隔)',
-    operator VARCHAR(100) COMMENT '收料人員',
+    fixture_id VARCHAR(50) NOT NULL COMMENT '治具編號',
+    quantity INT NOT NULL DEFAULT 0 COMMENT '異動數量',
+    operator VARCHAR(100) COMMENT '操作人員',
     note TEXT COMMENT '備註',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_fixture (fixture_code),
+    created_by INT COMMENT '建立人員ID',
+    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT,
+    FOREIGN KEY (fixture_id) REFERENCES fixtures(id) ON DELETE RESTRICT,
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+    INDEX idx_customer (customer_id),
+    INDEX idx_fixture_date (fixture_id, transaction_date),
     INDEX idx_order (order_no),
+    INDEX idx_type_date (transaction_type, transaction_date),
     INDEX idx_operator (operator)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='收料記錄表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='物料異動主表';
 
 -- =====================================
--- 12. 退料記錄表 (returns_table)
+-- 14. 物料異動明細表
 -- =====================================
-CREATE TABLE returns_table (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    type ENUM('batch', 'individual') DEFAULT 'batch' COMMENT '類型: batch=批量, individual=少量',
-    vendor VARCHAR(100) COMMENT '廠商',
-    order_no VARCHAR(100) COMMENT '單號',
-    fixture_code VARCHAR(50) COMMENT '治具編號',
-    serial_start VARCHAR(100) COMMENT '流水號起始',
-    serial_end VARCHAR(100) COMMENT '流水號結束',
-    serials TEXT COMMENT '序號列表(逗號分隔)',
-    operator VARCHAR(100) COMMENT '退料人員',
+CREATE TABLE material_transaction_details (
+    id INT AUTO_INCREMENT PRIMARY KEY COMMENT '明細記錄ID',
+    transaction_id INT NOT NULL COMMENT '異動主表ID',
+    serial_number VARCHAR(100) NOT NULL COMMENT '序號',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_transaction_serial (transaction_id, serial_number),
+    FOREIGN KEY (transaction_id) REFERENCES material_transactions(id) ON DELETE CASCADE,
+    INDEX idx_serial (serial_number)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='物料異動明細表';
+
+-- =====================================
+-- 15. 庫存快照表
+-- =====================================
+CREATE TABLE inventory_snapshots (
+    id INT AUTO_INCREMENT PRIMARY KEY COMMENT '快照記錄ID',
+    customer_id VARCHAR(50) NOT NULL COMMENT '客戶名稱',
+    fixture_id VARCHAR(50) NOT NULL COMMENT '治具編號',
+    snapshot_date DATE NOT NULL COMMENT '快照日期',
+    available_qty INT DEFAULT 0 COMMENT '可用數量',
+    deployed_qty INT DEFAULT 0 COMMENT '已部署數量',
+    maintenance_qty INT DEFAULT 0 COMMENT '維護中數量',
+    scrapped_qty INT DEFAULT 0 COMMENT '報廢數量',
+    returned_qty INT DEFAULT 0 COMMENT '已返還數量',
+    total_qty INT DEFAULT 0 COMMENT '總數量',
     note TEXT COMMENT '備註',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_fixture (fixture_code),
-    INDEX idx_order (order_no),
-    INDEX idx_operator (operator)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='退料記錄表';
+    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT,
+    FOREIGN KEY (fixture_id) REFERENCES fixtures(id) ON DELETE CASCADE,
+    UNIQUE KEY uk_customer_fixture_date (customer_id, fixture_id, snapshot_date),
+    INDEX idx_customer (customer_id),
+    INDEX idx_snapshot_date (snapshot_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='庫存快照表';
+
+-- =====================================
+-- 16. 部署歷史表
+-- =====================================
+CREATE TABLE deployment_history (
+    id INT AUTO_INCREMENT PRIMARY KEY COMMENT '歷史記錄ID',
+    serial_id INT NOT NULL COMMENT '序號ID',
+    station_id VARCHAR(50) NOT NULL COMMENT '站點代碼',
+    action ENUM('deploy', 'undeploy') NOT NULL COMMENT '動作',
+    operator VARCHAR(100) COMMENT '操作人員',
+    note TEXT COMMENT '備註',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (serial_id) REFERENCES fixture_serials(id) ON DELETE CASCADE,
+    FOREIGN KEY (station_id) REFERENCES stations(id) ON DELETE CASCADE,
+    INDEX idx_serial_date (serial_id, created_at),
+    INDEX idx_station_date (station_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='部署歷史表';
 
 -- =====================================
 -- 觸發器 (Triggers)
@@ -222,6 +368,7 @@ CREATE TABLE returns_table (
 DELIMITER //
 
 -- 觸發器1: 新增更換記錄時自動更新治具最近更換日期
+DROP TRIGGER IF EXISTS trg_replacement_insert//
 CREATE TRIGGER trg_replacement_insert
 AFTER INSERT ON replacement_logs
 FOR EACH ROW
@@ -229,11 +376,11 @@ BEGIN
     UPDATE fixtures
     SET last_replacement_date = NEW.replacement_date,
         updated_at = CURRENT_TIMESTAMP
-    WHERE fixture_id = NEW.fixture_id;
-END;
-//
+    WHERE id = NEW.fixture_id;
+END//
 
 -- 觸發器2: 刪除更換記錄時重新計算最近更換日期
+DROP TRIGGER IF EXISTS trg_replacement_delete//
 CREATE TRIGGER trg_replacement_delete
 AFTER DELETE ON replacement_logs
 FOR EACH ROW
@@ -245,11 +392,11 @@ BEGIN
         WHERE fixture_id = OLD.fixture_id
     ),
     updated_at = CURRENT_TIMESTAMP
-    WHERE fixture_id = OLD.fixture_id;
-END;
-//
+    WHERE id = OLD.fixture_id;
+END//
 
 -- 觸發器3: 修改更換記錄時重新計算最近更換日期
+DROP TRIGGER IF EXISTS trg_replacement_update//
 CREATE TRIGGER trg_replacement_update
 AFTER UPDATE ON replacement_logs
 FOR EACH ROW
@@ -261,9 +408,107 @@ BEGIN
         WHERE fixture_id = NEW.fixture_id
     ),
     updated_at = CURRENT_TIMESTAMP
-    WHERE fixture_id = NEW.fixture_id;
-END;
-//
+    WHERE id = NEW.fixture_id;
+END//
+
+-- 觸發器4: 序號狀態變更時更新治具統計
+DROP TRIGGER IF EXISTS trg_serial_status_update//
+CREATE TRIGGER trg_serial_status_update
+AFTER UPDATE ON fixture_serials
+FOR EACH ROW
+BEGIN
+    IF OLD.status != NEW.status THEN
+        UPDATE fixtures SET
+            available_qty = (
+                SELECT COUNT(*) FROM fixture_serials
+                WHERE fixture_id = NEW.fixture_id AND status = 'available'
+            ),
+            deployed_qty = (
+                SELECT COUNT(*) FROM fixture_serials
+                WHERE fixture_id = NEW.fixture_id AND status = 'deployed'
+            ),
+            maintenance_qty = (
+                SELECT COUNT(*) FROM fixture_serials
+                WHERE fixture_id = NEW.fixture_id AND status = 'maintenance'
+            ),
+            scrapped_qty = (
+                SELECT COUNT(*) FROM fixture_serials
+                WHERE fixture_id = NEW.fixture_id AND status = 'scrapped'
+            ),
+            returned_qty = (
+                SELECT COUNT(*) FROM fixture_serials
+                WHERE fixture_id = NEW.fixture_id AND status = 'returned'
+            ),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = NEW.fixture_id;
+    END IF;
+END//
+
+-- 觸發器5: 新增序號時更新統計
+DROP TRIGGER IF EXISTS trg_serial_insert//
+CREATE TRIGGER trg_serial_insert
+AFTER INSERT ON fixture_serials
+FOR EACH ROW
+BEGIN
+    UPDATE fixtures SET
+        available_qty = available_qty + IF(NEW.status = 'available', 1, 0),
+        deployed_qty = deployed_qty + IF(NEW.status = 'deployed', 1, 0),
+        maintenance_qty = maintenance_qty + IF(NEW.status = 'maintenance', 1, 0),
+        scrapped_qty = scrapped_qty + IF(NEW.status = 'scrapped', 1, 0),
+        returned_qty = returned_qty + IF(NEW.status = 'returned', 1, 0),
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = NEW.fixture_id;
+END//
+
+-- 觸發器6: 刪除序號時更新統計
+DROP TRIGGER IF EXISTS trg_serial_delete//
+CREATE TRIGGER trg_serial_delete
+AFTER DELETE ON fixture_serials
+FOR EACH ROW
+BEGIN
+    UPDATE fixtures SET
+        available_qty = available_qty - IF(OLD.status = 'available', 1, 0),
+        deployed_qty = deployed_qty - IF(OLD.status = 'deployed', 1, 0),
+        maintenance_qty = maintenance_qty - IF(OLD.status = 'maintenance', 1, 0),
+        scrapped_qty = scrapped_qty - IF(OLD.status = 'scrapped', 1, 0),
+        returned_qty = returned_qty - IF(OLD.status = 'returned', 1, 0),
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = OLD.fixture_id;
+END//
+
+-- 觸發器7: 記錄部署歷史
+DROP TRIGGER IF EXISTS trg_record_deployment//
+CREATE TRIGGER trg_record_deployment
+AFTER UPDATE ON fixture_serials
+FOR EACH ROW
+BEGIN
+    -- 記錄部署動作
+    IF OLD.status != 'deployed' AND NEW.status = 'deployed' THEN
+        INSERT INTO deployment_history (serial_id, station_id, action, created_at)
+        VALUES (NEW.id, NEW.current_station_id, 'deploy', CURRENT_TIMESTAMP);
+    END IF;
+
+    -- 記錄取消部署動作
+    IF OLD.status = 'deployed' AND NEW.status != 'deployed' THEN
+        INSERT INTO deployment_history (serial_id, station_id, action, created_at)
+        VALUES (NEW.id, OLD.current_station_id, 'undeploy', CURRENT_TIMESTAMP);
+    END IF;
+END//
+
+-- 觸發器8: 使用記錄更新序號使用次數
+DROP TRIGGER IF EXISTS trg_update_serial_usage//
+CREATE TRIGGER trg_update_serial_usage
+AFTER INSERT ON usage_logs
+FOR EACH ROW
+BEGIN
+    IF NEW.serial_id IS NOT NULL THEN
+        UPDATE fixture_serials SET
+            total_uses = total_uses + NEW.use_count,
+            last_use_date = CURRENT_DATE,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = NEW.serial_id;
+    END IF;
+END//
 
 DELIMITER ;
 
@@ -274,53 +519,384 @@ DELIMITER ;
 -- 視圖1: 治具狀況總覽
 CREATE VIEW view_fixture_status AS
 SELECT
-    f.fixture_id,
+    f.id AS fixture_id,
+    f.customer_id,
     f.fixture_name,
-    f.serial_number,
+    f.fixture_type,
     f.storage_location,
     f.status,
-    GROUP_CONCAT(DISTINCT s.station_code ORDER BY s.station_code) AS deployed_stations,
-    COALESCE(SUM(ul.use_count), 0) AS total_uses,
+    f.self_purchased_qty,
+    f.customer_supplied_qty,
+    f.available_qty,
+    f.deployed_qty,
+    f.maintenance_qty,
+    f.scrapped_qty,
+    f.returned_qty,
+    (f.self_purchased_qty + f.customer_supplied_qty) AS total_qty,
+    GROUP_CONCAT(DISTINCT s.id ORDER BY s.id SEPARATOR ', ') AS deployed_stations,
     f.last_replacement_date,
-    f.last_notification_time,
     f.replacement_cycle,
     f.cycle_unit,
     CASE
-        WHEN f.cycle_unit = 'uses' AND COALESCE(SUM(ul.use_count), 0) >= f.replacement_cycle THEN '需更換'
-        WHEN f.cycle_unit = 'days' AND f.last_replacement_date IS NOT NULL
-             AND DATEDIFF(NOW(), f.last_replacement_date) >= f.replacement_cycle THEN '需更換'
+        WHEN f.cycle_unit = 'uses' THEN
+            CASE
+                WHEN (SELECT SUM(total_uses) FROM fixture_serials WHERE fixture_id = f.id) >= f.replacement_cycle
+                THEN '需更換'
+                ELSE '正常'
+            END
+        WHEN f.cycle_unit = 'days' AND f.last_replacement_date IS NOT NULL THEN
+            CASE
+                WHEN DATEDIFF(CURDATE(), f.last_replacement_date) >= f.replacement_cycle
+                THEN '需更換'
+                ELSE '正常'
+            END
         ELSE '正常'
     END AS replacement_status,
-    o.primary_owner AS owner,
-    f.note
+    o.primary_owner,
+    o.secondary_owner,
+    f.note,
+    f.created_at,
+    f.updated_at
 FROM fixtures f
-LEFT JOIN fixture_deployments fd ON f.fixture_id = fd.fixture_id
-LEFT JOIN stations s ON fd.station_id = s.station_id
-LEFT JOIN usage_logs ul ON f.fixture_id = ul.fixture_id
+LEFT JOIN fixture_serials fs
+    ON f.id = fs.fixture_id AND fs.status = 'deployed'
+LEFT JOIN stations s
+    ON fs.current_station_id = s.id
+
 LEFT JOIN owners o ON f.owner_id = o.id
-GROUP BY f.fixture_id, f.fixture_name, f.serial_number, f.storage_location,
-         f.status, f.last_replacement_date, f.last_notification_time,
-         f.replacement_cycle, f.cycle_unit, o.primary_owner, f.note;
+GROUP BY f.id, f.customer_id, f.fixture_name, f.fixture_type, f.storage_location,
+         f.status, f.self_purchased_qty, f.customer_supplied_qty,
+         f.available_qty, f.deployed_qty, f.maintenance_qty, f.scrapped_qty, f.returned_qty,
+         f.last_replacement_date, f.replacement_cycle, f.cycle_unit,
+         o.primary_owner, o.secondary_owner, f.note, f.created_at, f.updated_at;
 
 -- 視圖2: 機種最大開站數
-CREATE VIEW view_m  odel_max_stations AS
+-- 視圖2: 機種最大開站數
+CREATE VIEW view_model_max_stations AS
 SELECT
-    mm.model_id,
+    mm.id AS model_id,
+    mm.customer_id,
     mm.model_name,
     ms.station_id,
-    s.station_code,
+    s.station_name,
+
+    -- 最大開站數（依序號 available 數量除以需求數量）
     MIN(
         FLOOR(
-            (f.self_purchased_qty + f.customer_supplied_qty) / fr.required_qty
+            (SELECT COUNT(*)
+             FROM fixture_serials fs
+             WHERE fs.fixture_id = fr.fixture_id
+               AND fs.status = 'available')
+            /
+            fr.required_qty
         )
-    ) AS max_stations_for_this_station
+    ) AS max_available_stations,
+
+    -- 注意：這裡缺逗號就是剛剛的 Syntax Error
+    GROUP_CONCAT(
+        CONCAT(ft.fixture_name, '(', f.available_qty, '/', fr.required_qty, ')')
+        ORDER BY f.available_qty / fr.required_qty
+        SEPARATOR ', '
+    ) AS limiting_fixtures
+
 FROM machine_models mm
-JOIN model_stations ms ON mm.model_id = ms.model_id
-JOIN stations s ON ms.station_id = s.station_id
-JOIN fixture_requirements fr ON mm.model_id = fr.model_id AND ms.station_id = fr.station_id
-JOIN fixtures f ON fr.fixture_id = f.fixture_id
-WHERE f.status = '正常'
-GROUP BY mm.model_id, mm.model_name, ms.station_id, s.station_code;
+JOIN model_stations ms
+    ON mm.id = ms.model_id
+JOIN stations s
+    ON ms.station_id = s.id
+JOIN fixture_requirements fr
+    ON mm.id = fr.model_id
+   AND ms.station_id = fr.station_id
+JOIN fixtures f
+    ON fr.fixture_id = f.id
+LEFT JOIN fixtures ft
+    ON fr.fixture_id = ft.id
+
+WHERE f.status = '正常' AND f.available_qty > 0
+
+GROUP BY
+    mm.id,
+    mm.customer_id,
+    mm.model_name,
+    ms.station_id,
+    s.station_name;
+
+
+-- 視圖3: 序號狀態總覽
+CREATE VIEW view_serial_status AS
+SELECT
+    fs.id AS serial_id,
+    fs.customer_id,
+    fs.serial_number,
+    fs.fixture_id,
+    f.fixture_name,
+    fs.source_type,
+    fs.status,
+    s.id AS current_station,
+    s.station_name,
+    fs.receipt_date,
+    fs.last_use_date,
+    fs.total_uses,
+    f.replacement_cycle,
+    f.cycle_unit,
+    CASE
+        WHEN f.cycle_unit = 'uses' AND fs.total_uses >= f.replacement_cycle THEN '需更換'
+        WHEN f.cycle_unit = 'days' AND fs.last_use_date IS NOT NULL
+             AND DATEDIFF(CURDATE(), fs.last_use_date) >= f.replacement_cycle THEN '需更換'
+        ELSE '正常'
+    END AS usage_status,
+    fs.note,
+    fs.created_at,
+    fs.updated_at
+FROM fixture_serials fs
+JOIN fixtures f ON fs.fixture_id = f.id
+LEFT JOIN stations s ON fs.current_station_id = s.id;
+
+-- =====================================
+-- 存儲過程 (Stored Procedures)
+-- =====================================
+
+DELIMITER //
+
+-- 存儲過程1: 收料作業
+DROP PROCEDURE IF EXISTS sp_material_receipt//
+CREATE PROCEDURE sp_material_receipt(
+    IN p_customer_id VARCHAR(50),
+    IN p_fixture_id VARCHAR(50),
+    IN p_transaction_date DATE,
+    IN p_order_no VARCHAR(100),
+    IN p_source_type ENUM('self_purchased', 'customer_supplied'),
+    IN p_serials TEXT,  -- 逗號分隔的序號列表
+    IN p_operator VARCHAR(100),
+    IN p_note TEXT,
+    IN p_user_id INT,
+    OUT p_transaction_id INT,
+    OUT p_message VARCHAR(255)
+)
+BEGIN
+    DECLARE v_serial VARCHAR(100);
+    DECLARE v_pos INT;
+    DECLARE v_count INT DEFAULT 0;
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        SET p_message = '收料作業失敗,已回滾';
+        SET p_transaction_id = NULL;
+    END;
+
+    START TRANSACTION;
+
+    -- 檢查客戶是否存在
+    IF NOT EXISTS (SELECT 1 FROM customers WHERE id = p_customer_id) THEN
+        SET p_message = '客戶不存在';
+        SET p_transaction_id = NULL;
+        ROLLBACK;
+    -- 檢查治具是否存在
+    ELSEIF NOT EXISTS (SELECT 1 FROM fixtures WHERE id = p_fixture_id AND customer_id = p_customer_id) THEN
+        SET p_message = '治具編號不存在或不屬於該客戶';
+        SET p_transaction_id = NULL;
+        ROLLBACK;
+    ELSE
+        -- 創建異動主記錄
+        INSERT INTO material_transactions (
+            transaction_type, transaction_date, customer_id, order_no,
+            fixture_id, quantity, operator, note, created_by
+        ) VALUES (
+            'receipt', p_transaction_date, p_customer_id, p_order_no,
+            p_fixture_id, 0, p_operator, p_note, p_user_id
+        );
+
+        SET p_transaction_id = LAST_INSERT_ID();
+
+        -- 處理序號列表
+        SET p_serials = CONCAT(p_serials, ',');
+
+        WHILE LENGTH(p_serials) > 0 DO
+            SET v_pos = LOCATE(',', p_serials);
+            SET v_serial = TRIM(SUBSTRING(p_serials, 1, v_pos - 1));
+            SET p_serials = SUBSTRING(p_serials, v_pos + 1);
+
+            IF LENGTH(v_serial) > 0 THEN
+                IF EXISTS (SELECT 1 FROM fixture_serials WHERE serial_number = v_serial) THEN
+                    SET p_message = CONCAT('序號重複：', v_serial);
+                    ROLLBACK;
+                END IF;
+
+                INSERT INTO fixture_serials (
+                    customer_id, fixture_id, serial_number, source_type, status, receipt_date
+                ) VALUES (
+                    p_customer_id, p_fixture_id, v_serial, p_source_type, 'available', p_transaction_date
+                );
+
+                -- 新增異動明細
+                INSERT INTO material_transaction_details (transaction_id, serial_number)
+                VALUES (p_transaction_id, v_serial);
+
+                SET v_count = v_count + 1;
+            END IF;
+        END WHILE;
+
+        -- 更新異動數量
+        UPDATE material_transactions
+        SET quantity = v_count
+        WHERE id = p_transaction_id;
+
+        -- 更新治具來源數量
+        IF p_source_type = 'self_purchased' THEN
+            UPDATE fixtures
+            SET self_purchased_qty = self_purchased_qty + v_count
+            WHERE id = p_fixture_id;
+        ELSE
+            UPDATE fixtures
+            SET customer_supplied_qty = customer_supplied_qty + v_count
+            WHERE id = p_fixture_id;
+        END IF;
+
+        COMMIT;
+        SET p_message = CONCAT('收料成功,共 ', v_count, ' 個序號');
+    END IF;
+END//
+
+-- 存儲過程2: 退料作業
+DROP PROCEDURE IF EXISTS sp_material_return//
+CREATE PROCEDURE sp_material_return(
+    IN p_customer_id VARCHAR(50),
+    IN p_fixture_id VARCHAR(50),
+    IN p_transaction_date DATE,
+    IN p_order_no VARCHAR(100),
+    IN p_serials TEXT,  -- 逗號分隔的序號列表
+    IN p_operator VARCHAR(100),
+    IN p_note TEXT,
+    IN p_user_id INT,
+    OUT p_transaction_id INT,
+    OUT p_message VARCHAR(255)
+)
+BEGIN
+    DECLARE v_serial VARCHAR(100);
+    DECLARE v_pos INT;
+    DECLARE v_count INT DEFAULT 0;
+    DECLARE v_source_type ENUM('self_purchased', 'customer_supplied');
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        SET p_message = '退料作業失敗,已回滾';
+        SET p_transaction_id = NULL;
+    END;
+
+    START TRANSACTION;
+
+    -- 創建異動主記錄
+    INSERT INTO material_transactions (
+        transaction_type, transaction_date, customer_id, order_no,
+        fixture_id, quantity, operator, note, created_by
+    ) VALUES (
+        'return', p_transaction_date, p_customer_id, p_order_no,
+        p_fixture_id, 0, p_operator, p_note, p_user_id
+    );
+
+    SET p_transaction_id = LAST_INSERT_ID();
+
+    -- 處理序號列表
+    SET p_serials = CONCAT(p_serials, ',');
+
+    WHILE LENGTH(p_serials) > 0 DO
+        SET v_pos = LOCATE(',', p_serials);
+        SET v_serial = TRIM(SUBSTRING(p_serials, 1, v_pos - 1));
+        SET p_serials = SUBSTRING(p_serials, v_pos + 1);
+
+        IF LENGTH(v_serial) > 0 THEN
+            -- 取得序號的來源類型
+            SELECT source_type INTO v_source_type
+            FROM fixture_serials
+            WHERE serial_number = v_serial AND customer_id = p_customer_id AND fixture_id = p_fixture_id
+            LIMIT 1;
+
+            IF v_source_type IS NOT NULL THEN
+                -- 更新序號狀態為已返還
+                UPDATE fixture_serials
+                SET status = 'returned'
+                WHERE serial_number = v_serial AND customer_id = p_customer_id AND fixture_id = p_fixture_id;
+
+                -- 新增異動明細
+                INSERT INTO material_transaction_details (transaction_id, serial_number)
+                VALUES (p_transaction_id, v_serial);
+
+                -- 更新治具來源數量
+
+                SET v_count = v_count + 1;
+            END IF;
+        END IF;
+    END WHILE;
+
+    -- 更新異動數量
+    UPDATE material_transactions
+    SET quantity = v_count
+    WHERE id = p_transaction_id;
+
+    COMMIT;
+    SET p_message = CONCAT('退料成功,共 ', v_count, ' 個序號');
+END//
+
+-- 存儲過程3: 每日庫存快照
+DROP PROCEDURE IF EXISTS sp_create_daily_snapshot//
+CREATE PROCEDURE sp_create_daily_snapshot(
+    IN p_snapshot_date DATE,
+    IN p_customer_id VARCHAR(50)  -- NULL 表示所有客戶
+)
+BEGIN
+    IF p_customer_id IS NULL THEN
+        -- 為所有客戶建立快照
+        INSERT INTO inventory_snapshots (
+            customer_id, fixture_id, snapshot_date,
+            available_qty, deployed_qty, maintenance_qty, scrapped_qty, returned_qty, total_qty
+        )
+        SELECT
+            customer_id,
+            id,
+            p_snapshot_date,
+            available_qty,
+            deployed_qty,
+            maintenance_qty,
+            scrapped_qty,
+            returned_qty,
+            (self_purchased_qty + customer_supplied_qty) AS total_qty
+        FROM fixtures
+        ON DUPLICATE KEY UPDATE
+            available_qty = VALUES(available_qty),
+            deployed_qty = VALUES(deployed_qty),
+            maintenance_qty = VALUES(maintenance_qty),
+            scrapped_qty = VALUES(scrapped_qty),
+            returned_qty = VALUES(returned_qty),
+            total_qty = VALUES(total_qty);
+    ELSE
+        -- 為特定客戶建立快照
+        INSERT INTO inventory_snapshots (
+            customer_id, fixture_id, snapshot_date,
+            available_qty, deployed_qty, maintenance_qty, scrapped_qty, returned_qty, total_qty
+        )
+        SELECT
+            customer_id,
+            id,
+            p_snapshot_date,
+            available_qty,
+            deployed_qty,
+            maintenance_qty,
+            scrapped_qty,
+            returned_qty,
+            (self_purchased_qty + customer_supplied_qty) AS total_qty
+        FROM fixtures
+        WHERE customer_id = p_customer_id
+        ON DUPLICATE KEY UPDATE
+            available_qty = VALUES(available_qty),
+            deployed_qty = VALUES(deployed_qty),
+            maintenance_qty = VALUES(maintenance_qty),
+            scrapped_qty = VALUES(scrapped_qty),
+            returned_qty = VALUES(returned_qty),
+            total_qty = VALUES(total_qty);
+    END IF;
+END//
+
+DELIMITER ;
 
 -- =====================================
 -- 初始資料
@@ -330,17 +906,30 @@ GROUP BY mm.model_id, mm.model_name, ms.station_id, s.station_code;
 INSERT INTO users (username, password_hash, role, full_name) VALUES
 ('admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', 'admin', '系統管理員');
 
--- 插入預設站點
-INSERT INTO stations (station_code, station_name) VALUES
-('T1_MP', 'T1_MP站'),
-('T2_STD', 'T2(標溫)站'),
-('T2_WIDE', 'T2(寬溫)站'),
-('T3_MAC', 'T3_MAC站'),
-('T3_ASQC', 'T3_ASQC站'),
-('T3_STG', 'T3_STG站');
+-- 插入範例客戶 (請根據實際情況修改)
+INSERT INTO customers (id, customer_abbr, is_active) VALUES
+('範例客戶A', '客戶A', TRUE),
+('範例客戶B', '客戶B', TRUE);
+
+-- 插入範例站點 (請根據實際情況修改客戶)
+INSERT INTO stations (id, customer_id, station_name) VALUES
+('T1_MP', '範例客戶A', 'T1_MP站'),
+('T2_STD', '範例客戶A', 'T2(標溫)站'),
+('T2_WIDE', '範例客戶A', 'T2(寬溫)站'),
+('T3_MAC', '範例客戶A', 'T3_MAC站'),
+('T3_ASQC', '範例客戶A', 'T3_ASQC站'),
+('T3_STG', '範例客戶A', 'T3_STG站');
 
 SET FOREIGN_KEY_CHECKS = 1;
 
--- 顯示完成訊息
-SELECT '✅ 資料庫初始化完成！' AS message;
-SELECT '🔑 預設管理員帳號: admin / 密碼: admin123' AS info;
+-- =====================================
+-- 完成訊息
+-- =====================================
+SELECT '✅ 資料庫重構 v3.0 完成！' AS message;
+SELECT '📋 主要變更:' AS info;
+SELECT '  1. 所有業務主鍵改為 VARCHAR(50)' AS change1;
+SELECT '  2. 新增客戶總表,所有表按客戶分類' AS change2;
+SELECT '  3. 統一使用代理主鍵 (id) + 簡單外鍵' AS change3;
+SELECT '  4. 收料/退料廠商欄位改為 customer_id' AS change4;
+SELECT '🔑 預設管理員: admin / admin123' AS admin_info;
+SELECT '⚠️  請修改範例客戶和站點資料!' AS warning;

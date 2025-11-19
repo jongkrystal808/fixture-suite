@@ -8,7 +8,7 @@ window.API_BASE = window.API_BASE || '';
 const API_PREFIX = '/api/v2';
 
 function getToken() {
-  return localStorage.getItem('jwt_token');
+  return localStorage.getItem('auth_token');
 }
 
 

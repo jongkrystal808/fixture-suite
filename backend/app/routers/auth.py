@@ -6,7 +6,7 @@ Authentication API Routes
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from backend.app.models import user
+from pydantic import BaseModel
 
 from backend.app.models.user import (
     UserCreate,
@@ -15,14 +15,16 @@ from backend.app.models.user import (
     UserResponse,
     PasswordChange
 )
-from backend.app.auth import (
-    create_access_token,
-    verify_password,
-    get_password_hash
-)
+
 from backend.app.dependencies import get_current_user, get_current_username
 from backend.app.database import db
-from backend.app.utils.password import hash_password as sha256_hash
+from backend.app.utils.password import (
+    hash_password,      # SHA256
+    verify_password     # SHA256 驗證
+)
+from backend.app.auth import (
+    create_access_token
+)
 
 
 # 建立路由器
@@ -32,8 +34,12 @@ router = APIRouter(
 )
 
 
+# ==========================================================
+# 🔹 使用者登入
+# ==========================================================
 @router.post("/login", response_model=LoginResponse, summary="使用者登入")
 async def login(user_data: UserLogin):
+
     query = """
         SELECT id, username, password_hash, role, created_at
         FROM users
@@ -49,21 +55,21 @@ async def login(user_data: UserLogin):
                 detail="使用者名稱或密碼錯誤"
             )
 
-        user = result[0]  # ✅ 正確：取得查詢結果
-
+        user = result[0]
         user_id = user["id"]
         username = user["username"]
-        password_hash = user["password_hash"]
+        password_hash_db = user["password_hash"]
         role = user["role"]
         created_at = user["created_at"]
 
-        # ✅ 驗證密碼
-        if not verify_password(user_data.password, password_hash):
+        # 驗證密碼（SHA256）
+        if not verify_password(user_data.password, password_hash_db):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="使用者名稱或密碼錯誤"
             )
 
+        # 產生 Token
         access_token = create_access_token(
             data={"sub": username, "user_id": user_id, "role": role}
         )
@@ -86,69 +92,65 @@ async def login(user_data: UserLogin):
         )
 
 
+# ==========================================================
+# 🔹 使用者註冊（SHA256）
+# ==========================================================
 @router.post("/register", response_model=UserResponse, summary="使用者註冊")
 async def register(user_data: UserCreate):
 
+    # 檢查是否已存在
     check_query = "SELECT id FROM users WHERE username = %s"
-
-    try:
-        existing_user = db.execute_query(check_query, (user_data.username,))
-        if existing_user:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="使用者名稱已存在"
-            )
-
-        password_hash = get_password_hash(user_data.password)
-
-        insert_query = """
-            INSERT INTO users (username, password_hash, role)
-            VALUES (%s, %s, %s)
-        """
-
-        # ✅ execute_update 只會回傳 affected_rows，不能得到新 ID
-        # 所以換成 execute_insert
-        user_id = db.execute_insert(
-            insert_query,
-            (user_data.username, password_hash, user_data.role.value)
+    existing = db.execute_query(check_query, (user_data.username,))
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="使用者名稱已存在"
         )
 
-        query = """
-            SELECT id, username, role, created_at
-            FROM users
-            WHERE id = %s
-        """
+    # 雜湊密碼（SHA256）
+    hashed = hash_password(user_data.password)
 
-        result = db.execute_query(query, (user_id,))
-        if not result:
-            raise HTTPException(
-                status_code=500,
-                detail="建立使用者失敗"
-            )
+    insert_query = """
+        INSERT INTO users (username, password_hash, role)
+        VALUES (%s, %s, %s)
+    """
 
-        user = result[0]
+    user_id = db.execute_insert(
+        insert_query,
+        (user_data.username, hashed, user_data.role.value)
+    )
 
-        return UserResponse(
-            id=user["id"],
-            username=user["username"],
-            role=user["role"],
-            created_at=user["created_at"]
-        )
+    # 查詢回傳資料
+    query = """
+        SELECT id, username, role, created_at
+        FROM users
+        WHERE id = %s
+    """
 
-    except Exception as e:
+    result = db.execute_query(query, (user_id,))
+
+    if not result:
         raise HTTPException(
             status_code=500,
-            detail=f"註冊失敗: {str(e)}"
+            detail="建立使用者失敗"
         )
 
+    user = result[0]
 
+    return UserResponse(
+        id=user["id"],
+        username=user["username"],
+        role=user["role"],
+        created_at=user["created_at"]
+    )
+
+
+# ==========================================================
+# 🔹 取得當前使用者資訊
+# ==========================================================
 @router.get("/me", response_model=UserResponse, summary="取得當前使用者資訊")
 async def get_current_user_info(current_user: dict = Depends(get_current_user)):
-    """
-    取得當前登入使用者的資訊
 
-    需要提供有效的 JWT Token
-    """
     return UserResponse(
         id=current_user["id"],
         username=current_user["username"],
@@ -157,93 +159,61 @@ async def get_current_user_info(current_user: dict = Depends(get_current_user)):
     )
 
 
+# ==========================================================
+# 🔹 使用者修改自己的密碼（SHA256）
+# ==========================================================
 @router.post("/change-password", summary="修改密碼")
 async def change_password(
     password_data: PasswordChange,
     current_user: dict = Depends(get_current_user)
 ):
-    """
-    修改當前使用者的密碼
 
-    - **old_password**: 舊密碼
-    - **new_password**: 新密碼 (至少 6 字元，且不能與舊密碼相同)
-
-    需要提供有效的 JWT Token
-    """
     user_id = current_user["id"]
 
-    try:
-        # 查詢當前密碼
-        query = "SELECT password_hash FROM users WHERE id = %s"
-        result = db.execute_query(query, (user_id,))
-
-        if not result:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="使用者不存在"
-            )
-
-        current_password_hash = result[0][0]
-
-        # 驗證舊密碼
-        if not verify_password(password_data.old_password, current_password_hash):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="舊密碼錯誤"
-            )
-
-        # 加密新密碼
-        new_password_hash = get_password_hash(password_data.new_password)
-
-        # 更新密碼
-        update_query = """
-            UPDATE users
-            SET password_hash = %s
-            WHERE id = %s
-        """
-
-        db.execute_update(update_query, (new_password_hash, user_id))
-
-        return {
-            "message": "密碼修改成功",
-            "username": current_user["username"]
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
+    # 查詢當前密碼
+    query = "SELECT password_hash FROM users WHERE id = %s"
+    result = db.execute_query(query, (user_id,))
+    if not result:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"修改密碼失敗: {str(e)}"
+            status_code=404,
+            detail="使用者不存在"
         )
 
+    password_hash_db = result[0][0]
 
+    # 驗證舊密碼
+    if not verify_password(password_data.old_password, password_hash_db):
+        raise HTTPException(
+            status_code=400,
+            detail="舊密碼錯誤"
+        )
+
+    # 雜湊新密碼（SHA256）
+    new_hash = hash_password(password_data.new_password)
+
+    update_query = "UPDATE users SET password_hash = %s WHERE id = %s"
+    db.execute_update(update_query, (new_hash, user_id))
+
+    return {"message": "密碼修改成功"}
+
+
+# ==========================================================
+# 🔹 使用者登出（記錄用途）
+# ==========================================================
 @router.post("/logout", summary="使用者登出")
 async def logout(current_username: str = Depends(get_current_username)):
-    """
-    使用者登出
-
-    注意：由於使用 JWT，Token 無法真正撤銷。
-    實際的登出應該在客戶端刪除 Token。
-    此 API 主要用於記錄登出事件。
-
-    需要提供有效的 JWT Token
-    """
     return {
         "message": "登出成功",
         "username": current_username,
-        "note": "請在客戶端刪除 Token"
+        "note": "請在前端刪除 Token"
     }
 
 
+# ==========================================================
+# 🔹 驗證 Token 是否有效
+# ==========================================================
 @router.post("/verify-token", summary="驗證 Token")
 async def verify_token_endpoint(current_user: dict = Depends(get_current_user)):
-    """
-    驗證 JWT Token 是否有效
-
-    如果 Token 有效，回傳使用者資訊
-    如果 Token 無效或過期，回傳 401 錯誤
-    """
     return {
         "valid": True,
         "user": UserResponse(
@@ -255,93 +225,38 @@ async def verify_token_endpoint(current_user: dict = Depends(get_current_user)):
     }
 
 
-# ==================== 管理員專用 API ====================
+# ==========================================================
+# 🔹 管理員重設使用者密碼（唯一正確版）
+# ==========================================================
 
-@router.post("/admin/reset-password/{user_id}", summary="重設使用者密碼 (管理員)")
+class ResetPasswordBody(BaseModel):
+    new_password: str
+
+
+@router.post("/admin/reset-password/{user_id}", summary="管理員重設指定使用者密碼")
 async def admin_reset_password(
     user_id: int,
-    new_password: str,
+    body: ResetPasswordBody,
     current_user: dict = Depends(get_current_user)
 ):
-    """
-    管理員重設指定使用者的密碼
 
-    - **user_id**: 要重設密碼的使用者 ID
-    - **new_password**: 新密碼
-
-    需要管理員權限
-    """
-    # 檢查權限
+    # 權限檢查
     if current_user["role"] != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="需要管理員權限"
-        )
+        raise HTTPException(status_code=403, detail="需要管理員權限")
 
-    try:
-        # 檢查使用者是否存在
-        check_query = "SELECT username FROM users WHERE id = %s"
-        result = db.execute_query(check_query, (user_id,))
+    # 確認使用者存在
+    query_check = "SELECT id FROM users WHERE id = %s"
+    target = db.execute_query(query_check, (user_id,))
+    if not target:
+        raise HTTPException(status_code=404, detail="使用者不存在")
 
-        if not result:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="使用者不存在"
-            )
+    # 雜湊新密碼（SHA256）
+    new_hash = hash_password(body.new_password)
 
-        username = result[0][0]
+    query_update = "UPDATE users SET password_hash = %s WHERE id = %s"
+    db.execute_update(query_update, (new_hash, user_id))
 
-        # 加密新密碼
-        new_password_hash = get_password_hash(new_password)
-
-        # 更新密碼
-        update_query = """
-            UPDATE users
-            SET password_hash = %s
-            WHERE id = %s
-        """
-
-        db.execute_update(update_query, (new_password_hash, user_id))
-
-        return {
-            "message": "密碼重設成功",
-            "user_id": user_id,
-            "username": username
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"重設密碼失敗: {str(e)}"
-        )
-
-
-# ==================== 測試用 API (生產環境應移除) ====================
-
-@router.get("/test/public", summary="公開測試端點 (無需登入)")
-async def test_public():
-    """
-    公開測試端點，無需登入即可存取
-    """
     return {
-        "message": "這是公開端點",
-        "auth_required": False
-    }
-
-
-@router.get("/test/protected", summary="受保護測試端點 (需要登入)")
-async def test_protected(current_user: dict = Depends(get_current_user)):
-    """
-    受保護的測試端點，需要登入才能存取
-    """
-    return {
-        "message": "這是受保護端點",
-        "auth_required": True,
-        "user": {
-            "id": current_user["id"],
-            "username": current_user["username"],
-            "role": current_user["role"]
-        }
+        "message": "密碼已成功重設",
+        "user_id": user_id
     }
