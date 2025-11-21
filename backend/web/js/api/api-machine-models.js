@@ -1,6 +1,6 @@
 ``/**
  * 機種 / 站點 / 機種-站點 / 治具需求 API
- * api-models.js
+ * api-machine-models.js
  *
  * 依後端 Router:
  * - /models

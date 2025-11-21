@@ -1,537 +1,268 @@
 """
-更換記錄 API 路由
-Replacement Logs API Routes
+治具更換記錄 API (v3.0)
+Replacement Logs API
 
-提供治具更換記錄的 CRUD、批量新增、Excel 匯入等功能
+對應資料表: replacement_logs
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from typing import Optional, List
-from datetime import date, datetime
-from pydantic import BaseModel, Field
+from typing import List, Optional
 
-from backend.app.dependencies import get_current_user, get_current_username
+from backend.app.dependencies import get_current_user, get_current_admin, get_current_username
 from backend.app.database import db
+
+from backend.app.models.replacement import (
+    ReplacementBase,
+    ReplacementCreate,
+    ReplacementUpdate,
+    ReplacementResponse,
+    ReplacementWithDetails
+)
 
 router = APIRouter(
     prefix="/logs/replacement",
-    tags=["更換記錄 Replacement Logs"],
+    tags=["更換記錄 Replacement Logs"]
 )
 
 
-# ==================== Pydantic 模型 ====================
+# ============================================================
+# 工具：檢查治具是否屬於該客戶
+# ============================================================
 
-
-class ReplacementLogBase(BaseModel):
-    """更換記錄基礎欄位"""
-
-    fixture_id: str = Field(..., description="治具編號")
-    replacement_date: date = Field(..., description="更換日期 (YYYY-MM-DD)")
-    reason: Optional[str] = Field(None, description="更換原因")
-    executor: Optional[str] = Field(None, description="執行人員")
-    note: Optional[str] = Field(None, description="備註")
-
-
-class ReplacementLogCreate(ReplacementLogBase):
-    """建立更換記錄用模型"""
-    pass
-
-
-class ReplacementLogResponse(ReplacementLogBase):
-    """更換記錄回應模型"""
-
-    replacement_id: int = Field(..., description="更換記錄 ID")
-    fixture_name: Optional[str] = Field(None, description="治具名稱")
-    created_at: datetime = Field(..., description="建立時間")
-
-
-class ReplacementLogListResponse(BaseModel):
-    """更換記錄列表回應"""
-
-    total: int
-    logs: List[ReplacementLogResponse]
-
-
-class ReplacementLogBatchCreate(ReplacementLogBase):
-    """批量建立相同內容的更換記錄"""
-
-    record_count: int = Field(
-        1,
-        ge=1,
-        le=10000,
-        description="要建立的筆數（同樣內容重複 N 筆）",
-    )
-
-
-class ReplacementLogImportRow(ReplacementLogBase):
-    """匯入單列資料 (對應 Excel 的一列)"""
-
-    # fixture_id, replacement_date, reason, executor, note 都沿用 Base
-    pass
-
-
-class ReplacementLogImportResult(BaseModel):
-    """匯入結果回應"""
-
-    message: str
-    success_count: int
-    fail_count: int
-    skipped_rows: List[dict]
-
-
-# ==================== 工具函數 ====================
-
-
-def _check_fixture_exists(fixture_id: str):
-    """檢查治具是否存在"""
-    sql = "SELECT fixture_id, fixture_name FROM fixtures WHERE fixture_id = %s"
-    rows = db.execute_query(sql, (fixture_id,))
+def ensure_fixture_exists(fixture_id: str, customer_id: str):
+    sql = """
+        SELECT id, fixture_name
+        FROM fixtures
+        WHERE id=%s AND customer_id=%s
+    """
+    rows = db.execute_query(sql, (fixture_id, customer_id))
     if not rows:
-        return None
+        raise HTTPException(400, f"治具 {fixture_id} 不存在或不屬於客戶 {customer_id}")
     return rows[0]
 
 
-# ==================== 建立單筆更換記錄 ====================
-
+# ============================================================
+# 1️⃣ 建立更換記錄
+# ============================================================
 
 @router.post(
-    "/",
-    response_model=ReplacementLogResponse,
+    "",
+    response_model=ReplacementResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="建立更換記錄",
+    summary="新增治具更換記錄"
 )
 async def create_replacement_log(
-    log_data: ReplacementLogCreate,
-    current_username: str = Depends(get_current_username),
+    data: ReplacementCreate,
+    username: str = Depends(get_current_username)
 ):
-    """
-    建立單筆更換記錄
-    """
-    try:
-        fixture_row = _check_fixture_exists(log_data.fixture_id)
-        if not fixture_row:
-            raise HTTPException(
-                status_code=400,
-                detail=f"治具編號 {log_data.fixture_id} 不存在",
-            )
+    ensure_fixture_exists(data.fixture_id, data.customer_id)
 
-        executor = log_data.executor or current_username
+    executor = data.executor or username
 
-        insert_sql = """
-            INSERT INTO replacement_logs
-                (fixture_id, replacement_date, reason, executor, note)
-            VALUES (%s, %s, %s, %s, %s)
+    new_id = db.insert(
         """
-        replacement_id = db.insert(
-            insert_sql,
-            (
-                log_data.fixture_id,
-                log_data.replacement_date,
-                log_data.reason,
-                executor,
-                log_data.note,
-            ),
-        )
-
-        # 重新查一次，帶出 created_at 與 fixture_name
-        query = """
-            SELECT rl.replacement_id,
-                   rl.fixture_id,
-                   f.fixture_name,
-                   rl.replacement_date,
-                   rl.reason,
-                   rl.executor,
-                   rl.note,
-                   rl.created_at
-            FROM replacement_logs rl
-            JOIN fixtures f ON rl.fixture_id = f.fixture_id
-            WHERE rl.replacement_id = %s
-        """
-        rows = db.execute_query(query, (replacement_id,))
-        row = rows[0]
-
-        return ReplacementLogResponse(
-            replacement_id=row["replacement_id"],
-            fixture_id=row["fixture_id"],
-            fixture_name=row.get("fixture_name"),
-            replacement_date=row["replacement_date"],
-            reason=row["reason"],
-            executor=row["executor"],
-            note=row["note"],
-            created_at=row["created_at"],
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"建立更換記錄失敗: {e}",
-        )
-
-
-# ==================== 批量建立相同內容的更換記錄 ====================
-
-
-@router.post(
-    "/batch",
-    response_model=ReplacementLogImportResult,
-    summary="批量建立相同內容的更換記錄",
-)
-async def create_replacement_logs_batch(
-    batch_data: ReplacementLogBatchCreate,
-    current_username: str = Depends(get_current_username),
-):
-    """
-    批量建立「內容完全相同」的更換記錄
-    使用欄位：fixture_id, replacement_date, reason, executor(可省略), note, record_count
-    """
-    try:
-        fixture_row = _check_fixture_exists(batch_data.fixture_id)
-        if not fixture_row:
-            raise HTTPException(
-                status_code=400,
-                detail=f"治具編號 {batch_data.fixture_id} 不存在",
-            )
-
-        executor = batch_data.executor or current_username
-
-        insert_sql = """
-            INSERT INTO replacement_logs
-                (fixture_id, replacement_date, reason, executor, note)
-            VALUES (%s, %s, %s, %s, %s)
-        """
-
-        success_count = 0
-        skipped_rows: List[dict] = []
-
-        for i in range(batch_data.record_count):
-            try:
-                db.insert(
-                    insert_sql,
-                    (
-                        batch_data.fixture_id,
-                        batch_data.replacement_date,
-                        batch_data.reason,
-                        executor,
-                        batch_data.note,
-                    ),
-                )
-                success_count += 1
-            except Exception as e:
-                # 理論上這裡不太會出錯，但還是保留，以便之後擴充
-                skipped_rows.append(
-                    {
-                        "index": i,
-                        "error": str(e),
-                    }
-                )
-
-        fail_count = len(skipped_rows)
-
-        return ReplacementLogImportResult(
-            message="批量建立完成",
-            success_count=success_count,
-            fail_count=fail_count,
-            skipped_rows=skipped_rows,
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"批量建立更換記錄失敗: {e}",
-        )
-
-
-# ==================== Excel 匯入多筆不同內容 ====================
-
-
-@router.post(
-    "/import",
-    response_model=ReplacementLogImportResult,
-    summary="匯入多筆不同內容的更換記錄（Excel 解析後傳 JSON）",
-)
-async def import_replacement_logs(
-    rows: List[ReplacementLogImportRow],
-    current_username: str = Depends(get_current_username),
-):
-    """
-    匯入多筆更換記錄。
-
-    🔹 前端會先把 .xlsx 解析成 JSON，再呼叫本 API。
-    🔹 每一列對應一個 ReplacementLogImportRow：
-
-        - fixture_id           : str
-        - replacement_date     : YYYY-MM-DD
-        - reason               : str (可空)
-        - executor             : str (可空，若空則使用目前登入帳號)
-        - note                 : str (可空)
-
-    🔹 錯誤處理：
-        - 單筆失敗不會中斷整批
-        - 會跳過錯誤行並記錄
-        - 回傳 success_count / fail_count / skipped_rows
-    """
-    success_count = 0
-    skipped_rows: List[dict] = []
-
-    # Excel 通常第 2 列才是資料，所以這裡 row_index 從 2 開始比較直覺
-    excel_row_index = 2
-
-    insert_sql = """
         INSERT INTO replacement_logs
-            (fixture_id, replacement_date, reason, executor, note)
-        VALUES (%s, %s, %s, %s, %s)
-    """
-
-    for row in rows:
-        try:
-            # 檢查治具存在
-            fixture_row = _check_fixture_exists(row.fixture_id)
-            if not fixture_row:
-                skipped_rows.append(
-                    {
-                        "row": excel_row_index,
-                        "fixture_id": row.fixture_id,
-                        "error": f"治具編號 {row.fixture_id} 不存在",
-                    }
-                )
-                excel_row_index += 1
-                continue
-
-            executor = row.executor or current_username
-
-            db.insert(
-                insert_sql,
-                (
-                    row.fixture_id,
-                    row.replacement_date,
-                    row.reason,
-                    executor,
-                    row.note,
-                ),
-            )
-            success_count += 1
-
-        except Exception as e:
-            skipped_rows.append(
-                {
-                    "row": excel_row_index,
-                    "fixture_id": row.fixture_id,
-                    "error": str(e),
-                }
-            )
-        finally:
-            excel_row_index += 1
-
-    fail_count = len(skipped_rows)
-
-    message = (
-        "匯入完成，全部成功"
-        if fail_count == 0
-        else "匯入完成，有部分資料被略過"
+            (customer_id, fixture_id, replacement_date, reason, executor, note)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        """,
+        (
+            data.customer_id,
+            data.fixture_id,
+            data.replacement_date,
+            data.reason,
+            executor,
+            data.note
+        )
     )
 
-    return ReplacementLogImportResult(
-        message=message,
-        success_count=success_count,
-        fail_count=fail_count,
-        skipped_rows=skipped_rows,
+    # 回查
+    row = db.execute_query(
+        """
+        SELECT
+            rl.*,
+            f.fixture_name
+        FROM replacement_logs rl
+        JOIN fixtures f
+            ON rl.fixture_id = f.id AND rl.customer_id = f.customer_id
+        WHERE rl.id = %s
+        """,
+        (new_id,)
+    )[0]
+
+    return ReplacementResponse(**row)
+
+
+# ============================================================
+# 2️⃣ 更新更換記錄
+# ============================================================
+
+@router.put(
+    "/{log_id}",
+    response_model=ReplacementResponse,
+    summary="更新更換記錄"
+)
+async def update_replacement_log(
+    log_id: int,
+    data: ReplacementUpdate,
+    admin=Depends(get_current_admin)
+):
+    # 查詢是否存在
+    exists = db.execute_query(
+        "SELECT customer_id, fixture_id FROM replacement_logs WHERE id=%s",
+        (log_id,)
     )
+    if not exists:
+        raise HTTPException(404, "更換記錄不存在")
+
+    update_fields = []
+    params = []
+
+    if data.replacement_date is not None:
+        update_fields.append("replacement_date=%s")
+        params.append(data.replacement_date)
+
+    if data.reason is not None:
+        update_fields.append("reason=%s")
+        params.append(data.reason)
+
+    if data.executor is not None:
+        update_fields.append("executor=%s")
+        params.append(data.executor)
+
+    if data.note is not None:
+        update_fields.append("note=%s")
+        params.append(data.note)
+
+    if update_fields:
+        sql = f"""
+            UPDATE replacement_logs
+            SET {', '.join(update_fields)}
+            WHERE id=%s
+        """
+        params.append(log_id)
+        db.execute_update(sql, tuple(params))
+
+    # 回查
+    row = db.execute_query(
+        """
+        SELECT rl.*, f.fixture_name
+        FROM replacement_logs rl
+        JOIN fixtures f
+            ON rl.fixture_id = f.id AND rl.customer_id = f.customer_id
+        WHERE rl.id=%s
+        """,
+        (log_id,)
+    )[0]
+
+    return ReplacementResponse(**row)
 
 
-# ==================== 查詢單筆更換記錄 ====================
-
+# ============================================================
+# 3️⃣ 查詢單筆更換記錄
+# ============================================================
 
 @router.get(
-    "/{replacement_id}",
-    response_model=ReplacementLogResponse,
-    summary="取得單筆更換記錄",
+    "/{log_id}",
+    response_model=ReplacementWithDetails,
+    summary="取得單筆更換記錄"
 )
 async def get_replacement_log(
-    replacement_id: int,
-    current_user: dict = Depends(get_current_user),
+    log_id: int,
+    current_user=Depends(get_current_user)
 ):
-    """
-    根據 ID 取得單筆更換記錄
-    """
-    try:
-        query = """
-            SELECT rl.replacement_id,
-                   rl.fixture_id,
-                   f.fixture_name,
-                   rl.replacement_date,
-                   rl.reason,
-                   rl.executor,
-                   rl.note,
-                   rl.created_at
-            FROM replacement_logs rl
-            JOIN fixtures f ON rl.fixture_id = f.fixture_id
-            WHERE rl.replacement_id = %s
+    rows = db.execute_query(
         """
-        rows = db.execute_query(query, (replacement_id,))
-        if not rows:
-            raise HTTPException(
-                status_code=404,
-                detail=f"更換記錄 {replacement_id} 不存在",
-            )
+        SELECT rl.*, f.fixture_name
+        FROM replacement_logs rl
+        JOIN fixtures f
+            ON rl.fixture_id = f.id AND rl.customer_id = f.customer_id
+        WHERE rl.id=%s
+        """,
+        (log_id,)
+    )
 
-        row = rows[0]
-        return ReplacementLogResponse(
-            replacement_id=row["replacement_id"],
-            fixture_id=row["fixture_id"],
-            fixture_name=row.get("fixture_name"),
-            replacement_date=row["replacement_date"],
-            reason=row["reason"],
-            executor=row["executor"],
-            note=row["note"],
-            created_at=row["created_at"],
-        )
+    if not rows:
+        raise HTTPException(404, "更換記錄不存在")
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"查詢更換記錄失敗: {e}",
-        )
+    return ReplacementWithDetails(**rows[0])
 
 
-# ==================== 查詢更換記錄列表 ====================
-
+# ============================================================
+# 4️⃣ 列表查詢
+# ============================================================
 
 @router.get(
     "",
-    response_model=ReplacementLogListResponse,
-    summary="查詢更換記錄列表",
+    response_model=List[ReplacementWithDetails],
+    summary="查詢更換記錄列表"
 )
 async def list_replacement_logs(
-    skip: int = Query(0, ge=0, description="略過筆數"),
-    limit: int = Query(30, ge=1, le=500, description="每頁筆數"),
-    fixture_id: Optional[str] = Query(None, description="治具編號篩選"),
-    executor: Optional[str] = Query(None, description="執行人員包含文字"),
-    date_from: Optional[date] = Query(None, description="更換日期起 (YYYY-MM-DD)"),
-    date_to: Optional[date] = Query(None, description="更換日期迄 (YYYY-MM-DD，含當日)"),
-    current_user: dict = Depends(get_current_user),
+    customer_id: str = Query(...),
+    fixture_id: Optional[str] = None,
+    executor: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 100,
+    current_user=Depends(get_current_user)
 ):
+    where = ["rl.customer_id = %(customer_id)s"]
+    params = {"customer_id": customer_id}
+
+    if fixture_id:
+        where.append("rl.fixture_id = %(fixture_id)s")
+        params["fixture_id"] = fixture_id
+
+    if executor:
+        where.append("rl.executor LIKE %(executor)s")
+        params["executor"] = f"%{executor}%"
+
+    if date_from:
+        where.append("rl.replacement_date >= %(date_from)s")
+        params["date_from"] = date_from
+
+    if date_to:
+        where.append("rl.replacement_date <= %(date_to)s")
+        params["date_to"] = date_to
+
+    where_sql = " AND ".join(where)
+
+    sql = f"""
+        SELECT rl.*, f.fixture_name
+        FROM replacement_logs rl
+        JOIN fixtures f
+            ON rl.fixture_id = f.id AND rl.customer_id = f.customer_id
+        WHERE {where_sql}
+        ORDER BY rl.replacement_date DESC, rl.created_at DESC
+        LIMIT %(limit)s OFFSET %(skip)s
     """
-    查詢更換記錄列表（支援分頁與條件篩選）
-    """
-    try:
-        where_clauses = []
-        params: dict = {}
 
-        if fixture_id:
-            where_clauses.append("rl.fixture_id = %(fixture_id)s")
-            params["fixture_id"] = fixture_id
+    params["limit"] = limit
+    params["skip"] = skip
 
-        if executor:
-            where_clauses.append("rl.executor LIKE %(executor)s")
-            params["executor"] = f"%{executor}%"
-
-        if date_from:
-            where_clauses.append("rl.replacement_date >= %(date_from)s")
-            params["date_from"] = date_from
-
-        if date_to:
-            where_clauses.append("rl.replacement_date <= %(date_to)s")
-            params["date_to"] = date_to
-
-        where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
-
-        count_sql = f"""
-            SELECT COUNT(*) AS total
-            FROM replacement_logs rl
-            {where_sql}
-        """
-        total_result = db.execute_query(count_sql, params)
-        total = total_result[0]["total"] if total_result else 0
-
-        query = f"""
-            SELECT rl.replacement_id,
-                   rl.fixture_id,
-                   f.fixture_name,
-                   rl.replacement_date,
-                   rl.reason,
-                   rl.executor,
-                   rl.note,
-                   rl.created_at
-            FROM replacement_logs rl
-            JOIN fixtures f ON rl.fixture_id = f.fixture_id
-            {where_sql}
-            ORDER BY rl.replacement_date DESC, rl.created_at DESC
-            LIMIT %(limit)s OFFSET %(skip)s
-        """
-        params["limit"] = limit
-        params["skip"] = skip
-
-        rows = db.execute_query(query, params)
-
-        logs: List[ReplacementLogResponse] = []
-        for row in rows:
-            logs.append(
-                ReplacementLogResponse(
-                    replacement_id=row["replacement_id"],
-                    fixture_id=row["fixture_id"],
-                    fixture_name=row.get("fixture_name"),
-                    replacement_date=row["replacement_date"],
-                    reason=row["reason"],
-                    executor=row["executor"],
-                    note=row["note"],
-                    created_at=row["created_at"],
-                )
-            )
-
-        return ReplacementLogListResponse(total=total, logs=logs)
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"查詢更換記錄列表失敗: {e}",
-        )
+    rows = db.execute_query(sql, params)
+    return [ReplacementWithDetails(**row) for row in rows]
 
 
-# ==================== 刪除更換記錄 ====================
-
+# ============================================================
+# 5️⃣ 刪除紀錄
+# ============================================================
 
 @router.delete(
-    "/{replacement_id}",
-    summary="刪除更換記錄",
+    "/{log_id}",
+    status_code=204,
+    summary="刪除更換記錄"
 )
 async def delete_replacement_log(
-    replacement_id: int,
-    current_user: dict = Depends(get_current_user),
+    log_id: int,
+    admin=Depends(get_current_admin)
 ):
-    """
-    刪除指定的更換記錄
-    """
-    try:
-        check = db.execute_query(
-            "SELECT replacement_id FROM replacement_logs WHERE replacement_id = %s",
-            (replacement_id,),
-        )
-        if not check:
-            raise HTTPException(
-                status_code=404,
-                detail=f"更換記錄 {replacement_id} 不存在",
-            )
+    affected = db.execute_update(
+        "DELETE FROM replacement_logs WHERE id=%s",
+        (log_id,)
+    )
 
-        db.execute_update(
-            "DELETE FROM replacement_logs WHERE replacement_id = %s",
-            (replacement_id,),
-        )
+    if affected == 0:
+        raise HTTPException(404, "更換記錄不存在")
 
-        return {
-            "message": "更換記錄刪除成功",
-            "replacement_id": replacement_id,
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"刪除更換記錄失敗: {e}",
-        )
+    return None

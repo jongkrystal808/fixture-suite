@@ -17,18 +17,22 @@ import time
 import os
 
 # 導入路由
+from backend.app.routers.customers import router as customers_router
 from backend.app.routers.auth import router as auth_router
 from backend.app.routers.fixtures import router as fixtures_router
 from backend.app.routers.receipts import router as receipts_router
 from backend.app.routers.returns import router as returns_router
 from backend.app.routers.replacement import router as replacement_router
 from backend.app.routers.usage import router as usage_router
-from backend.app.routers.models import router as models_router
+from backend.app.routers.machine_models import router as machine_models_router
 from backend.app.routers.stats import router as stats_router
 from backend.app.routers.users import router as users_router
 from backend.app.routers.stations import router as stations_router
 from backend.app.routers.model_stations import router as model_stations_router
 from backend.app.routers.fixture_requirements import router as fixture_requirements_router
+from backend.app.routers.owners import router as owners_router
+from backend.app.routers.serials import router as serials_router
+
 
 
 
@@ -203,21 +207,49 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 # ==================== 註冊路由 ====================
 
 # Just use /api/v2 as the base
-app.include_router(receipts_router, prefix="/api/v2")
-app.include_router(fixtures_router, prefix="/api/v2")
-app.include_router(returns_router, prefix="/api/v2")
-app.include_router(replacement_router, prefix="/api/v2")
-app.include_router(usage_router, prefix="/api/v2")
-app.include_router(models_router, prefix="/api/v2")
-app.include_router(stats_router, prefix="/api/v2")
-app.include_router(users_router, prefix="/api/v2")
+# ============================================================
+# 🔐 認證 / 使用者 / 客戶 相關
+# ============================================================
 app.include_router(auth_router, prefix="/api/v2")
-app.include_router(stations_router, prefix="/api/v2")
+app.include_router(users_router, prefix="/api/v2")
+app.include_router(customers_router, prefix="/api/v2")
 
-app.include_router(model_stations_router, prefix="/api/v2")
 
-app.include_router(fixture_requirements_router, prefix="/api/v2")
+# ============================================================
+# 📚 基礎資料（Master Data）
+# ============================================================
+app.include_router(owners_router, prefix="/api/v2")            # 負責人
+app.include_router(stations_router, prefix="/api/v2")          # 站點
+app.include_router(machine_models_router, prefix="/api/v2")    # 機種
+app.include_router(model_stations_router, prefix="/api/v2")    # 機種站點對應
 
+
+# ============================================================
+# 🧰 治具主資料（Fixture Master）
+# ============================================================
+app.include_router(fixtures_router, prefix="/api/v2")              # 治具清單
+app.include_router(fixture_requirements_router, prefix="/api/v2")  # 治具需求（每站點）
+
+
+# ============================================================
+# 🔢 序號管理（Serial Management）
+# ============================================================
+app.include_router(serials_router, prefix="/api/v2")
+
+
+# ============================================================
+# 🔄 流程類（Process APIs）
+# ============================================================
+app.include_router(receipts_router, prefix="/api/v2")        # 收料
+app.include_router(returns_router, prefix="/api/v2")         # 退料
+app.include_router(usage_router, prefix="/api/v2")           # 使用紀錄
+app.include_router(replacement_router, prefix="/api/v2")     # 更換紀錄
+
+
+# ============================================================
+# 📊 統計（Analytics / Dashboard）
+# ============================================================
+app.include_router(stats_router, prefix="/api/v2")
 
 # ==================== 根路由 ====================
 
@@ -327,7 +359,7 @@ async def root():
     <body>
         <div class="container">
             <h1>🔧 治具管理系統</h1>
-            <p class="subtitle">Fixture Management System v2.0.0</p>
+            <p class="subtitle">Fixture Management System v3.0.0</p>
             
             <div class="status">
                 <div class="status-item">

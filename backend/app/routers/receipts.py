@@ -1,218 +1,283 @@
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
-from typing import Optional, List
-from backend.app.dependencies import get_current_user
+"""
+收料 Receipts API (v3.0)
+依據新版資料庫結構:
+- vendor → customer_id
+- fixture_code → fixture_id
+- 收料後自動寫入 fixture_serials
+- 由 MySQL triggers 更新 fixtures 的數量欄位
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from typing import List, Optional
+from datetime import datetime
+
+from backend.app.dependencies import get_current_user, get_current_username
 from backend.app.database import db
 
-# 重要：導入我們新的序號工具庫
 from backend.app.utils.serial_tools import (
     expand_serial_range,
     normalise_serial_list,
 )
+
+from backend.app.models.receipts import (
+    ReceiptCreate,
+    ReceiptBatchCreate,
+    ReceiptIndividualCreate,
+    ReceiptResponse,
+    ReceiptListResponse,
+    ReturnCreate,
+    ReturnBatchCreate,
+    ReturnIndividualCreate,
+)
+
 
 router = APIRouter(
     prefix="/receipts",
     tags=["收料 Receipts"]
 )
 
+
 # ============================================================
-# Pydantic Schemas
+# 工具：檢查治具是否屬於此客戶
 # ============================================================
 
-class ReceiptBase(BaseModel):
-    type: str                         # batch / individual
-    vendor: Optional[str] = None
-    order_no: Optional[str] = None
-    fixture_code: str
-    serial_start: Optional[str] = None
-    serial_end: Optional[str] = None
-    serials: Optional[str] = None     # comma separated
-    operator: Optional[str] = None
-    note: Optional[str] = None
-
-class ReceiptCreate(ReceiptBase):
-    pass
-
-class ReceiptImportRow(ReceiptBase):
-    pass
+def ensure_fixture_exists(fixture_id: str, customer_id: str):
+    sql = """
+        SELECT id, fixture_name
+        FROM fixtures
+        WHERE id=%s AND customer_id=%s
+    """
+    row = db.execute_query(sql, (fixture_id, customer_id))
+    if not row:
+        raise HTTPException(400, f"治具 {fixture_id} 不存在或不屬於客戶 {customer_id}")
+    return row[0]
 
 
 # ============================================================
 # 列表查詢
 # ============================================================
 
-@router.get("")
+@router.get("", response_model=ReceiptListResponse, summary="查詢收料紀錄")
 def list_receipts(
-    fixture_code: Optional[str] = None,
-    vendor: Optional[str] = None,
+    customer_id: str = Query(...),
+    fixture_id: Optional[str] = None,
     order_no: Optional[str] = None,
     operator: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 100,
+    user=Depends(get_current_user)
 ):
-    sql = "SELECT * FROM receipts WHERE 1=1"
-    params = []
+    where = ["customer_id = %s"]
+    params = [customer_id]
 
-    if fixture_code:
-        sql += " AND fixture_code LIKE %s"
-        params.append(f"%{fixture_code}%")
-
-    if vendor:
-        sql += " AND vendor LIKE %s"
-        params.append(f"%{vendor}%")
+    if fixture_id:
+        where.append("fixture_id LIKE %s")
+        params.append(f"%{fixture_id}%")
 
     if order_no:
-        sql += " AND order_no LIKE %s"
+        where.append("order_no LIKE %s")
         params.append(f"%{order_no}%")
 
     if operator:
-        sql += " AND operator LIKE %s"
+        where.append("operator LIKE %s")
         params.append(f"%{operator}%")
 
-    sql += " ORDER BY created_at DESC"
+    where_sql = " AND ".join(where)
 
-    return db.query_all(sql, params)
+    total_sql = f"SELECT COUNT(*) AS total FROM receipts WHERE {where_sql}"
+    total = db.execute_query(total_sql, tuple(params))[0]["total"]
+
+    sql = f"""
+        SELECT *
+        FROM receipts
+        WHERE {where_sql}
+        ORDER BY created_at DESC
+        LIMIT %s OFFSET %s
+    """
+    params += [limit, skip]
+
+    rows = db.execute_query(sql, tuple(params))
+
+    return ReceiptListResponse(
+        total=total,
+        receipts=[ReceiptResponse(**row) for row in rows]
+    )
 
 
 # ============================================================
-# 新增
+# 新增收料紀錄
 # ============================================================
 
-@router.post("")
-def create_receipt(data: ReceiptCreate, user=Depends(get_current_user)):
+@router.post("", response_model=ReceiptResponse, summary="新增收料紀錄")
+def create_receipt(
+    data: ReceiptCreate,
+    username: str = Depends(get_current_username)
+):
+    # 檢查治具是否屬於此客戶
+    ensure_fixture_exists(data.fixture_id, data.customer_id)
 
-    if data.type not in ("batch", "individual"):
-        raise HTTPException(400, "type 必須為 batch 或 individual")
-
-    # ---------------------
-    # 批量模式 batch
-    # ---------------------
+    # 批量模式 → 展開成 serial_list
     if data.type == "batch":
-        if not data.serial_start or not data.serial_end:
-            raise HTTPException(400, "batch 模式需要 serial_start + serial_end")
+        serials = expand_serial_range(data.serial_start, data.serial_end)
+    else:
+        serial_list = [x.strip() for x in data.serials.split(",")]
+        serials = normalise_serial_list(serial_list)
 
-        try:
-            serial_list = expand_serial_range(data.serial_start, data.serial_end)
-        except Exception as e:
-            raise HTTPException(400, f"展開序號錯誤：{e}")
+    operator = data.operator or username
+    now = datetime.now()
 
-        for s in serial_list:
-            db.execute("""
-                INSERT INTO receipts (type, vendor, order_no, fixture_code,
-                                      serials, operator, note)
-                VALUES (%s,%s,%s,%s,%s,%s,%s)
-            """, ("individual", data.vendor, data.order_no,
-                  data.fixture_code, s, data.operator, data.note))
+    # 寫入 receipts (一筆紀錄)
+    receipt_id = db.insert(
+        """
+        INSERT INTO receipts
+            (customer_id, type, order_no, fixture_id,
+             serial_start, serial_end, serials,
+             operator, note, created_at)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        """,
+        (
+            data.customer_id,
+            data.type.value,
+            data.order_no,
+            data.fixture_id,
+            data.serial_start,
+            data.serial_end,
+            ",".join(serials),
+            operator,
+            data.note,
+            now,
+        )
+    )
 
-        return {"message": f"批量新增 {len(serial_list)} 筆"}
+    # 寫入序號 fixture_serials
+    for sn in serials:
+        db.execute_update(
+            """
+            INSERT INTO fixture_serials
+                (customer_id, fixture_id, serial_no, created_at)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (data.customer_id, data.fixture_id, sn, now),
+        )
 
-    # ---------------------
-    # 個別序號 individual 模式
-    # ---------------------
-    if data.type == "individual":
-        if not data.serials:
-            raise HTTPException(400, "individual 模式需提供 serials（逗號分隔）")
-
-        # 拆分 / trim / 去重 / 排序 / 補零
-        try:
-            serial_list = normalise_serial_list(
-                [x.strip() for x in data.serials.split(",")]
-            )
-        except Exception as e:
-            raise HTTPException(400, f"序號格式錯誤：{e}")
-
-        for s in serial_list:
-            db.execute("""
-                INSERT INTO receipts (type, vendor, order_no, fixture_code,
-                                      serials, operator, note)
-                VALUES (%s,%s,%s,%s,%s,%s,%s)
-            """, ("individual", data.vendor, data.order_no,
-                  data.fixture_code, s, data.operator, data.note))
-
-        return {"message": f"新增 {len(serial_list)} 筆"}
-
-    raise HTTPException(400, "未知錯誤")
+    # 回傳
+    return ReceiptResponse(
+        id=receipt_id,
+        customer_id=data.customer_id,
+        type=data.type.value,
+        order_no=data.order_no,
+        fixture_id=data.fixture_id,
+        serial_start=data.serial_start,
+        serial_end=data.serial_end,
+        serials=",".join(serials),
+        operator=operator,
+        note=data.note,
+        created_at=now,
+    )
 
 
 # ============================================================
-# 批量匯入 /import
+# Excel 批量匯入
 # ============================================================
 
-@router.post("/import")
-def import_receipts(rows: List[ReceiptImportRow], user=Depends(get_current_user)):
-
+@router.post("/import", summary="批量匯入收料")
+def import_receipts(
+    rows: List[ReceiptCreate],
+    username: str = Depends(get_current_username)
+):
     success = 0
-    skipped = []
+    failed = []
 
-    for idx, row in enumerate(rows, start=2):
-
-        # 必填欄位
-        if not row.fixture_code:
-            skipped.append({"row": idx, "error": "fixture_code 必填"})
-            continue
-
+    for i, data in enumerate(rows, start=2):
         try:
-            # -------------------------
-            # 批量模式 batch
-            # -------------------------
-            if row.type == "batch":
-                if not row.serial_start or not row.serial_end:
-                    skipped.append({"row": idx, "error": "batch 模式缺序號起迄"})
-                    continue
+            ensure_fixture_exists(data.fixture_id, data.customer_id)
 
-                serials = expand_serial_range(row.serial_start, row.serial_end)
+            if data.type == "batch":
+                serials = expand_serial_range(data.serial_start, data.serial_end)
+            else:
+                serial_list = [x.strip() for x in data.serials.split(",")]
+                serials = normalise_serial_list(serial_list)
 
-                for s in serials:
-                    db.execute("""
-                        INSERT INTO receipts (type, vendor, order_no, fixture_code,
-                                              serials, operator, note)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s)
-                    """, ("individual", row.vendor, row.order_no,
-                          row.fixture_code, s, row.operator, row.note))
+            now = datetime.now()
+            operator = data.operator or username
 
-                success += len(serials)
-                continue
+            receipt_id = db.insert(
+                """
+                INSERT INTO receipts
+                    (customer_id, type, order_no, fixture_id,
+                     serial_start, serial_end, serials,
+                     operator, note, created_at)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                """,
+                (
+                    data.customer_id,
+                    data.type.value,
+                    data.order_no,
+                    data.fixture_id,
+                    data.serial_start,
+                    data.serial_end,
+                    ",".join(serials),
+                    operator,
+                    data.note,
+                    now,
+                )
+            )
 
-            # -------------------------
-            # 個別序號 individual
-            # -------------------------
-            if row.type == "individual":
-                if not row.serials:
-                    skipped.append({"row": idx, "error": "serials 必填"})
-                    continue
-
-                # 使用 normalise 序號清理
-                cleaned = normalise_serial_list(
-                    [x.strip() for x in row.serials.split(",")]
+            for sn in serials:
+                db.execute_update(
+                    """
+                    INSERT INTO fixture_serials
+                        (customer_id, fixture_id, serial_no, created_at)
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    (data.customer_id, data.fixture_id, sn, now),
                 )
 
-                for s in cleaned:
-                    db.execute("""
-                        INSERT INTO receipts (type, vendor, order_no, fixture_code,
-                                              serials, operator, note)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s)
-                    """, ("individual", row.vendor, row.order_no,
-                          row.fixture_code, s, row.operator, row.note))
-
-                success += len(cleaned)
-                continue
-
-            skipped.append({"row": idx, "error": "type 必須為 batch 或 individual"})
+            success += 1
 
         except Exception as e:
-            skipped.append({"row": idx, "error": str(e)})
+            failed.append({"row": i, "error": str(e)})
 
     return {
-        "message": "收料匯入完成",
-        "success_count": success,
-        "fail_count": len(skipped),
-        "skipped_rows": skipped,
+        "message": "匯入完成",
+        "success": success,
+        "failed": failed,
     }
 
 
 # ============================================================
-# 刪除
+# 刪除收料紀錄
 # ============================================================
 
-@router.delete("/{id}")
-def delete_receipt(id: int, user=Depends(get_current_user)):
-    db.execute("DELETE FROM receipts WHERE id=%s", (id,))
+@router.delete("/{receipt_id}", summary="刪除收料紀錄")
+def delete_receipt(
+    receipt_id: int,
+    user=Depends(get_current_user)
+):
+    # 必須先查序號，再刪除 fixture_serials
+    row = db.execute_query(
+        "SELECT customer_id, fixture_id, serials FROM receipts WHERE id=%s",
+        (receipt_id,)
+    )
+
+    if not row:
+        raise HTTPException(404, "收料記錄不存在")
+
+    customer_id = row[0]["customer_id"]
+    fixture_id = row[0]["fixture_id"]
+    serials = row[0]["serials"].split(",")
+
+    # 刪掉序號
+    for sn in serials:
+        db.execute_update(
+            """
+            DELETE FROM fixture_serials
+            WHERE customer_id=%s AND fixture_id=%s AND serial_no=%s
+            """,
+            (customer_id, fixture_id, sn),
+        )
+
+    # 刪掉 receipts
+    db.execute_update("DELETE FROM receipts WHERE id=%s", (receipt_id,))
+
     return {"message": "刪除成功"}

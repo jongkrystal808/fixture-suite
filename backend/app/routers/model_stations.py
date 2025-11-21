@@ -1,11 +1,18 @@
 """
-機種 ↔ 站點綁定 (model_stations)
-獨立路由: /model-stations
+機種 ↔ 站點綁定 API (v3.0 完整版)
+Model-Stations Binding (Aligned with DB v3.0 Schema)
+
+變更內容：
+- station_id 改 varchar(50)
+- 加入 customer_id
+- 使用 id (AUTO_INCREMENT) 作為主鍵
+- UNIQUE KEY: (customer_id, model_id, station_id)
+- 完整多客戶隔離
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from typing import List
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from typing import List, Optional
+from pydantic import BaseModel
 
 from backend.app.dependencies import get_current_user, get_current_admin
 from backend.app.database import db
@@ -16,167 +23,176 @@ router = APIRouter(
 )
 
 
-# =========================================================
-# Pydantic Schema
-# =========================================================
+# ============================================================
+# Pydantic Models
+# ============================================================
 
 class StationBound(BaseModel):
-    station_id: int
-    station_code: str
-    station_name: str | None = None
-    note: str | None = None
+    station_id: str            # varchar(50)
+    station_name: Optional[str] = None
+    note: Optional[str] = None
 
 
 class BindStationInput(BaseModel):
-    station_id: int = Field(..., description="站點 ID")
+    station_id: str            # varchar(50)
 
 
-# =========================================================
-# 工具：確認機種是否存在
-# =========================================================
+# ============================================================
+# Tools: Check if model & station exist for customer
+# ============================================================
 
-def ensure_model_exist(model_id: str):
+def ensure_model_exist(model_id: str, customer_id: str):
     rows = db.execute_query(
-        "SELECT model_id FROM machine_models WHERE model_id = %s",
-        (model_id,),
+        "SELECT id FROM machine_models WHERE id=%s AND customer_id=%s",
+        (model_id, customer_id),
     )
     if not rows:
-        raise HTTPException(status_code=404, detail="機種不存在")
+        raise HTTPException(status_code=404, detail="此客戶下的機種不存在")
 
 
-def ensure_station_exist(station_id: int):
+def ensure_station_exist(station_id: str, customer_id: str):
     rows = db.execute_query(
-        "SELECT station_id FROM stations WHERE station_id = %s",
-        (station_id,),
+        "SELECT id FROM stations WHERE id=%s AND customer_id=%s",
+        (station_id, customer_id),
     )
     if not rows:
-        raise HTTPException(status_code=404, detail="站點不存在")
+        raise HTTPException(status_code=404, detail="此客戶下的站點不存在")
 
 
-# =========================================================
+# ============================================================
 # 1. 查詢某機種已綁定的站點
-# =========================================================
+# ============================================================
 
-@router.get("/{model_id}", response_model=List[StationBound], summary="查詢機種已綁定的站點")
+@router.get(
+    "",
+    response_model=List[StationBound],
+    summary="查詢機種已綁定的站點"
+)
 async def list_bound_stations(
-    model_id: str,
-    current_user=Depends(get_current_user),
+    model_id: str = Query(...),
+    customer_id: str = Query(...),
+    current_user=Depends(get_current_user)
 ):
-    ensure_model_exist(model_id)
+    ensure_model_exist(model_id, customer_id)
 
     sql = """
         SELECT
-            s.station_id,
-            s.station_code,
+            s.id AS station_id,
             s.station_name,
             s.note
         FROM model_stations ms
-        JOIN stations s ON ms.station_id = s.station_id
-        WHERE ms.model_id = %s
-        ORDER BY s.station_code
+        JOIN stations s
+            ON ms.station_id = s.id AND ms.customer_id = s.customer_id
+        WHERE ms.model_id = %s AND ms.customer_id = %s
+        ORDER BY s.id
     """
-    rows = db.execute_query(sql, (model_id,))
+
+    rows = db.execute_query(sql, (model_id, customer_id))
     return [StationBound(**row) for row in rows]
 
 
-# =========================================================
+# ============================================================
 # 2. 查詢尚未綁定的站點
-# =========================================================
+# ============================================================
 
 @router.get(
-    "/{model_id}/available",
+    "/available",
     response_model=List[StationBound],
-    summary="查詢尚未綁定的站點",
+    summary="查詢尚未綁定的站點"
 )
 async def list_available_stations(
-    model_id: str,
-    current_user=Depends(get_current_user),
+    model_id: str = Query(...),
+    customer_id: str = Query(...),
+    current_user=Depends(get_current_user)
 ):
-    ensure_model_exist(model_id)
+    ensure_model_exist(model_id, customer_id)
 
     sql = """
-        SELECT 
-            s.station_id,
-            s.station_code,
+        SELECT
+            s.id AS station_id,
             s.station_name,
             s.note
         FROM stations s
-        WHERE s.station_id NOT IN (
-            SELECT station_id FROM model_stations WHERE model_id = %s
-        )
-        ORDER BY s.station_code
+        WHERE s.customer_id = %s
+          AND s.id NOT IN (
+              SELECT station_id
+              FROM model_stations
+              WHERE model_id = %s AND customer_id = %s
+          )
+        ORDER BY s.id
     """
 
-    rows = db.execute_query(sql, (model_id,))
+    rows = db.execute_query(sql, (customer_id, model_id, customer_id))
     return [StationBound(**row) for row in rows]
 
 
-# =========================================================
+# ============================================================
 # 3. 新增綁定
-# =========================================================
+# ============================================================
 
 @router.post(
-    "/{model_id}",
+    "",
     response_model=List[StationBound],
     status_code=status.HTTP_201_CREATED,
-    summary="新增機種-站點綁定",
+    summary="新增機種-站點綁定"
 )
 async def bind_station(
-    model_id: str,
-    data: BindStationInput,
-    current_admin=Depends(get_current_admin),
+    model_id: str = Query(...),
+    customer_id: str = Query(...),
+    data: BindStationInput = None,
+    admin=Depends(get_current_admin)
 ):
-    ensure_model_exist(model_id)
-    ensure_station_exist(data.station_id)
+    ensure_model_exist(model_id, customer_id)
+    ensure_station_exist(data.station_id, customer_id)
 
-    # 檢查是否已存在
+    # 檢查是否已綁定
     exists = db.execute_query(
         """
         SELECT id FROM model_stations
-        WHERE model_id = %s AND station_id = %s
+        WHERE customer_id=%s AND model_id=%s AND station_id=%s
         """,
-        (model_id, data.station_id),
+        (customer_id, model_id, data.station_id),
     )
-
     if exists:
         raise HTTPException(status_code=400, detail="此站點已綁定此機種")
 
     # 新增綁定
     db.execute_update(
         """
-        INSERT INTO model_stations (model_id, station_id)
-        VALUES (%s, %s)
+        INSERT INTO model_stations (customer_id, model_id, station_id)
+        VALUES (%s, %s, %s)
         """,
-        (model_id, data.station_id),
+        (customer_id, model_id, data.station_id),
     )
 
-    # 回傳最新綁定列表
-    return await list_bound_stations(model_id)
+    # 回傳更新後綁定列表
+    return await list_bound_stations(model_id=model_id, customer_id=customer_id)
 
 
-# =========================================================
+# ============================================================
 # 4. 刪除綁定
-# =========================================================
+# ============================================================
 
 @router.delete(
-    "/{model_id}/{station_id}",
+    "",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="移除機種-站點綁定",
+    summary="移除機種-站點綁定"
 )
 async def unbind_station(
-    model_id: str,
-    station_id: int,
-    current_admin=Depends(get_current_admin),
+    model_id: str = Query(...),
+    station_id: str = Query(...),
+    customer_id: str = Query(...),
+    admin=Depends(get_current_admin)
 ):
-    ensure_model_exist(model_id)
-    ensure_station_exist(station_id)
+    ensure_model_exist(model_id, customer_id)
+    ensure_station_exist(station_id, customer_id)
 
     affected = db.execute_update(
         """
         DELETE FROM model_stations
-        WHERE model_id = %s AND station_id = %s
+        WHERE customer_id=%s AND model_id=%s AND station_id=%s
         """,
-        (model_id, station_id),
+        (customer_id, model_id, station_id),
     )
 
     if affected == 0:

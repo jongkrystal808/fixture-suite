@@ -8,7 +8,7 @@ Authentication API Routes
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from backend.app.models.user import (
+from backend.app.models.users import (
     UserCreate,
     UserLogin,
     LoginResponse,
@@ -16,14 +16,18 @@ from backend.app.models.user import (
     PasswordChange
 )
 
-from backend.app.dependencies import get_current_user, get_current_username
+from backend.app.dependencies import (
+    get_current_user,
+    get_current_username,
+    get_current_admin,
+)
 from backend.app.database import db
 from backend.app.utils.password import (
     hash_password,      # SHA256
     verify_password     # SHA256 驗證
 )
 from backend.app.auth import (
-    create_access_token
+    create_token_for_user,   # v3.0: 根據 user_row 產 token
 )
 
 
@@ -41,7 +45,7 @@ router = APIRouter(
 async def login(user_data: UserLogin):
 
     query = """
-        SELECT id, username, password_hash, role, created_at
+        SELECT id, username, password_hash, role, is_active, created_at
         FROM users
         WHERE username = %s
     """
@@ -60,6 +64,7 @@ async def login(user_data: UserLogin):
         username = user["username"]
         password_hash_db = user["password_hash"]
         role = user["role"]
+        is_active = user.get("is_active", 1)
         created_at = user["created_at"]
 
         # 驗證密碼（SHA256）
@@ -69,10 +74,15 @@ async def login(user_data: UserLogin):
                 detail="使用者名稱或密碼錯誤"
             )
 
-        # 產生 Token
-        access_token = create_access_token(
-            data={"sub": username, "user_id": user_id, "role": role}
-        )
+        # 檢查帳號是否啟用
+        if not is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="此帳號已停用，請聯絡管理員"
+            )
+
+        # 產生 Token（v3.0：使用 user 資料產生 payload）
+        access_token = create_token_for_user(user)
 
         return LoginResponse(
             access_token=access_token,
@@ -85,6 +95,9 @@ async def login(user_data: UserLogin):
             )
         )
 
+    except HTTPException:
+        # 已明確拋出的錯誤直接往外丟
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -110,6 +123,7 @@ async def register(user_data: UserCreate):
     # 雜湊密碼（SHA256）
     hashed = hash_password(user_data.password)
 
+    # 註冊時先給 role，is_active 預設 1（如果資料庫有 default 也 OK）
     insert_query = """
         INSERT INTO users (username, password_hash, role)
         VALUES (%s, %s, %s)
@@ -179,7 +193,8 @@ async def change_password(
             detail="使用者不存在"
         )
 
-    password_hash_db = result[0][0]
+    # ⚠ 修正：使用 dict key 讀取，而不是 result[0][0]
+    password_hash_db = result[0]["password_hash"]
 
     # 驗證舊密碼
     if not verify_password(password_data.old_password, password_hash_db):
@@ -226,7 +241,7 @@ async def verify_token_endpoint(current_user: dict = Depends(get_current_user)):
 
 
 # ==========================================================
-# 🔹 管理員重設使用者密碼（唯一正確版）
+# 🔹 管理員重設使用者密碼
 # ==========================================================
 
 class ResetPasswordBody(BaseModel):
@@ -237,12 +252,10 @@ class ResetPasswordBody(BaseModel):
 async def admin_reset_password(
     user_id: int,
     body: ResetPasswordBody,
-    current_user: dict = Depends(get_current_user)
+    current_admin: dict = Depends(get_current_admin)
 ):
 
-    # 權限檢查
-    if current_user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="需要管理員權限")
+    # 走 get_current_admin 就已經保證是 admin，用不到再檢查一次 role
 
     # 確認使用者存在
     query_check = "SELECT id FROM users WHERE id = %s"

@@ -1,140 +1,164 @@
 """
-使用者管理 API
-User Management API
+使用者管理 API (v3.0)
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status
 from backend.app.database import db
-from backend.app.dependencies import get_current_user
+from backend.app.dependencies import get_current_admin
 from backend.app.auth import hash_password
-from typing import Dict
+from typing import List
+
+from backend.app.models.user import (
+    UserCreate,
+    UserUpdate,
+    UserResponse,
+    UserListResponse
+)
 
 router = APIRouter(
     prefix="/users",
-    tags=["使用者管理 Users"]
+    tags=["Users 使用者管理"]
 )
 
-# ==========================================================
-# 🔹 取得使用者清單（固定排序）
-# ==========================================================
-@router.get("", summary="取得使用者清單")
-async def list_users(current_user: dict = Depends(get_current_user)):
-    """管理員取得所有使用者清單"""
-    if current_user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="需要管理員權限")
+# ============================================================
+# 取得使用者列表
+# ============================================================
 
-    try:
-        query = """
-            SELECT 
-                id,
-                username,
-                email,
-                role,
-                full_name,
-                is_active,
-                created_at
-            FROM users
-            ORDER BY id ASC
+@router.get("", response_model=UserListResponse, summary="取得使用者清單")
+async def list_users(admin=Depends(get_current_admin)):
+    rows = db.execute_query(
         """
-        rows = db.execute_query(query)
+        SELECT 
+            id,
+            username,
+            email,
+            full_name,
+            role,
+            is_active,
+            created_at
+        FROM users
+        ORDER BY id ASC
+        """
+    )
 
-        return [
-            {
-                "id": row["id"],
-                "username": row["username"],
-                "email": row["email"],            # ✔ email 確保回傳
-                "role": row["role"],
-                "full_name": row["full_name"],
-                "is_active": row["is_active"],
-                "created_at": row["created_at"]
-            }
-            for row in rows
-        ]
+    return UserListResponse(
+        total=len(rows),
+        users=[UserResponse(**row) for row in rows]
+    )
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"查詢使用者失敗: {str(e)}")
+# ============================================================
+# 建立使用者
+# ============================================================
 
-
-# ==========================================================
-# 🔹 新增使用者
-# ==========================================================
-@router.post("", summary="新增使用者")
-async def create_user(user: Dict, current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="需要管理員權限")
-
-    username = user.get("username")
-    password = user.get("password")
-    email = user.get("email", "")
-    role = user.get("role", "user")
-
-    if not username or not password:
-        raise HTTPException(status_code=400, detail="帳號與密碼必填")
-
-    # 檢查是否重複
-    query_check = "SELECT id FROM users WHERE username = %s"
-    exists = db.execute_query(query_check, (username,))
+@router.post("", response_model=UserResponse, summary="新增使用者")
+async def create_user(
+    data: UserCreate,
+    admin=Depends(get_current_admin)
+):
+    # 檢查重複
+    exists = db.execute_query(
+        "SELECT id FROM users WHERE username=%s", (data.username,)
+    )
     if exists:
-        raise HTTPException(status_code=400, detail=f"使用者 {username} 已存在")
+        raise HTTPException(400, f"使用者 {data.username} 已存在")
 
-    # 建立新使用者
-    query_insert = """
-        INSERT INTO users (username, password_hash, email, role)
-        VALUES (%s, %s, %s, %s)
-    """
-    db.execute_update(query_insert, (username, hash_password(password), email, role))
+    # 寫入資料
+    new_id = db.insert(
+        """
+        INSERT INTO users (username, password_hash, full_name, email, role, is_active)
+        VALUES (%s, %s, %s, %s, %s, 1)
+        """,
+        (
+            data.username,
+            hash_password(data.password),
+            None,              # full_name 最後看你是否要支援
+            None,              # email 有填寫你可放 data.email
+            data.role.value,
+        )
+    )
 
-    return {"message": "使用者建立成功", "username": username, "role": role}
+    # 回查
+    row = db.execute_query(
+        """
+        SELECT id, username, email, full_name, role, is_active, created_at
+        FROM users
+        WHERE id=%s
+        """,
+        (new_id,)
+    )[0]
 
+    return UserResponse(**row)
 
-# ==========================================================
-# 🔹 更新使用者資料（email / role）
-# ==========================================================
-@router.put("/{user_id}", summary="更新使用者")
-async def update_user(user_id: int, user: Dict, current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="需要管理員權限")
+# ============================================================
+# 更新使用者
+# ============================================================
 
+@router.put("/{user_id}", response_model=UserResponse, summary="更新使用者")
+async def update_user(
+    user_id: int,
+    data: UserUpdate,
+    admin=Depends(get_current_admin)
+):
+    # 檢查是否存在
+    exists = db.execute_query("SELECT id FROM users WHERE id=%s", (user_id,))
+    if not exists:
+        raise HTTPException(404, "使用者不存在")
+
+    # 更新欄位
     updates = []
     params = []
 
-    if user.get("email") is not None:
-        updates.append("email = %s")
-        params.append(user["email"])
+    if data.username is not None:
+        updates.append("username=%s")
+        params.append(data.username)
 
-    if user.get("role") is not None:
-        updates.append("role = %s")
-        params.append(user["role"])
+    if data.password is not None:
+        updates.append("password_hash=%s")
+        params.append(hash_password(data.password))
+
+    if data.role is not None:
+        updates.append("role=%s")
+        params.append(data.role.value)
 
     if not updates:
-        raise HTTPException(status_code=400, detail="沒有提供要更新的欄位")
+        raise HTTPException(400, "沒有提供更新欄位")
 
     params.append(user_id)
 
-    query = f"UPDATE users SET {', '.join(updates)} WHERE id = %s"
-    db.execute_update(query, tuple(params))
+    sql = f"""
+        UPDATE users
+        SET {', '.join(updates)}
+        WHERE id=%s
+    """
+    db.execute_update(sql, tuple(params))
 
-    return {"message": f"使用者 {user_id} 已更新"}
+    # 回查
+    row = db.execute_query(
+        """
+        SELECT id, username, email, full_name, role, is_active, created_at
+        FROM users WHERE id=%s
+        """,
+        (user_id,)
+    )[0]
 
+    return UserResponse(**row)
 
-# ==========================================================
-# 🔹 刪除使用者
-# ==========================================================
+# ============================================================
+# 刪除使用者
+# ============================================================
+
 @router.delete("/{user_id}", summary="刪除使用者")
 async def delete_user(
     user_id: int,
-    password: str = Query(...),
-    current_user: dict = Depends(get_current_user)
+    admin=Depends(get_current_admin)
 ):
-    if current_user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="需要管理員權限")
+    affected = db.execute_update(
+        "DELETE FROM users WHERE id=%s",
+        (user_id,)
+    )
 
-    # ⚠ 沒有必要用 password 驗證，因為管理員刪除帳號
-    #   但你既然有 Query(password)，就至少檢查是否輸入
-    if not password:
-        raise HTTPException(status_code=400, detail="需提供密碼確認")
+    if affected == 0:
+        raise HTTPException(404, "使用者不存在")
 
-    query = "DELETE FROM users WHERE id = %s"
-    db.execute_update(query, (user_id,))
+    return {"message": "使用者已刪除"}
 
-    return {"message": f"使用者 {user_id} 已刪除"}

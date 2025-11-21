@@ -1,14 +1,19 @@
 """
-站點 CRUD
-stations
+站點管理 API (v3.0 完整版本)
+Stations API (Aligned with DB v3.0 Schema)
+
+變更內容：
+- station_id (int) → id (varchar)
+- station_code → id
+- 新增 customer_id
+- 所有操作均需 customer_id (多客戶隔離)
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import Optional, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
-
-from backend.app.dependencies import get_current_admin
+from backend.app.dependencies import get_current_admin, get_current_user
 from backend.app.database import db
 
 router = APIRouter(
@@ -17,10 +22,15 @@ router = APIRouter(
 )
 
 
+# ============================================================
+# Pydantic Models
+# ============================================================
+
 class StationBase(BaseModel):
-    station_code: str = Field(..., description="站點代碼")
-    station_name: Optional[str] = Field(None, description="站點名稱")
-    note: Optional[str] = Field(None, description="備註")
+    id: str                     # 站點代碼 (主鍵)
+    customer_id: str            # 客戶 ID (v3.0 新增)
+    station_name: Optional[str] = None
+    note: Optional[str] = None
 
 
 class StationCreate(StationBase):
@@ -28,137 +38,157 @@ class StationCreate(StationBase):
 
 
 class StationUpdate(BaseModel):
-    station_code: Optional[str] = Field(None, description="站點代碼")
-    station_name: Optional[str] = Field(None, description="站點名稱")
-    note: Optional[str] = Field(None, description="備註")
+    station_name: Optional[str] = None
+    note: Optional[str] = None
 
 
 class StationResponse(StationBase):
-    station_id: int = Field(..., description="站點 ID")
-
-    class Config:
-        from_attributes = True
+    created_at: Optional[str] = None
 
 
-# =======================
-# 1. 查詢所有站點列表
-# =======================
+# ============================================================
+# 1. 查詢站點列表 (依客戶分隔)
+# ============================================================
+
 @router.get("", response_model=List[StationResponse], summary="查詢站點列表")
 async def list_stations(
-    q: Optional[str] = Query(None, description="搜尋關鍵字（站點代碼、名稱模糊查詢）"),
-    current_user=Depends(get_current_admin),  # 確保管理員才可查詢
+    customer_id: str = Query(..., description="客戶 ID"),
+    q: Optional[str] = Query(None, description="搜尋關鍵字"),
+    current_user=Depends(get_current_user)
 ):
     sql = """
-        SELECT station_id, station_code, station_name, note
+        SELECT *
         FROM stations
+        WHERE customer_id = %s
     """
-    params = []
-    if q:
-        sql += " WHERE station_code LIKE %s OR station_name LIKE %s"
-        search_pattern = f"%{q}%"
-        params = [search_pattern, search_pattern]
+    params = [customer_id]
 
-    sql += " ORDER BY station_code"
+    if q:
+        sql += " AND (id LIKE %s OR station_name LIKE %s)"
+        like = f"%{q}%"
+        params.extend([like, like])
+
+    sql += " ORDER BY id"
 
     rows = db.execute_query(sql, tuple(params))
     return [StationResponse(**row) for row in rows]
 
 
-# =======================
+# ============================================================
 # 2. 查詢單一站點
-# =======================
-@router.get("/{station_id}", response_model=StationResponse, summary="查詢單一站點")
+# ============================================================
+
+@router.get("/{station_id}", response_model=StationResponse, summary="查詢站點詳情")
 async def get_station(
-    station_id: int,
-    current_user=Depends(get_current_admin),
+    station_id: str,
+    customer_id: str = Query(...),
+    current_user=Depends(get_current_user)
 ):
     sql = """
-        SELECT station_id, station_code, station_name, note
+        SELECT *
         FROM stations
-        WHERE station_id = %s
+        WHERE id = %s AND customer_id = %s
     """
-    rows = db.execute_query(sql, (station_id,))
+    rows = db.execute_query(sql, (station_id, customer_id))
+
     if not rows:
         raise HTTPException(status_code=404, detail="站點不存在")
+
     return StationResponse(**rows[0])
 
 
-# =======================
+# ============================================================
 # 3. 新增站點
-# =======================
+# ============================================================
+
 @router.post("", response_model=StationResponse, status_code=status.HTTP_201_CREATED, summary="新增站點")
 async def create_station(
     data: StationCreate,
-    current_admin=Depends(get_current_admin),  # 需要管理員權限
+    admin=Depends(get_current_admin)
 ):
-    # 檢查是否已存在相同的站點代碼
+    # 檢查客戶是否存在
+    exists_customer = db.execute_query("SELECT id FROM customers WHERE id=%s", (data.customer_id,))
+    if not exists_customer:
+        raise HTTPException(400, "客戶不存在")
+
+    # 檢查站點是否已存在（同客戶）
     exists = db.execute_query(
-        "SELECT station_id FROM stations WHERE station_code = %s", (data.station_code,)
+        "SELECT id FROM stations WHERE id=%s AND customer_id=%s",
+        (data.id, data.customer_id)
     )
     if exists:
-        raise HTTPException(status_code=400, detail="站點代碼已存在")
+        raise HTTPException(status_code=400, detail="該客戶下站點代碼已存在")
 
-    # 新增站點
-    insert_sql = """
-        INSERT INTO stations (station_code, station_name, note)
-        VALUES (%s, %s, %s)
+    sql = """
+        INSERT INTO stations (id, customer_id, station_name, note)
+        VALUES (%s, %s, %s, %s)
     """
-    db.execute_update(insert_sql, (data.station_code, data.station_name, data.note))
+    db.execute_update(sql, (data.id, data.customer_id, data.station_name, data.note))
 
-    # 回傳新增的站點
-    return await get_station(station_id=db.execute_query("SELECT LAST_INSERT_ID()")[0][0])
+    return await get_station(data.id, data.customer_id)
 
 
-# =======================
+# ============================================================
 # 4. 更新站點
-# =======================
+# ============================================================
+
 @router.put("/{station_id}", response_model=StationResponse, summary="更新站點")
 async def update_station(
-    station_id: int,
+    station_id: str,
     data: StationUpdate,
-    current_admin=Depends(get_current_admin),  # 需要管理員權限
+    customer_id: str = Query(...),
+    admin=Depends(get_current_admin),
 ):
-    # 確認站點是否存在
+    # 確認存在
     existing = db.execute_query(
-        "SELECT station_id FROM stations WHERE station_id = %s", (station_id,)
+        "SELECT id FROM stations WHERE id = %s AND customer_id = %s",
+        (station_id, customer_id)
     )
     if not existing:
         raise HTTPException(status_code=404, detail="站點不存在")
 
-    # 更新站點
-    fields = []
+    update_fields = []
     params = []
 
-    if data.station_code:
-        fields.append("station_code = %s")
-        params.append(data.station_code)
-    if data.station_name:
-        fields.append("station_name = %s")
+    if data.station_name is not None:
+        update_fields.append("station_name = %s")
         params.append(data.station_name)
-    if data.note:
-        fields.append("note = %s")
+
+    if data.note is not None:
+        update_fields.append("note = %s")
         params.append(data.note)
 
-    sql = f"UPDATE stations SET {', '.join(fields)} WHERE station_id = %s"
-    params.append(station_id)
+    if not update_fields:
+        raise HTTPException(400, "沒有要更新的欄位")
+
+    sql = f"""
+        UPDATE stations
+        SET {', '.join(update_fields)}
+        WHERE id = %s AND customer_id = %s
+    """
+    params.extend([station_id, customer_id])
     db.execute_update(sql, tuple(params))
 
-    # 回傳更新後的站點
-    return await get_station(station_id)
+    return await get_station(station_id, customer_id)
 
 
-# =======================
+# ============================================================
 # 5. 刪除站點
-# =======================
+# ============================================================
+
 @router.delete("/{station_id}", status_code=status.HTTP_204_NO_CONTENT, summary="刪除站點")
 async def delete_station(
-    station_id: int,
-    current_admin=Depends(get_current_admin),  # 需要管理員權限
+    station_id: str,
+    customer_id: str = Query(...),
+    admin=Depends(get_current_admin)
 ):
-    # 刪除站點
-    affected = db.execute_update(
-        "DELETE FROM stations WHERE station_id = %s", (station_id,)
-    )
+    sql = """
+        DELETE FROM stations
+        WHERE id = %s AND customer_id = %s
+    """
+    affected = db.execute_update(sql, (station_id, customer_id))
+
     if affected == 0:
         raise HTTPException(status_code=404, detail="站點不存在")
+
     return None
