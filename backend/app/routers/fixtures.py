@@ -414,10 +414,11 @@ async def fixture_statistics(customer_id: str = Query(...)):
     except Exception as e:
         print("❌ [fixture_statistics] ERROR:\n", traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"查詢統計資料失敗: {repr(e)}")
+
+
 # ============================================================
 # 取得治具完整詳細資料 (DETAIL)
 # ============================================================
-
 @router.get("/{fixture_id}/detail", summary="取得治具完整詳細資料")
 async def get_fixture_detail(
     fixture_id: str,
@@ -463,43 +464,36 @@ async def get_fixture_detail(
         fixture_rows = db.execute_query(fixture_sql, (fixture_id, customer_id))
         if not fixture_rows:
             raise HTTPException(status_code=404, detail="治具不存在")
-
         fixture = fixture_rows[0]
 
         # ---------------------------
-        # 2) 最近收料紀錄
+        # 2) 收料最新紀錄
         # ---------------------------
         last_receipt_sql = """
             SELECT id, transaction_date, order_no, operator, note
             FROM material_transactions
-            WHERE fixture_id = %s
-              AND customer_id = %s
-              AND transaction_type = 'receipt'
+            WHERE fixture_id = %s AND customer_id = %s AND transaction_type = 'receipt'
             ORDER BY transaction_date DESC, id DESC
             LIMIT 1
         """
-
-        last_receipt_rows = db.execute_query(last_receipt_sql, (fixture_id, customer_id))
-        last_receipt = last_receipt_rows[0] if last_receipt_rows else None
+        last_receipt = db.execute_query(last_receipt_sql, (fixture_id, customer_id))
+        last_receipt = last_receipt[0] if last_receipt else None
 
         # ---------------------------
-        # 3) 最近退料紀錄
+        # 3) 退料最新紀錄
         # ---------------------------
         last_return_sql = """
             SELECT id, transaction_date, order_no, operator, note
             FROM material_transactions
-            WHERE fixture_id = %s
-              AND customer_id = %s
-              AND transaction_type = 'return'
+            WHERE fixture_id = %s AND customer_id = %s AND transaction_type = 'return'
             ORDER BY transaction_date DESC, id DESC
             LIMIT 1
         """
-
-        last_return_rows = db.execute_query(last_return_sql, (fixture_id, customer_id))
-        last_return = last_return_rows[0] if last_return_rows else None
+        last_return = db.execute_query(last_return_sql, (fixture_id, customer_id))
+        last_return = last_return[0] if last_return else None
 
         # ---------------------------
-        # 4) 使用紀錄 usage_logs
+        # 4) 使用紀錄 usage_logs（最新100筆）
         # ---------------------------
         usage_sql = """
             SELECT id, used_at, station_id, operator, note
@@ -511,22 +505,35 @@ async def get_fixture_detail(
         usage_logs = db.execute_query(usage_sql, (fixture_id, customer_id))
 
         # ---------------------------
-        # 5) 更換紀錄 replacement_logs
+        # 5) 更換紀錄 replacement_logs（⚠修正欄位）
         # ---------------------------
         replacement_sql = """
-            SELECT id, replaced_at, old_serial, new_serial, operator, note
+            SELECT id, replacement_date, reason, executor, note
             FROM replacement_logs
             WHERE fixture_id = %s AND customer_id = %s
-            ORDER BY replaced_at DESC
+            ORDER BY replacement_date DESC
             LIMIT 100
         """
         replacement_logs = db.execute_query(replacement_sql, (fixture_id, customer_id))
 
         # ---------------------------
-        # 6) 統一回傳格式
+        # 6) 序號明細 fixture_serials
+        # ---------------------------
+        serial_sql = """
+            SELECT id, serial_number, source_type, status, current_station_id,
+                   receipt_date, last_use_date, total_uses
+            FROM fixture_serials
+            WHERE fixture_id = %s AND customer_id = %s
+            ORDER BY serial_number
+        """
+        serials = db.execute_query(serial_sql, (fixture_id, customer_id))
+
+        # ---------------------------
+        # 7) 統一回傳資料
         # ---------------------------
         return {
             "fixture": fixture,
+            "serials": serials,
             "last_receipt": last_receipt,
             "last_return": last_return,
             "usage_logs": usage_logs,

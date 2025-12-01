@@ -175,14 +175,20 @@
             </div>
 
             <div class="field">
-              <label class="label-xs">廠商</label>
-              <input id="receiptSearchVendor" class="input" placeholder="廠商">
+              <label class="label-xs">客戶</label>
+              <input id="receiptSearchVendor" class="input" placeholder="客戶">
             </div>
 
             <div class="field">
               <label class="label-xs">操作人員</label>
               <input id="receiptSearchOperator" class="input" placeholder="員工號">
             </div>
+
+            <div class="field">
+              <label class="label-xs">序號</label>
+              <input id="receiptSearchSerial" class="input" placeholder="序號">
+            </div>
+
 
             <div class="flex items-end">
               <button class="btn btn-primary w-full" onclick="loadReceipts()">查詢</button>
@@ -208,7 +214,7 @@
 
             <div class="grid md:grid-cols-5 gap-3">
               <div class="field">
-                <label class="label-xs">廠商</label>
+                <label class="label-xs">客戶</label>
                 <input id="receiptAddVendor" class="input">
               </div>
 
@@ -264,16 +270,17 @@
           <div class="overflow-auto">
             <table class="min-w-full text-sm">
               <thead class="text-left text-gray-500">
-              <tr>
-                <th class="py-2 pr-4">日期</th>
-                <th class="py-2 pr-4">治具</th>
-                <th class="py-2 pr-4">廠商</th>
-                <th class="py-2 pr-4">單號</th>
-                <th class="py-2 pr-4">序號</th>
-                <th class="py-2 pr-4">操作人員</th>
-                <th class="py-2 pr-4">備註</th>
-              </tr>
-              </thead>
+                <tr>
+                  <th class="py-2 pr-4">日期</th>
+                  <th class="py-2 pr-4">治具</th>
+                  <th class="py-2 pr-4">客戶</th>
+                  <th class="py-2 pr-4">單號</th>
+                  <th class="py-2 pr-4">序號</th>
+                  <th class="py-2 pr-4">操作人員</th>
+                  <th class="py-2 pr-4">備註</th>
+                  <th class="py-2 pr-4">刪除</th> <!-- ★ 新增 -->
+                </tr>
+                </thead>
               <tbody id="receiptTable"></tbody>
             </table>
             <div id="receiptPagination" class="flex mt-4 justify-center"></div>
@@ -303,13 +310,18 @@
             </div>
 
             <div class="field">
-              <label class="label-xs">廠商</label>
-              <input id="returnSearchVendor" class="input" placeholder="廠商">
+              <label class="label-xs">客戶</label>
+              <input id="returnSearchVendor" class="input" placeholder="客戶">
             </div>
 
             <div class="field">
               <label class="label-xs">操作人員</label>
               <input id="returnSearchOperator" class="input" placeholder="員工號">
+            </div>
+
+            <div class="field">
+              <label class="label-xs">序號</label>
+              <input id="returnSearchSerial" class="input" placeholder="序號">
             </div>
 
             <div class="flex items-end">
@@ -334,7 +346,7 @@
 
             <div class="grid md:grid-cols-5 gap-3">
               <div class="field">
-                <label class="label-xs">廠商</label>
+                <label class="label-xs">客戶</label>
                 <input id="returnAddVendor" class="input">
               </div>
 
@@ -390,16 +402,17 @@
           <div class="overflow-auto">
             <table class="min-w-full text-sm">
               <thead class="text-left text-gray-500">
-              <tr>
-                <th class="py-2 pr-4">日期</th>
-                <th class="py-2 pr-4">治具</th>
-                <th class="py-2 pr-4">廠商</th>
-                <th class="py-2 pr-4">單號</th>
-                <th class="py-2 pr-4">序號</th>
-                <th class="py-2 pr-4">操作人員</th>
-                <th class="py-2 pr-4">備註</th>
-              </tr>
-              </thead>
+                <tr>
+                  <th class="py-2 pr-4">日期</th>
+                  <th class="py-2 pr-4">治具</th>
+                  <th class="py-2 pr-4">客戶</th>
+                  <th class="py-2 pr-4">單號</th>
+                  <th class="py-2 pr-4">序號</th>
+                  <th class="py-2 pr-4">操作人員</th>
+                  <th class="py-2 pr-4">備註</th>
+                  <th class="py-2 pr-4">刪除</th> <!-- ★ 新增 -->
+                </tr>
+                </thead>
               <tbody id="returnTable"></tbody>
             </table>
               <div id="returnPagination" class="flex gap-2 mt-3 justify-center"></div>
@@ -1402,48 +1415,51 @@
           </div>
         </div>
       </div>
+</section>
 
 
+        <!-- ================================ -->
+        <!-- 🟦 Fixture Detail Drawer        -->
+        <!-- ================================ -->
+        <div id="fixtureDetailDrawer"
+             class="fixed left-0 top-0 h-full w-96 bg-white shadow-xl transform -translate-x-full transition-all duration-300 z-50">
 
-  <!-- Toast -->
-  <div id="toast" class="fixed bottom-4 left-1/2 -translate-x-1/2 hidden">
-    <div class="bg-gray-900 text-white px-4 py-2 rounded-xl shadow-lg">訊息</div>
-  </div>
+          <div class="flex justify-between items-center p-4 border-b">
+            <h2 class="text-lg font-semibold">治具詳情</h2>
+            <button onclick="closeFixtureDetail()" class="text-gray-500 hover:text-black">
+              ✕
+            </button>
+          </div>
 
-<!-- =========================================== -->
-<!-- 🟦 Fixture Detail Drawer (右側滑出面板)     -->
-<!-- =========================================== -->
-<div id="fixtureDetailDrawer"
-     class="fixed top-0 right-0 w-full md:w-2/3 lg:w-1/2 h-full bg-white shadow-2xl transform translate-x-full transition-transform duration-300 z-50 overflow-y-auto">
+          <div id="fixtureDetailContent" class="p-4 overflow-y-auto h-[calc(100%-60px)]">
+            <!-- JS render content here -->
+          </div>
 
-  <div class="p-5 border-b flex justify-between">
-    <h2 class="text-xl font-semibold">治具詳情</h2>
-    <button onclick="closeFixtureDetail()" class="btn btn-ghost text-lg">✕</button>
-  </div>
+        </div>
 
-  <div id="fixtureDetailContent" class="p-5 space-y-6">
-    <!-- JS 動態渲染 -->
-  </div>
+        <!-- =========================================== -->
+        <!-- 🟩 Model Detail Drawer -->
+        <!-- =========================================== -->
+        <div id="modelDetailDrawer"
+             class="fixed top-0 right-0 w-full md:w-2/3 lg:w-1/2 h-full bg-white shadow-2xl transform translate-x-full transition-transform duration-300 z-50 overflow-y-auto">
+
+          <div class="p-5 border-b flex justify-between">
+            <h2 class="text-xl font-semibold">機種詳情</h2>
+            <button onclick="closeModelDetail()" class="btn btn-ghost text-lg">✕</button>
+          </div>
+
+          <div id="modelDetailContent" class="p-5 space-y-6">
+            <!-- JS會動態放內容 -->
+          </div>
+
+      <!-- Toast -->
+      <div id="toast" class="fixed bottom-4 left-1/2 -translate-x-1/2 hidden">
+        <div class="bg-gray-900 text-white px-4 py-2 rounded-xl shadow-lg">訊息</div>
+      </div>
+
+
 
 </div>
-
-<!-- =========================================== -->
-<!-- 🟩 Model Detail Drawer -->
-<!-- =========================================== -->
-<div id="modelDetailDrawer"
-     class="fixed top-0 right-0 w-full md:w-2/3 lg:w-1/2 h-full bg-white shadow-2xl transform translate-x-full transition-transform duration-300 z-50 overflow-y-auto">
-
-  <div class="p-5 border-b flex justify-between">
-    <h2 class="text-xl font-semibold">機種詳情</h2>
-    <button onclick="closeModelDetail()" class="btn btn-ghost text-lg">✕</button>
-  </div>
-
-  <div id="modelDetailContent" class="p-5 space-y-6">
-    <!-- JS會動態放內容 -->
-  </div>
-
-</div>
-
 
                 <!-- 引入 JavaScript -->
             <!-- ================================ -->

@@ -4,6 +4,15 @@
  * - 完全採用 customer_id（與 receipts 一致）
  * - 修正所有 DOM id，完全對齊 index.html
  */
+function formatSerialsIntoRows(serialsArray, perRow = 5) {
+  if (!Array.isArray(serialsArray)) return serialsArray;
+
+  let rows = [];
+  for (let i = 0; i < serialsArray.length; i += perRow) {
+    rows.push(serialsArray.slice(i, i + perRow).join(", "));
+  }
+  return rows.join("<br>");
+}
 
 /* ============================================================
  * 取得 customer_id
@@ -27,7 +36,9 @@ async function loadReturns() {
 
   const fixture = document.getElementById("returnSearchFixture")?.value.trim() || "";
   const order = document.getElementById("returnSearchOrder")?.value.trim() || "";
+  const vendor = document.getElementById("returnSearchVendor")?.value.trim() || "";
   const operator = document.getElementById("returnSearchOperator")?.value.trim() || "";
+  const serial = document.getElementById("returnSearchSerial")?.value?.trim() || "";
 
   const params = {
     customer_id,
@@ -37,11 +48,12 @@ async function loadReturns() {
 
   if (fixture) params.fixture_id = fixture;
   if (order) params.order_no = order;
+  if (vendor) params.customer_id = vendor;
   if (operator) params.operator = operator;
+  if (serial) params.serial = serial;
 
   try {
     const data = await apiListReturns(params);
-
     renderReturnTable(data.returns || []);
     renderPagination(
       "returnPagination",
@@ -59,6 +71,7 @@ async function loadReturns() {
   }
 }
 
+
 /* ============================================================
  * 渲染退料表格
  * ============================================================ */
@@ -68,31 +81,46 @@ function renderReturnTable(rows) {
 
   if (!rows.length) {
     tbody.innerHTML = `
-      <tr><td colspan="6" class="text-center py-2 text-gray-400">沒有資料</td></tr>
+      <tr><td colspan="8" class="text-center py-2 text-gray-400">沒有資料</td></tr>
     `;
     return;
   }
 
-  rows.forEach(r => {
-    const serialText =
-      r.serial_text ||
-      (r.serials ? r.serials : null) ||
-      (r.serial_start && r.serial_end ? `${r.serial_start}~${r.serial_end}` : "-");
+    rows.forEach(r => {
+        // ★ 統一序號顯示
+        const serialText =
+          r.serial_list ||                                    // v3.6 新欄位
+          r.serial_text ||
+          (r.serials ? r.serials : null) ||
+          (r.serial_start && r.serial_end
+            ? `${r.serial_start}~${r.serial_end}`
+            : "-");
 
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td class="py-2 pr-4">${r.transaction_date || ""}</td>
-      <td class="py-2 pr-4">${r.fixture_id}</td>
-      <td class="py-2 pr-4">${r.order_no || "-"}</td>
-      <td class="py-2 pr-4">${serialText}</td>
-      <td class="py-2 pr-4">${r.operator || "-"}</td>
-      <td class="py-2 pr-4 text-red-600">
-        <button class="btn btn-ghost text-xs" onclick="deleteReturn(${r.id})">刪除</button>
-      </td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td class="py-2 pr-4">${r.transaction_date || ""}</td>
+          <td class="py-2 pr-4">${r.fixture_id}</td>
+          <td class="py-2 pr-4">${r.customer_id || "-"}</td>
+          <td class="py-2 pr-4">${r.order_no || "-"}</td>
+          <td class="py-2 pr-4">
+            <div class="serial-cell">${serialText}</div>
+          </td>
+          <td class="py-2 pr-4">${r.operator || "-"}</td>
+          <td class="py-2 pr-4">${r.note || "-"}</td>
+    
+          <!-- 🔥 刪除獨立欄位 -->
+          <td class="py-2 pr-4 text-red-600">
+            <button class="btn btn-ghost text-xs"
+                    onclick="deleteReturn(${r.id})">
+              刪除
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+
 
 /* ============================================================
  * 新增退料
@@ -105,7 +133,7 @@ async function submitReturn() {
   const order = document.getElementById("returnAddOrder").value.trim();
   const type = document.getElementById("returnAddType").value;
   const note = document.getElementById("returnAddNote").value.trim();
-
+  const vendor = document.getElementById("returnAddVendor").value.trim();
   const serialStart = document.getElementById("returnAddStart").value.trim();
   const serialEnd = document.getElementById("returnAddEnd").value.trim();
   const serials = document.getElementById("returnAddSerials").value.trim();
@@ -113,7 +141,7 @@ async function submitReturn() {
   if (!fixture) return toast("治具編號不得為空");
 
   const payload = {
-    customer_id,
+    customer_id: vendor || customer_id,
     fixture_id: fixture,
     order_no: order || null,
     type,
@@ -236,6 +264,7 @@ function downloadReturnTemplate() {
   const template = [
     {
       fixture_id: "C-00010",
+      customer_id: "moxa",
       order_no: "PO123456",
       type: "batch",
       serial_start: 1,

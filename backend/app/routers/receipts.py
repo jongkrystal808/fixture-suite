@@ -40,42 +40,72 @@ def list_receipts(
     operator: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    serial: Optional[str] = None,     # ★ 新增序號搜尋
     skip: int = 0,
     limit: int = 50,
     user=Depends(get_current_user)
 ):
-    where = ["transaction_type='receipt'", "customer_id=%s"]
+    where = ["t.transaction_type='receipt'", "t.customer_id=%s"]
     params = [customer_id]
 
+    # 動態 where 組裝
     if fixture_id:
-        where.append("fixture_id LIKE %s")
+        where.append("t.fixture_id LIKE %s")
         params.append(f"%{fixture_id}%")
     if order_no:
-        where.append("order_no LIKE %s")
+        where.append("t.order_no LIKE %s")
         params.append(f"%{order_no}%")
     if operator:
-        where.append("operator LIKE %s")
+        where.append("t.operator LIKE %s")
         params.append(f"%{operator}%")
     if date_from:
-        where.append("transaction_date >= %s")
+        where.append("t.transaction_date >= %s")
         params.append(date_from)
     if date_to:
-        where.append("transaction_date <= %s")
+        where.append("t.transaction_date <= %s")
         params.append(date_to)
 
+    # ★ 新增序號搜尋：JOIN details 找 serial_number
+    if serial:
+        where.append("""
+            t.id IN (
+                SELECT transaction_id
+                FROM material_transaction_details
+                WHERE serial_number LIKE %s
+            )
+        """)
+        params.append(f"%{serial}%")
+
+    # 查詢 + JOIN details
     sql = f"""
-        SELECT *
-        FROM material_transactions
+        SELECT 
+            t.*,
+            GROUP_CONCAT(d.serial_number ORDER BY d.serial_number SEPARATOR ',') AS serial_list
+        FROM material_transactions t
+        LEFT JOIN material_transaction_details d
+            ON d.transaction_id = t.id
         WHERE {' AND '.join(where)}
-        ORDER BY created_at DESC
+        GROUP BY t.id
+        ORDER BY t.created_at DESC
         LIMIT %s OFFSET %s
     """
-    params += [limit, skip]
-    rows = db.execute_query(sql, tuple(params))
 
-    # total count
-    count_sql = f"SELECT COUNT(*) AS cnt FROM material_transactions WHERE {' AND '.join(where)}"
-    total = db.execute_query(count_sql, tuple(params[:-2]))[0]["cnt"]
+    params_page = params + [limit, skip]
+    rows = db.execute_query(sql, tuple(params_page))
+
+    # 計算總筆數（必須再次 JOIN + GROUP）
+    count_sql = f"""
+        SELECT COUNT(*) AS cnt
+        FROM (
+            SELECT t.id
+            FROM material_transactions t
+            LEFT JOIN material_transaction_details d ON d.transaction_id=t.id
+            WHERE {' AND '.join(where)}
+            GROUP BY t.id
+        ) AS x
+    """
+
+    total = db.execute_query(count_sql, tuple(params))[0]["cnt"]
 
     return {"total": total, "receipts": rows}
 

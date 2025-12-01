@@ -36,6 +36,7 @@ async function apiListReturns(params = {}) {
   if (params.operator) q.set("operator", params.operator);
   if (params.date_from) q.set("date_from", params.date_from);
   if (params.date_to) q.set("date_to", params.date_to);
+  if (params.serial) q.set("serial", params.serial);
 
   if (params.skip !== undefined) q.set("skip", params.skip);
   if (params.limit !== undefined) q.set("limit", params.limit);

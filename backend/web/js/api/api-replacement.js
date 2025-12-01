@@ -3,7 +3,7 @@
  * api-replacement.js
  *
  * ✔ 新路由 /replacement
- * ✔ replaced_at（取代 replacement_date）
+ * ✔ replacement_date
  * ✔ replace_reason（取代 reason）
  * ✔ operator（取代 executor）
  * ✔ 匯入 / 匯出 / 分頁全部更新
@@ -51,7 +51,7 @@ async function apiListReplacementLogs(params = {}) {
  * @param {object} data
  * {
  *   fixture_id,
- *   replaced_at,
+ *   replacement_date,
  *   replace_reason,
  *   operator,
  *   note
@@ -91,7 +91,7 @@ async function apiDeleteReplacementLog(id) {
 
 /**
  * v3.0 Excel 欄位必須是：
- * fixture_id | replaced_at | replace_reason | operator | note
+ * fixture_id | replacement_date | replace_reason | operator | note
  */
 async function apiImportReplacementLogsXlsx(file) {
   return new Promise((resolve, reject) => {
@@ -106,7 +106,7 @@ async function apiImportReplacementLogsXlsx(file) {
 
         const rows = rawRows.map((r) => ({
           fixture_id: (r.fixture_id || "").trim(),
-          replaced_at: r.replaced_at ? new Date(r.replaced_at).toISOString() : null,
+          replacement_date: r.replacement_date ? new Date(r.replacement_date).toISOString() : null,
           replace_reason: r.replace_reason || null,
           operator: r.operator || null,
           note: r.note || null

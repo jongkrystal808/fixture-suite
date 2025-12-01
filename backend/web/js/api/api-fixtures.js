@@ -145,3 +145,4 @@ window.apiCreateFixture = apiCreateFixture;
 window.apiUpdateFixture = apiUpdateFixture;
 window.apiDeleteFixture = apiDeleteFixture;
 window.apiGetFixturesSimple = apiGetFixturesSimple;
+window.apiGetFixtureDetail = apiGetFixtureDetail;

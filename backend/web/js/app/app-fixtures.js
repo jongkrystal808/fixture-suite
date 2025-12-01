@@ -115,7 +115,12 @@ function renderFixtureTable(rows) {
   rows.forEach(f => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td class="py-2 pr-4">${f.id}</td>
+      <td class="py-2 pr-4">
+        <span class="text-indigo-600 underline cursor-pointer"
+              onclick="openFixtureDetail('${f.id}')">
+          ${f.id}
+        </span>
+      </td>
       <td class="py-2 pr-4">${f.fixture_name || "-"}</td>
       <td class="py-2 pr-4">${f.fixture_type || "-"}</td>
 

@@ -127,6 +127,15 @@ async function apiDeleteFixtureRequirement(reqId) {
     method: "DELETE"
   });
 }
+async function apiGetMachineModelDetail(modelId) {
+  return api(`/models/${modelId}/detail`);
+}
+
+async function apiGetModelDetail(modelId) {
+  const customer_id = localStorage.getItem("current_customer_id");
+  return api(`/model-stations/${modelId}/detail?customer_id=${customer_id}`);
+}
+
 
 /* ============================================================
  * 🔵 導出到全域

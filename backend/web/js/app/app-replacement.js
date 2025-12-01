@@ -90,7 +90,7 @@ function renderReplacementTable(rows) {
   rows.forEach(r => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td class="py-2 pr-4">${r.replaced_at || ""}</td>
+      <td class="py-2 pr-4">${r.replacement_date || ""}</td>
       <td class="py-2 pr-4">${r.fixture_id}</td>
       <td class="py-2 pr-4">${r.replace_reason || "-"}</td>
       <td class="py-2 pr-4">${r.operator || "-"}</td>
@@ -148,7 +148,7 @@ async function submitReplacementLog() {
   const payload = {
     customer_id,
     fixture_id: fixtureId,
-    replaced_at: new Date(replacedAt).toISOString(),
+    replacement_date: new Date(replacedAt).toISOString(),
     replace_reason: reason || null,
     operator: operator || null,
     note: note || null

@@ -9,19 +9,17 @@ Model-Stations Binding (Aligned with DB v3.0 Schema)
 - UNIQUE KEY: (customer_id, model_id, station_id)
 - 完整多客戶隔離
 """
-
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import List, Optional
 from pydantic import BaseModel
-
 from backend.app.dependencies import get_current_user, get_current_admin
 from backend.app.database import db
 
+
 router = APIRouter(
     prefix="/model-stations",
-    tags=["機種-站點綁定 Model-Stations"],
+    tags=["Model Detail"],
 )
-
 
 # ============================================================
 # Pydantic Models
@@ -199,3 +197,132 @@ async def unbind_station(
         raise HTTPException(status_code=404, detail="綁定不存在")
 
     return None
+
+
+
+
+@router.get("/{model_id}/detail")
+async def get_model_detail(
+    model_id: str,
+    customer_id: str = Query(...),
+    current_user=Depends(get_current_user)
+):
+    """
+    🔵 Model Detail API (v3.6)
+    - 機種基本資料
+    - 已綁定站點
+    - 治具需求 (含 available_qty)
+    - 最大開站量（動態計算，不使用 view）
+    """
+
+    print(f"🔥 get_model_detail(): model_id={model_id}, customer_id={customer_id}")
+
+    try:
+        # ---------------------------
+        # 1) 機種基本資料
+        # ---------------------------
+        sql_model = """
+            SELECT id, customer_id, model_name, note, created_at
+            FROM machine_models
+            WHERE id = %s AND customer_id = %s
+            LIMIT 1
+        """
+        model_rows = db.execute_query(sql_model, (model_id, customer_id))
+        if not model_rows:
+            raise HTTPException(404, "找不到該機種")
+
+        model = model_rows[0]
+
+        # ---------------------------
+        # 2) 綁定站點
+        # ---------------------------
+        sql_stations = """
+            SELECT 
+                ms.station_id,
+                s.station_name
+            FROM model_stations ms
+            JOIN stations s ON ms.station_id = s.id
+            WHERE ms.model_id = %s AND ms.customer_id = %s
+            ORDER BY ms.station_id
+        """
+        stations = db.execute_query(sql_stations, (model_id, customer_id))
+
+        # ---------------------------
+        # 3) 治具需求
+        # ---------------------------
+        sql_requirements = """
+            SELECT
+                fr.id,
+                fr.station_id,
+                s.station_name,
+                fr.fixture_id,
+                f.fixture_name,
+                fr.required_qty,
+                f.available_qty,
+                fr.note
+            FROM fixture_requirements fr
+            JOIN stations s ON fr.station_id = s.id
+            JOIN fixtures f ON fr.fixture_id = f.id
+            WHERE fr.model_id = %s AND fr.customer_id = %s
+            ORDER BY fr.station_id, fr.fixture_id
+        """
+        requirements = db.execute_query(sql_requirements, (model_id, customer_id))
+
+        # ---------------------------
+        # 4) 最大開站量 → 依需求計算
+        # ---------------------------
+        max_map = {}   # {station_id: {station_name, max_qty, limiting_fixtures}}
+
+        for r in requirements:
+            station_id = r["station_id"]
+            station_name = r["station_name"]
+            required_qty = r["required_qty"]
+            available_qty = r["available_qty"] or 0
+
+            if required_qty <= 0:
+                continue
+
+            max_open = available_qty // required_qty
+
+            if station_id not in max_map:
+                max_map[station_id] = {
+                    "station_id": station_id,
+                    "station_name": station_name,
+                    "max_available_stations": max_open,
+                    "limiting_fixtures": []
+                }
+            else:
+                # 取最小值
+                max_map[station_id]["max_available_stations"] = min(
+                    max_map[station_id]["max_available_stations"],
+                    max_open
+                )
+
+            # 記錄限制因子
+            max_map[station_id]["limiting_fixtures"].append({
+                "fixture_id": r["fixture_id"],
+                "fixture_name": r["fixture_name"],
+                "available_qty": available_qty,
+                "required_qty": required_qty,
+                "max_stations_by_this_fixture": max_open
+            })
+
+        max_stations = list(max_map.values())
+
+        # ---------------------------
+        # 回傳
+        # ---------------------------
+        return {
+            "model": model,
+            "stations": stations,
+            "requirements": requirements,
+            "max_stations": max_stations,
+        }
+
+    except Exception as e:
+        import traceback
+        print("========== ERROR IN get_model_detail ==========")
+        print(traceback.format_exc())
+        print("==============================================")
+        raise HTTPException(500, f"後端錯誤: {e}")
+

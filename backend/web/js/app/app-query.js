@@ -103,24 +103,26 @@ function renderFixturesTable(rows) {
   });
 }
 
-
-
 /* ============================================================
- * 🟦 Fixture Detail Drawer
+ * 🟦 Fixture Detail Drawer (v3.6)
  * ============================================================ */
 
 function closeFixtureDetail() {
-  document.getElementById("fixtureDetailDrawer")
-    ?.classList.add("translate-x-full");
+  const drawer = document.getElementById("fixtureDetailDrawer");
+  if (drawer) drawer.classList.add("translate-x-full");
 }
 
 async function openFixtureDetail(fixtureId) {
   const drawer = document.getElementById("fixtureDetailDrawer");
   const box = document.getElementById("fixtureDetailContent");
-  if (!drawer || !box) return;
+
+  if (!drawer || !box) {
+    console.error("❌ Drawer DOM not found");
+    return;
+  }
 
   drawer.classList.remove("translate-x-full");
-  box.innerHTML = `<div class="p-4 text-gray-400">載入中...</div>`;
+  box.innerHTML = `<div class="p-4 text-gray-500">載入中...</div>`;
 
   try {
     const data = await apiGetFixtureDetail(fixtureId);
@@ -129,32 +131,36 @@ async function openFixtureDetail(fixtureId) {
     box.innerHTML = `
       <section class="space-y-4">
 
+        <!-- 基本資料 -->
         <div>
           <h3 class="text-lg font-semibold">基本資料</h3>
           <div class="grid grid-cols-2 gap-2 text-sm mt-2">
-            <div><strong>治具編號：</strong>${f.fixture_id}</div>
-            <div><strong>名稱：</strong>${f.fixture_name || "-"}</div>
-            <div><strong>狀態：</strong>${f.status || "-"}</div>
-            <div><strong>負責人：</strong>${f.owner_name || "-"}</div>
-            <div><strong>儲位：</strong>${f.storage_location || "-"}</div>
+            <div><b>治具編號：</b>${f.fixture_id}</div>
+            <div><b>名稱：</b>${f.fixture_name ?? "-"}</div>
+            <div><b>狀態：</b>${f.status ?? "-"}</div>
+            <div><b>負責人：</b>${f.owner_name ?? "-"}</div>
+            <div><b>儲位：</b>${f.storage_location ?? "-"}</div>
           </div>
         </div>
 
+        <!-- 最近交易 -->
         <div>
-          <h3 class="font-semibold text-lg">最近交易</h3>
+          <h3 class="text-lg font-semibold">最近交易</h3>
           <div class="text-sm space-y-1 mt-1">
-            <div><strong>收料：</strong>${formatTrans(data.last_receipt)}</div>
-            <div><strong>退料：</strong>${formatTrans(data.last_return)}</div>
+            <div><b>收料：</b>${formatTrans(data.last_receipt)}</div>
+            <div><b>退料：</b>${formatTrans(data.last_return)}</div>
           </div>
         </div>
 
+        <!-- 使用紀錄 -->
         <div>
-          <h3 class="font-semibold text-lg">使用紀錄</h3>
+          <h3 class="text-lg font-semibold">使用紀錄</h3>
           ${renderUsageLogs(data.usage_logs)}
         </div>
 
+        <!-- 更換紀錄 -->
         <div>
-          <h3 class="font-semibold text-lg">更換紀錄</h3>
+          <h3 class="text-lg font-semibold">更換紀錄</h3>
           ${renderReplacementLogs(data.replacement_logs)}
         </div>
 
@@ -162,14 +168,10 @@ async function openFixtureDetail(fixtureId) {
     `;
   } catch (err) {
     console.error(err);
-    box.innerHTML = `<div class="text-red-500 p-3">讀取資料失敗</div>`;
+    box.innerHTML = `<div class="p-4 text-red-500">讀取資料失敗</div>`;
   }
 }
 
-function formatTrans(t) {
-  if (!t) return "-";
-  return `${t.transaction_date || ""} / ${t.order_no || ""} / ${t.operator || ""}`;
-}
 
 
 
@@ -253,3 +255,174 @@ function switchQueryType() {
   }
 }
 window.switchQueryType = switchQueryType;
+
+// ==============================================================
+// 🟦 Drawer：使用紀錄渲染（供 openFixtureDetail() 呼叫）
+// ==============================================================
+function renderUsageLogs(logs) {
+  if (!logs || !Array.isArray(logs) || logs.length === 0) {
+    return "<p class='text-gray-500'>無使用紀錄</p>";
+  }
+
+  return `
+    <div class="space-y-3">
+      ${logs
+        .map(
+          (log) => `
+        <div class="border rounded-xl p-3 text-sm bg-gray-50">
+          <div><b>日期：</b>${log.used_at ?? "-"}</div>
+          <div><b>站點：</b>${log.station_id ?? "-"}</div>
+          <div><b>操作人員：</b>${log.operator ?? "-"}</div>
+          ${
+            log.note
+              ? `<div><b>備註：</b>${log.note}</div>`
+              : ""
+          }
+        </div>
+      `
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+// 讓其他 JS 也能呼叫（保險）
+window.renderUsageLogs = renderUsageLogs;
+// ==============================================================
+// 🟧 Drawer：更換紀錄渲染（供 openFixtureDetail() 呼叫）
+// ==============================================================
+function renderReplacementLogs(logs) {
+  if (!logs || !Array.isArray(logs) || logs.length === 0) {
+    return "<p class='text-gray-500'>無更換紀錄</p>";
+  }
+
+  return `
+    <div class="space-y-3">
+      ${logs
+        .map(
+          (log) => `
+        <div class="border rounded-xl p-3 text-sm bg-gray-50">
+          <div><b>日期：</b>${log.replacement_date ?? "-"}</div>
+          <div><b>原因：</b>${log.reason ?? "-"}</div>
+          <div><b>執行人員：</b>${log.executor ?? "-"}</div>
+          ${
+            log.note
+              ? `<div><b>備註：</b>${log.note}</div>`
+              : ""
+          }
+        </div>
+      `
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+/* ============================================================
+ * 🟦 通用格式化
+ * ============================================================ */
+function formatTrans(t) {
+  if (!t) return "-";
+  return `${t.transaction_date ?? ""} / ${t.order_no ?? ""} / ${t.operator ?? ""}`;
+}
+window.formatTrans = formatTrans;
+
+window.renderReplacementLogs = renderReplacementLogs;
+window.openFixtureDetail = openFixtureDetail;
+/* ============================================================
+ * 🟩 Model Detail Drawer (機種查詢 詳情)
+ * ============================================================ */
+
+function closeModelDetail() {
+  const drawer = document.getElementById("modelDetailDrawer");
+  if (drawer) drawer.classList.add("translate-x-full");
+}
+
+
+async function openModelDetail(modelId) {
+  const drawer = document.getElementById("modelDetailDrawer");
+  const box = document.getElementById("modelDetailContent");
+  if (!drawer || !box) return;
+
+  drawer.classList.remove("translate-x-full");
+  box.innerHTML = `<div class="p-4 text-gray-500">載入中...</div>`;
+
+  try {
+    const data = await apiGetModelDetail(modelId);
+    const m = data.model;
+    const stations = data.stations || [];
+    const fixtures = data.fixtures || [];
+    const capacity = data.capacity || [];   // ★ 後端計算後回傳
+
+    box.innerHTML = `
+      <section class="space-y-6">
+
+        <!-- 基本資料 -->
+        <div>
+          <h3 class="text-lg font-semibold">基本資料</h3>
+          <div class="grid grid-cols-2 gap-2 text-sm mt-2">
+            <div><b>機種代碼：</b>${m.id}</div>
+            <div><b>名稱：</b>${m.model_name ?? "-"}</div>
+            <div><b>客戶：</b>${m.customer_id ?? "-"}</div>
+            <div class="col-span-2"><b>備註：</b>${m.note ?? "-"}</div>
+          </div>
+        </div>
+
+        <!-- 綁定站點 -->
+        <div>
+          <h3 class="text-lg font-semibold">綁定站點</h3>
+          ${
+            stations.length
+              ? `<ul class="list-disc pl-6 text-sm">
+                   ${stations.map(s => `<li>${s.station_id} - ${s.station_name}</li>`).join("")}
+                 </ul>`
+              : `<p class="text-gray-500 text-sm">無綁定站點</p>`
+          }
+        </div>
+
+        <!-- 治具需求 -->
+        <div>
+          <h3 class="text-lg font-semibold">每站治具需求</h3>
+          ${
+            fixtures.length
+              ? fixtures.map(f => `
+                <div class="border rounded-xl p-3 bg-gray-50 text-sm space-y-1">
+                  <div><b>站點：</b>${f.station_id}</div>
+                  <div><b>治具：</b>${f.fixture_id} - ${f.fixture_name}</div>
+                  <div><b>需求數量：</b>${f.required_qty}</div>
+                </div>
+              `).join("")
+              : `<p class="text-gray-500 text-sm">無治具需求</p>`
+          }
+        </div>
+
+        <!-- 最大開站量 -->
+        <div>
+          <h3 class="text-lg font-semibold">最大可開站數</h3>
+          ${
+            capacity.length
+              ? capacity.map(c => `
+                <div class="border rounded-xl p-3 bg-green-50 text-sm space-y-1">
+                  <div><b>站點：</b>${c.station_id}</div>
+                  <div><b>最大可開：</b>${c.max_station} 站</div>
+                  <div class="text-xs text-gray-600">
+                    (瓶頸治具：${c.bottleneck_fixture_id}，可提供 ${c.bottleneck_qty})
+                  </div>
+                </div>
+              `).join("")
+              : `<p class="text-gray-500 text-sm">未計算或無資料</p>`
+          }
+        </div>
+
+      </section>
+    `;
+  } catch (err) {
+    console.error("openModelDetail() failed:", err);
+    box.innerHTML = `<div class="text-red-500 p-4">讀取失敗</div>`;
+  }
+}
+
+
+window.openModelDetail = openModelDetail;
+window.closeModelDetail = closeModelDetail;
+

@@ -193,3 +193,50 @@ button {
 .min-w-200 {
   min-width: 200px;
 }
+.serial-cell {
+  max-height: 40px;       /* 限制高度，避免過長破版 */
+  overflow-y: auto;       /* 超過就捲動 */
+  white-space: normal;    /* ★ 自動換行 */
+  line-height: 1.3;
+  padding-right: 4px;
+}
+
+/* 滑鼠移過時展開整個高度 */
+.serial-cell:hover {
+  max-height: none;
+  background: #f9fafb;
+  padding: 4px;
+  border-radius: 6px;
+  position: relative;
+  z-index: 10;
+  box-shadow: 0 0 4px rgba(0,0,0,0.1);
+}
+
+/* 🔵 讓 modal 背景全螢幕遮罩 */
+#fixtureDetailModal {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0,0,0,0.4);
+    z-index: 9999 !important;
+    display: none; /* 透過 JS 控制成 flex */
+    justify-content: center;
+    align-items: flex-start; /* 或 center，看你喜歡 */
+    padding-top: 40px; /* 讓 modal 下移一些 */
+}
+
+/* 🔵 Modal 內容本體（白色盒子） */
+#fixtureDetailModal .modal {
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    width: 600px;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 5px 25px rgba(0,0,0,0.2);
+    z-index: 10000;
+}
+
+
