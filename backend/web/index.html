@@ -446,7 +446,6 @@
             <span class="query-label">治具搜尋：</span>
             <input id="fixtureSearch" class="query-input" placeholder="輸入治具編號 / 名稱" oninput="debounceLoadFixtures()">
           </div>
-
           <div>
             <span class="query-label">狀態：</span>
             <select id="fixtureStatus" class="query-input" onchange="loadFixturesQuery()">
@@ -479,6 +478,7 @@
               </thead>
               <tbody id="fixtureTable" class="divide-y divide-gray-100 text-gray-800"></tbody>
             </table>
+              <div id="fixtureQueryPagination" class="flex gap-2 mt-3 justify-center"></div>
           </div>
         </div>
 
@@ -504,6 +504,8 @@
               </thead>
               <tbody id="modelTable" class="divide-y divide-gray-100 text-gray-800"></tbody>
             </table>
+              <div id="modelQueryPagination" class="flex gap-2 mt-3 justify-center"></div>
+              </div>
           </div>
 
           <!-- ============================= -->
@@ -1422,7 +1424,7 @@
         <!-- 🟦 Fixture Detail Drawer        -->
         <!-- ================================ -->
         <div id="fixtureDetailDrawer"
-             class="fixed left-0 top-0 h-full w-96 bg-white shadow-xl transform -translate-x-full transition-all duration-300 z-50">
+                  class="fixed top-0 right-0 w-full md:w-2/3 lg:w-1/2 h-full bg-white shadow-2xl transform translate-x-full transition-transform duration-300 z-50 overflow-y-auto">
 
           <div class="flex justify-between items-center p-4 border-b">
             <h2 class="text-lg font-semibold">治具詳情</h2>

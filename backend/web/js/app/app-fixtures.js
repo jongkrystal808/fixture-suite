@@ -69,35 +69,30 @@ async function loadOwnerDropdown() {
 /* ============================================================
  * 載入列表
  * ============================================================ */
-
 async function loadFixtureList() {
   const customer_id = getCurrentCustomerId();
   if (!customer_id) return;
 
   const search = fxSearchInput.value.trim();
-  const status = fxStatusFilter.value;
-  const owner_id = fxOwnerFilter.value;
-  const pageSize = Number(fxPageSizeSelect.value);
+  const owner = fxOwnerSelect.value;
+  const status = fxStatusSelect.value;
 
   const params = {
     customer_id,
-    skip: (fxPage - 1) * pageSize,
-    limit: pageSize
+    skip: (fxPage - 1) * fxPageSize,
+    limit: fxPageSize
   };
 
   if (search) params.search = search;
-  if (status) params.status = status;
-  if (owner_id) params.owner_id = owner_id;
+  if (owner) params.owner_id = owner;
+  if (status) params.status_filter = status;
 
-  try {
-    const result = await apiListFixtures(params);  // {fixtures, total}
-    renderFixtureTable(result.fixtures || []);
-    renderFixturePagination(result.total || 0);
-  } catch (err) {
-    console.error("loadFixtureList error", err);
-    toast("讀取治具失敗", "error");
-  }
+  const data = await apiListFixtures(params);
+
+  renderFixtureTable(data.fixtures);
+  renderFixturePagination(data.total);
 }
+
 
 /* ============================================================
  * 渲染表格
@@ -314,3 +309,63 @@ fxPageSizeSelect?.addEventListener("change", () => {
   fxPage = 1;
   loadFixtureList();
 });
+
+function renderPagination(targetId, total, page, pageSize, onClick) {
+  const el = document.getElementById(targetId);
+  if (!el) return;
+
+  el.innerHTML = "";
+  if (total <= pageSize) return;
+
+  const totalPages = Math.ceil(total / pageSize);
+  const maxButtons = 11;  // 顯示最多 11 個按鈕（含 ...）
+
+  function addBtn(label, p, active = false, disabled = false) {
+    const btn = document.createElement("button");
+    btn.innerText = label;
+
+    btn.className =
+      "btn btn-xs mx-1 " +
+      (active ? "btn-primary" : "btn-ghost");
+
+    if (disabled) btn.disabled = true;
+
+    btn.onclick = () => !disabled && onClick(p);
+    el.appendChild(btn);
+  }
+
+  // 上一頁
+  addBtn("‹", page - 1, false, page === 1);
+
+  // 顯示範圍
+  let start = Math.max(1, page - 4);
+  let end = Math.min(totalPages, page + 4);
+
+  if (page <= 5) {
+    end = Math.min(10, totalPages);
+  }
+
+  if (page >= totalPages - 4) {
+    start = Math.max(1, totalPages - 9);
+  }
+
+  // 第一頁
+  if (start > 1) {
+    addBtn("1", 1);
+    if (start > 2) addBtn("...", null, false, true);
+  }
+
+  // 中間頁
+  for (let p = start; p <= end; p++) {
+    addBtn(p, p, p === page);
+  }
+
+  // 最後一頁
+  if (end < totalPages) {
+    if (end < totalPages - 1) addBtn("...", null, false, true);
+    addBtn(totalPages, totalPages);
+  }
+
+  // 下一頁
+  addBtn("›", page + 1, false, page === totalPages);
+}

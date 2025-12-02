@@ -71,6 +71,66 @@ async function loadReceipts() {
     toast("收料資料載入失敗", "error");
   }
 }
+function renderPagination(targetId, total, page, pageSize, onClick) {
+  const el = document.getElementById(targetId);
+  if (!el) return;
+
+  el.innerHTML = "";
+  if (total <= pageSize) return;
+
+  const totalPages = Math.ceil(total / pageSize);
+  const maxButtons = 11;  // 顯示最多 11 個按鈕（含 ...）
+
+  function addBtn(label, p, active = false, disabled = false) {
+    const btn = document.createElement("button");
+    btn.innerText = label;
+
+    btn.className =
+      "btn btn-xs mx-1 " +
+      (active ? "btn-primary" : "btn-ghost");
+
+    if (disabled) btn.disabled = true;
+
+    btn.onclick = () => !disabled && onClick(p);
+    el.appendChild(btn);
+  }
+
+  // 上一頁
+  addBtn("‹", page - 1, false, page === 1);
+
+  // 顯示範圍
+  let start = Math.max(1, page - 4);
+  let end = Math.min(totalPages, page + 4);
+
+  if (page <= 5) {
+    end = Math.min(10, totalPages);
+  }
+
+  if (page >= totalPages - 4) {
+    start = Math.max(1, totalPages - 9);
+  }
+
+  // 第一頁
+  if (start > 1) {
+    addBtn("1", 1);
+    if (start > 2) addBtn("...", null, false, true);
+  }
+
+  // 中間頁
+  for (let p = start; p <= end; p++) {
+    addBtn(p, p, p === page);
+  }
+
+  // 最後一頁
+  if (end < totalPages) {
+    if (end < totalPages - 1) addBtn("...", null, false, true);
+    addBtn(totalPages, totalPages);
+  }
+
+  // 下一頁
+  addBtn("›", page + 1, false, page === totalPages);
+}
+
 
 /* ============================================================
  * 渲染收料表格（8 欄版）
@@ -101,9 +161,7 @@ function renderReceiptTable(rows) {
       </td>
       <td class="py-2 pr-4">${r.operator || "-"}</td>
       <td class="py-2 pr-4">${r.note || "-"}</td>
-      <td class="py-2 pr-4 text-red-600">
         <button class="btn btn-ghost text-xs" onclick="deleteReceipt(${r.id})">刪除</button>
-      </td>
     `;
     tbody.appendChild(tr);
   });

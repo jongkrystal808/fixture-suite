@@ -21,6 +21,9 @@ function getCustomerId() {
     return null;
   }
 }
+function _getCurrentCustomerId() {
+  return window.currentCustomerId || localStorage.getItem("current_customer_id");
+}
 
 // ================================
 // 治具 CRUD API
@@ -29,25 +32,21 @@ function getCustomerId() {
 /**
  * 查詢治具列表（支援分頁 / 搜尋 / 篩選）
  */
-async function apiListFixtures(options = {}) {
-  const {
-    page = 1,
-    pageSize = 8,
-    statusFilter = "",
-    ownerId = "",
-    search = ""
-  } = options;
+async function apiListFixtures(params = {}) {
+  const q = new URLSearchParams();
 
-  const params = new URLSearchParams();
-  params.set("skip", String((page - 1) * pageSize));
-  params.set("limit", String(pageSize));
+  // ⭐ 一定要帶 customer_id，否則後端會 422 / 或查不到資料
+  const customer_id = params.customer_id || _getCurrentCustomerId();
+  if (customer_id) q.set("customer_id", customer_id);
 
-  if (statusFilter) params.set("status_filter", statusFilter);
-  if (ownerId) params.set("owner_id", String(ownerId));
-  if (search) params.set("search", search);
+  if (params.search) q.set("search", params.search);
+  if (params.status) q.set("status_filter", params.status);
+  if (params.owner_id) q.set("owner_id", params.owner_id);
 
-  // ⚠ 後端會依 token 中的 customer_id 過濾，不需額外傳 customer_id
-  return api("/fixtures?" + params.toString());
+  if (params.skip !== undefined) q.set("skip", String(params.skip));
+  if (params.limit !== undefined) q.set("limit", String(params.limit));
+
+  return api(`/fixtures?${q.toString()}`);
 }
 
 /**
@@ -74,8 +73,9 @@ async function apiListFixturesStatus(options = {}) {
 /**
  * 查詢單一治具
  */
-async function apiGetFixture(fixtureId) {
-  return api(`/fixtures/${encodeURIComponent(fixtureId)}`);
+async function apiGetFixture(id) {
+  const customer_id = _getCurrentCustomerId();
+  return api(`/fixtures/${encodeURIComponent(id)}?customer_id=${customer_id}`);
 }
 
 /**
@@ -131,8 +131,9 @@ async function apiGetFixturesSimple(statusFilter = "") {
   return api("/fixtures/simple/list" + query);
 }
 
-async function apiGetFixtureDetail(fixtureId) {
-  return api(`/fixtures/${encodeURIComponent(fixtureId)}/detail`);
+async function apiGetFixtureDetail(id) {
+  const customer_id = _getCurrentCustomerId();
+  return api(`/fixtures/${encodeURIComponent(id)}/detail?customer_id=${customer_id}`);
 }
 
 window.apiGetFixtureDetail = apiGetFixtureDetail;

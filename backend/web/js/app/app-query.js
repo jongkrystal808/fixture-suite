@@ -1,22 +1,79 @@
 /* ============================================================
- * app-query.js  (v3.5)
+ * app-query.js  (v3.6)
  *
  * ✔ 完全對應 index.html 的查詢頁
- * ✔ 治具查詢 fixtureQueryArea
- * ✔ 機種查詢 modelQueryArea
- * ✔ Drawer 詳細資訊
- * ✔ 無舊版 UI / qtab / stationList / fixturePagination 等不存在 DOM
+ * ✔ 治具查詢 fixtureQueryArea（含分頁）
+ * ✔ 機種查詢 modelQueryArea（含分頁）
+ * ✔ Fixture Detail Drawer / Model Detail Drawer
  * ✔ 使用 current_customer_id
  * ============================================================ */
 
 
 /* ============================================================
- * 工具：簡易分頁（目前 UI 沒有分頁欄位，所以不顯示）
+ * 工具：通用分頁元件
  * ============================================================ */
-function renderPagination() {
-  /* 保留空函式避免錯誤（index.html 無對應 DOM，因此不做任何事） */
-}
+function renderPagination(targetId, total, page, pageSize, onClick) {
+  const el = document.getElementById(targetId);
+  if (!el) return;
 
+  el.innerHTML = "";
+  if (!total || total <= pageSize) return;
+
+  const totalPages = Math.ceil(total / pageSize);
+  const maxButtons = 11;  // 顯示最多 11 個按鈕（含 ...）
+
+  function addBtn(label, p, active = false, disabled = false) {
+    const btn = document.createElement("button");
+    btn.innerText = label;
+    btn.className =
+      "btn btn-xs mx-1 " +
+      (active ? "btn-primary" : "btn-ghost");
+
+    if (disabled || p == null) {
+      btn.disabled = true;
+      el.appendChild(btn);
+      return;
+    }
+
+    btn.onclick = () => onClick(p);
+    el.appendChild(btn);
+  }
+
+  // 上一頁
+  addBtn("‹", page - 1, false, page === 1);
+
+  // 顯示範圍
+  let start = Math.max(1, page - 4);
+  let end = Math.min(totalPages, page + 4);
+
+  if (page <= 5) {
+    end = Math.min(10, totalPages);
+  }
+
+  if (page >= totalPages - 4) {
+    start = Math.max(1, totalPages - 9);
+  }
+
+  // 第一頁
+  if (start > 1) {
+    addBtn("1", 1);
+    if (start > 2) addBtn("...", null, false, true);
+  }
+
+  // 中間頁
+  for (let p = start; p <= end; p++) {
+    addBtn(String(p), p, p === page);
+  }
+
+  // 最後一頁
+  if (end < totalPages) {
+    if (end < totalPages - 1) addBtn("...", null, false, true);
+    addBtn(String(totalPages), totalPages);
+  }
+
+  // 下一頁
+  addBtn("›", page + 1, false, page === totalPages);
+}
 
 
 /* ============================================================
@@ -55,8 +112,20 @@ async function loadFixturesQuery() {
   if (status && status !== "全部") params.status = status;
 
   try {
-    const data = await apiListFixtures(params);   // 回傳格式：{fixtures, total}
+    // 預期回傳：{ fixtures: [...], total: 123 }
+    const data = await apiListFixtures(params);
     renderFixturesTable(data.fixtures || []);
+
+    renderPagination(
+      "fixtureQueryPagination",           // ⚠️ index.html 需要有這個 <div>
+      data.total || 0,
+      fixtureQueryPage,
+      fixtureQueryPageSize,
+      (p) => {
+        fixtureQueryPage = p;
+        loadFixturesQuery();
+      }
+    );
   } catch (err) {
     console.error("loadFixturesQuery() failed:", err);
   }
@@ -76,10 +145,10 @@ function renderFixturesTable(rows) {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td class="py-2 px-4">
-          <span class="text-indigo-600 underline cursor-pointer"
-                onclick="openFixtureDetail('${f.fixture_id}')">
-            ${f.fixture_id}
-          </span>
+        <span class="text-indigo-600 underline cursor-pointer"
+              onclick="openFixtureDetail('${f.fixture_id}')">
+          ${f.fixture_id}
+        </span>
       </td>
 
       <td class="py-2 px-4">${f.fixture_name || "-"}</td>
@@ -103,8 +172,13 @@ function renderFixturesTable(rows) {
   });
 }
 
+/* 讓查詢按鈕 / onload 找得到 */
+window.loadFixturesQuery = loadFixturesQuery;
+window.debounceLoadFixtures = debounceLoadFixtures;
+
+
 /* ============================================================
- * 🟦 Fixture Detail Drawer (v3.6)
+ * 🟦 Fixture Detail Drawer
  * ============================================================ */
 
 function closeFixtureDetail() {
@@ -172,7 +246,8 @@ async function openFixtureDetail(fixtureId) {
   }
 }
 
-
+window.openFixtureDetail = openFixtureDetail;
+window.closeFixtureDetail = closeFixtureDetail;
 
 
 /* ============================================================
@@ -180,30 +255,43 @@ async function openFixtureDetail(fixtureId) {
  * ============================================================ */
 
 let modelQueryPage = 1;
-const modelQueryPageSize = 20;
+const modelQueryPageSize = 50;
 
 async function loadModelsQuery() {
-  const customer_id = localStorage.getItem("current_customer_id");  // ← 修正
+  const customer_id = localStorage.getItem("current_customer_id");
   if (!customer_id) return;
 
   const keyword = document.getElementById("modelSearch")?.value.trim() || "";
 
-  try {
-    const list = await apiListMachineModels({
-      customer_id,
-      search: keyword,
-      skip: 0,
-      limit: 200
-    });
+  const params = {
+    customer_id,
+    search: keyword,
+    skip: (modelQueryPage - 1) * modelQueryPageSize,
+    limit: modelQueryPageSize
+  };
 
-    renderModelsQueryTable(list || []);
+  try {
+    // 建議後端回傳 {items,total} 或 {models,total}
+    const data = await apiListMachineModels(params);
+    const list = data.items || data.models || data || [];
+
+    renderModelsQueryTable(list);
+    renderPagination(
+      "modelQueryPagination",          // ⚠️ index.html 要有這個 <div>
+      data.total || list.length || 0,
+      modelQueryPage,
+      modelQueryPageSize,
+      (p) => {
+        modelQueryPage = p;
+        loadModelsQuery();
+      }
+    );
   } catch (err) {
     console.error("loadModelsQuery() failed:", err);
     renderModelsQueryTable([]);
   }
 }
 window.loadModelsQuery = loadModelsQuery;
-
 
 function renderModelsQueryTable(list) {
   const tbody = document.getElementById("modelTable");
@@ -233,7 +321,6 @@ function renderModelsQueryTable(list) {
 }
 
 
-
 /* ============================================================
  * queryType 切換（只支援新版）
  * ============================================================ */
@@ -247,18 +334,21 @@ function switchQueryType() {
   if (type === "fixture") {
     fixtureArea.classList.remove("hidden");
     modelArea.classList.add("hidden");
+    fixtureQueryPage = 1;
     loadFixturesQuery();
   } else {
     modelArea.classList.remove("hidden");
     fixtureArea.classList.add("hidden");
+    modelQueryPage = 1;
     loadModelsQuery();
   }
 }
 window.switchQueryType = switchQueryType;
 
-// ==============================================================
-// 🟦 Drawer：使用紀錄渲染（供 openFixtureDetail() 呼叫）
-// ==============================================================
+
+/* ============================================================
+ * Drawer：使用紀錄 / 更換紀錄
+ * ============================================================ */
 function renderUsageLogs(logs) {
   if (!logs || !Array.isArray(logs) || logs.length === 0) {
     return "<p class='text-gray-500'>無使用紀錄</p>";
@@ -273,11 +363,7 @@ function renderUsageLogs(logs) {
           <div><b>日期：</b>${log.used_at ?? "-"}</div>
           <div><b>站點：</b>${log.station_id ?? "-"}</div>
           <div><b>操作人員：</b>${log.operator ?? "-"}</div>
-          ${
-            log.note
-              ? `<div><b>備註：</b>${log.note}</div>`
-              : ""
-          }
+          ${log.note ? `<div><b>備註：</b>${log.note}</div>` : ""}
         </div>
       `
         )
@@ -285,12 +371,8 @@ function renderUsageLogs(logs) {
     </div>
   `;
 }
-
-// 讓其他 JS 也能呼叫（保險）
 window.renderUsageLogs = renderUsageLogs;
-// ==============================================================
-// 🟧 Drawer：更換紀錄渲染（供 openFixtureDetail() 呼叫）
-// ==============================================================
+
 function renderReplacementLogs(logs) {
   if (!logs || !Array.isArray(logs) || logs.length === 0) {
     return "<p class='text-gray-500'>無更換紀錄</p>";
@@ -305,11 +387,7 @@ function renderReplacementLogs(logs) {
           <div><b>日期：</b>${log.replacement_date ?? "-"}</div>
           <div><b>原因：</b>${log.reason ?? "-"}</div>
           <div><b>執行人員：</b>${log.executor ?? "-"}</div>
-          ${
-            log.note
-              ? `<div><b>備註：</b>${log.note}</div>`
-              : ""
-          }
+          ${log.note ? `<div><b>備註：</b>${log.note}</div>` : ""}
         </div>
       `
         )
@@ -317,9 +395,11 @@ function renderReplacementLogs(logs) {
     </div>
   `;
 }
+window.renderReplacementLogs = renderReplacementLogs;
+
 
 /* ============================================================
- * 🟦 通用格式化
+ * 通用格式化
  * ============================================================ */
 function formatTrans(t) {
   if (!t) return "-";
@@ -327,17 +407,16 @@ function formatTrans(t) {
 }
 window.formatTrans = formatTrans;
 
-window.renderReplacementLogs = renderReplacementLogs;
-window.openFixtureDetail = openFixtureDetail;
+
 /* ============================================================
- * 🟩 Model Detail Drawer (機種查詢 詳情)
+ * 🟩 Model Detail Drawer (若你還放在這支檔案)
  * ============================================================ */
 
 function closeModelDetail() {
   const drawer = document.getElementById("modelDetailDrawer");
   if (drawer) drawer.classList.add("translate-x-full");
 }
-
+window.closeModelDetail = closeModelDetail;
 
 async function openModelDetail(modelId) {
   const drawer = document.getElementById("modelDetailDrawer");
@@ -352,12 +431,11 @@ async function openModelDetail(modelId) {
     const m = data.model;
     const stations = data.stations || [];
     const fixtures = data.fixtures || [];
-    const capacity = data.capacity || [];   // ★ 後端計算後回傳
+    const capacity = data.capacity || [];
 
     box.innerHTML = `
       <section class="space-y-6">
 
-        <!-- 基本資料 -->
         <div>
           <h3 class="text-lg font-semibold">基本資料</h3>
           <div class="grid grid-cols-2 gap-2 text-sm mt-2">
@@ -368,7 +446,6 @@ async function openModelDetail(modelId) {
           </div>
         </div>
 
-        <!-- 綁定站點 -->
         <div>
           <h3 class="text-lg font-semibold">綁定站點</h3>
           ${
@@ -380,7 +457,6 @@ async function openModelDetail(modelId) {
           }
         </div>
 
-        <!-- 治具需求 -->
         <div>
           <h3 class="text-lg font-semibold">每站治具需求</h3>
           ${
@@ -396,7 +472,6 @@ async function openModelDetail(modelId) {
           }
         </div>
 
-        <!-- 最大開站量 -->
         <div>
           <h3 class="text-lg font-semibold">最大可開站數</h3>
           ${
@@ -421,8 +496,4 @@ async function openModelDetail(modelId) {
     box.innerHTML = `<div class="text-red-500 p-4">讀取失敗</div>`;
   }
 }
-
-
 window.openModelDetail = openModelDetail;
-window.closeModelDetail = closeModelDetail;
-
