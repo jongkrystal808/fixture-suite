@@ -9,18 +9,6 @@
 // ================================
 // 工具：取得使用者 token 中的 customer_id
 // ================================
-function getCustomerId() {
-  // Token 已由後端在登入時生成，內含 customer_id
-  const raw = localStorage.getItem("auth_user");
-  if (!raw) return null;
-  try {
-    const obj = JSON.parse(raw);
-    return obj.customer_id || null;
-  } catch (e) {
-    console.warn("無法解析 auth_user:", e);
-    return null;
-  }
-}
 function _getCurrentCustomerId() {
   return window.currentCustomerId || localStorage.getItem("current_customer_id");
 }
@@ -147,3 +135,32 @@ window.apiUpdateFixture = apiUpdateFixture;
 window.apiDeleteFixture = apiDeleteFixture;
 window.apiGetFixturesSimple = apiGetFixturesSimple;
 window.apiGetFixtureDetail = apiGetFixtureDetail;
+// api-fixtures.js 補上
+
+async function apiGetFixtureStatistics(customer_id) {
+  const cid =
+    customer_id ||
+    window.currentCustomerId ||
+    localStorage.getItem("current_customer_id");
+
+  const q = new URLSearchParams();
+  if (cid) q.set("customer_id", cid);
+
+  return api(`/fixtures/statistics/summary?${q.toString()}`);
+}
+
+async function apiGetFixtureStatus(customer_id) {
+  const cid =
+    customer_id ||
+    window.currentCustomerId ||
+    localStorage.getItem("current_customer_id");
+
+  const q = new URLSearchParams();
+  if (cid) q.set("customer_id", cid);
+
+  // 後端 fixtures.py 有 /fixtures/status/view
+  return api(`/fixtures/status/view?${q.toString()}`);
+}
+
+window.apiGetFixtureStatistics = apiGetFixtureStatistics;
+window.apiGetFixtureStatus = apiGetFixtureStatus;

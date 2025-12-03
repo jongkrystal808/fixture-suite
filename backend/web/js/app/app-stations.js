@@ -169,6 +169,40 @@ async function stDelete(stationId) {
 }
 
 /* ============================================================
+ * 🟩 重新計算最大可開站數（依model_id）
+ * ============================================================ */
+async function recalculateMaxStations() {
+  if (!currentSelectedModel) {
+    toast("請先選擇機種");
+    return;
+  }
+
+  const customer_id = getCurrentCustomerId();
+  if (!customer_id) {
+    toast("無 customer_id");
+    return;
+  }
+
+  try {
+    // 呼叫後端重新計算（你後端 detail 已包含 max_stations）
+    const detail = await apiGetModelDetail(currentSelectedModel);
+
+    // 更新 Drawer：若正在開啟，也重新渲染
+    if (typeof openModelDetail === "function") {
+      openModelDetail(currentSelectedModel);
+    }
+
+    toast("最大可開站數已重新計算");
+  } catch (err) {
+    console.error("recalculateMaxStations() failed:", err);
+    toast("重新計算失敗", "error");
+  }
+}
+
+// 全域
+window.recalculateMaxStations = recalculateMaxStations;
+
+/* ============================================================
  * 導出全域
  * ============================================================ */
 

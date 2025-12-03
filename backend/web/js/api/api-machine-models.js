@@ -6,7 +6,7 @@
  * - /models/{id}
  * - /models/{id}/detail   <-- ★ 新增 for 機種詳細頁
  * - /stations
- * - /model-stations
+ * - /model-detail
  * - /fixture-requirements
  */
 
@@ -81,22 +81,22 @@ async function apiDeleteMachineModel(modelId) {
  * 🔵 機種 ↔ 站點 綁定 (model_stations)
  * ============================================================ */
 async function apiListModelStations(modelId) {
-  return api(`/model-stations/${encodeURIComponent(modelId)}`);
+  return api(`/model-detail/${encodeURIComponent(modelId)}`);
 }
 
 async function apiListAvailableStationsForModel(modelId) {
-  return api(`/model-stations/${encodeURIComponent(modelId)}/available`);
+  return api(`/model-detail/${encodeURIComponent(modelId)}/available`);
 }
 
 async function apiBindStationToModel(modelId, stationId) {
-  return api(`/model-stations/${encodeURIComponent(modelId)}`, {
+  return api(`/model-detail/${encodeURIComponent(modelId)}`, {
     method: "POST",
     body: JSON.stringify({ station_id: stationId })
   });
 }
 
 async function apiUnbindStationFromModel(modelId, stationId) {
-  return api(`/model-stations/${encodeURIComponent(modelId)}/${encodeURIComponent(stationId)}`, {
+  return api(`/model-detail/${encodeURIComponent(modelId)}/${encodeURIComponent(stationId)}`, {
     method: "DELETE"
   });
 }
@@ -133,7 +133,7 @@ async function apiGetMachineModelDetail(modelId) {
 
 async function apiGetModelDetail(modelId) {
   const customer_id = localStorage.getItem("current_customer_id");
-  return api(`/model-stations/${modelId}/detail?customer_id=${customer_id}`);
+  return api(`/model-detail/${modelId}/detail?customer_id=${customer_id}`);
 }
 
 

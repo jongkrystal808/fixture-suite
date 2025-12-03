@@ -1,11 +1,12 @@
 /* ============================================================
- * app-query.js  (v3.6)
+ * app-query.js  (v4.0)
  *
  * ✔ 完全對應 index.html 的查詢頁
  * ✔ 治具查詢 fixtureQueryArea（含分頁）
  * ✔ 機種查詢 modelQueryArea（含分頁）
  * ✔ Fixture Detail Drawer / Model Detail Drawer
- * ✔ 使用 current_customer_id
+ * ✔ 使用 current_customer_id（由 api-config 自動帶 customer_id）
+ * ✔ Model Detail 走 /model-detail/{model_id}/detail (v4.0)
  * ============================================================ */
 
 
@@ -20,7 +21,7 @@ function renderPagination(targetId, total, page, pageSize, onClick) {
   if (!total || total <= pageSize) return;
 
   const totalPages = Math.ceil(total / pageSize);
-  const maxButtons = 11;  // 顯示最多 11 個按鈕（含 ...）
+  const maxButtons = 11; // 顯示最多 11 個按鈕（含 ...）
 
   function addBtn(label, p, active = false, disabled = false) {
     const btn = document.createElement("button");
@@ -109,15 +110,15 @@ async function loadFixturesQuery() {
   };
 
   if (keyword) params.search = keyword;
-  if (status && status !== "全部") params.status = status;
+  if (status && status !== "全部") params.status_filter = status;
 
   try {
-    // 預期回傳：{ fixtures: [...], total: 123 }
+    // 後端回傳：{ fixtures: [...], total: 123 }
     const data = await apiListFixtures(params);
     renderFixturesTable(data.fixtures || []);
 
     renderPagination(
-      "fixtureQueryPagination",           // ⚠️ index.html 需要有這個 <div>
+      "fixtureQueryPagination",
       data.total || 0,
       fixtureQueryPage,
       fixtureQueryPageSize,
@@ -141,7 +142,7 @@ function renderFixturesTable(rows) {
     return;
   }
 
-  rows.forEach(f => {
+  rows.forEach((f) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td class="py-2 px-4">
@@ -185,6 +186,7 @@ function closeFixtureDetail() {
   const drawer = document.getElementById("fixtureDetailDrawer");
   if (drawer) drawer.classList.add("translate-x-full");
 }
+window.closeFixtureDetail = closeFixtureDetail;
 
 async function openFixtureDetail(fixtureId) {
   const drawer = document.getElementById("fixtureDetailDrawer");
@@ -199,7 +201,7 @@ async function openFixtureDetail(fixtureId) {
   box.innerHTML = `<div class="p-4 text-gray-500">載入中...</div>`;
 
   try {
-    const data = await apiGetFixtureDetail(fixtureId);
+    const data = await apiGetFixtureDetail(fixtureId); // /fixtures/{id}/detail
     const f = data.fixture;
 
     box.innerHTML = `
@@ -247,7 +249,6 @@ async function openFixtureDetail(fixtureId) {
 }
 
 window.openFixtureDetail = openFixtureDetail;
-window.closeFixtureDetail = closeFixtureDetail;
 
 
 /* ============================================================
@@ -261,7 +262,8 @@ async function loadModelsQuery() {
   const customer_id = localStorage.getItem("current_customer_id");
   if (!customer_id) return;
 
-  const keyword = document.getElementById("modelSearch")?.value.trim() || "";
+  const keyword =
+    document.getElementById("modelSearch")?.value.trim() || "";
 
   const params = {
     customer_id,
@@ -271,13 +273,14 @@ async function loadModelsQuery() {
   };
 
   try {
-    // 建議後端回傳 {items,total} 或 {models,total}
+    // 後端建議回傳 {items,total} 或 {models,total}
     const data = await apiListMachineModels(params);
     const list = data.items || data.models || data || [];
 
     renderModelsQueryTable(list);
+
     renderPagination(
-      "modelQueryPagination",          // ⚠️ index.html 要有這個 <div>
+      "modelQueryPagination",
       data.total || list.length || 0,
       modelQueryPage,
       modelQueryPageSize,
@@ -297,12 +300,12 @@ function renderModelsQueryTable(list) {
   const tbody = document.getElementById("modelTable");
   tbody.innerHTML = "";
 
-  if (!list.length) {
+  if (!list || !list.length) {
     tbody.innerHTML = `<tr><td colspan="5" class="text-center py-3 text-gray-400">沒有資料</td></tr>`;
     return;
   }
 
-  list.forEach(m => {
+  list.forEach((m) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td class="py-2 px-4">${m.id}</td>
@@ -322,7 +325,7 @@ function renderModelsQueryTable(list) {
 
 
 /* ============================================================
- * queryType 切換（只支援新版）
+ * queryType 切換
  * ============================================================ */
 function switchQueryType() {
   const type = document.getElementById("queryType")?.value;
@@ -334,6 +337,7 @@ function switchQueryType() {
   if (type === "fixture") {
     fixtureArea.classList.remove("hidden");
     modelArea.classList.add("hidden");
+    modelQueryPage = 1;
     fixtureQueryPage = 1;
     loadFixturesQuery();
   } else {
@@ -347,7 +351,7 @@ window.switchQueryType = switchQueryType;
 
 
 /* ============================================================
- * Drawer：使用紀錄 / 更換紀錄
+ * Drawer：使用紀錄 / 更換紀錄（供 Fixture Drawer 使用）
  * ============================================================ */
 function renderUsageLogs(logs) {
   if (!logs || !Array.isArray(logs) || logs.length === 0) {
@@ -403,13 +407,15 @@ window.renderReplacementLogs = renderReplacementLogs;
  * ============================================================ */
 function formatTrans(t) {
   if (!t) return "-";
-  return `${t.transaction_date ?? ""} / ${t.order_no ?? ""} / ${t.operator ?? ""}`;
+  return `${t.transaction_date ?? ""} / ${t.order_no ?? ""} / ${
+    t.operator ?? ""
+  }`;
 }
 window.formatTrans = formatTrans;
 
 
 /* ============================================================
- * 🟩 Model Detail Drawer (若你還放在這支檔案)
+ * 🟦 Model Detail Drawer（對應 model-detail v4.0）
  * ============================================================ */
 
 function closeModelDetail() {
@@ -421,21 +427,28 @@ window.closeModelDetail = closeModelDetail;
 async function openModelDetail(modelId) {
   const drawer = document.getElementById("modelDetailDrawer");
   const box = document.getElementById("modelDetailContent");
-  if (!drawer || !box) return;
+  if (!drawer || !box) {
+    console.error("❌ modelDetailDrawer DOM 未找到");
+    return;
+  }
 
   drawer.classList.remove("translate-x-full");
   box.innerHTML = `<div class="p-4 text-gray-500">載入中...</div>`;
 
   try {
+    // ⚠ 這裡使用的是「新」的 /model-detail/{model_id}/detail
+    // apiGetModelDetail 需在 api-model-detail.js 中實作
     const data = await apiGetModelDetail(modelId);
+
     const m = data.model;
     const stations = data.stations || [];
-    const fixtures = data.fixtures || [];
+    const fixtures = data.requirements || []; // ✅ v4.0: 從 requirements 來
     const capacity = data.capacity || [];
 
     box.innerHTML = `
       <section class="space-y-6">
 
+        <!-- 基本資料 -->
         <div>
           <h3 class="text-lg font-semibold">基本資料</h3>
           <div class="grid grid-cols-2 gap-2 text-sm mt-2">
@@ -446,45 +459,68 @@ async function openModelDetail(modelId) {
           </div>
         </div>
 
+        <!-- 綁定站點 -->
         <div>
           <h3 class="text-lg font-semibold">綁定站點</h3>
           ${
             stations.length
               ? `<ul class="list-disc pl-6 text-sm">
-                   ${stations.map(s => `<li>${s.station_id} - ${s.station_name}</li>`).join("")}
+                   ${stations
+                     .map(
+                       (s) =>
+                         `<li>${s.station_id} - ${s.station_name || ""}</li>`
+                     )
+                     .join("")}
                  </ul>`
               : `<p class="text-gray-500 text-sm">無綁定站點</p>`
           }
         </div>
 
+        <!-- 治具需求 -->
         <div>
           <h3 class="text-lg font-semibold">每站治具需求</h3>
           ${
             fixtures.length
-              ? fixtures.map(f => `
+              ? fixtures
+                  .map(
+                    (f) => `
                 <div class="border rounded-xl p-3 bg-gray-50 text-sm space-y-1">
                   <div><b>站點：</b>${f.station_id}</div>
-                  <div><b>治具：</b>${f.fixture_id} - ${f.fixture_name}</div>
+                  <div><b>治具：</b>${f.fixture_id} - ${
+                      f.fixture_name || "-"
+                    }</div>
                   <div><b>需求數量：</b>${f.required_qty}</div>
+                  <div><b>可用數量：</b>${f.available_qty ?? 0}</div>
                 </div>
-              `).join("")
+              `
+                  )
+                  .join("")
               : `<p class="text-gray-500 text-sm">無治具需求</p>`
           }
         </div>
 
+        <!-- 最大開站量 -->
         <div>
           <h3 class="text-lg font-semibold">最大可開站數</h3>
           ${
             capacity.length
-              ? capacity.map(c => `
+              ? capacity
+                  .map(
+                    (c) => `
                 <div class="border rounded-xl p-3 bg-green-50 text-sm space-y-1">
-                  <div><b>站點：</b>${c.station_id}</div>
+                  <div><b>站點：</b>${c.station_id} ${
+                      c.station_name ? `- ${c.station_name}` : ""
+                    }</div>
                   <div><b>最大可開：</b>${c.max_station} 站</div>
                   <div class="text-xs text-gray-600">
-                    (瓶頸治具：${c.bottleneck_fixture_id}，可提供 ${c.bottleneck_qty})
+                    (瓶頸治具：${c.bottleneck_fixture_id}，可提供 ${
+                      c.bottleneck_qty
+                    })
                   </div>
                 </div>
-              `).join("")
+              `
+                  )
+                  .join("")
               : `<p class="text-gray-500 text-sm">未計算或無資料</p>`
           }
         </div>
@@ -493,7 +529,10 @@ async function openModelDetail(modelId) {
     `;
   } catch (err) {
     console.error("openModelDetail() failed:", err);
-    box.innerHTML = `<div class="text-red-500 p-4">讀取失敗</div>`;
+    box.innerHTML = `<div class="text-red-500 p-4">讀取失敗：${
+      err?.data?.detail || err.message || ""
+    }</div>`;
   }
 }
+
 window.openModelDetail = openModelDetail;

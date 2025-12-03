@@ -19,10 +19,9 @@ import os
 # 導入路由
 from backend.app.routers.auth import router as auth_router
 from backend.app.routers.customers import router as customers_router
-from backend.app.routers.fixture_requirements import router as fixture_requirements_router
 from backend.app.routers.fixtures import router as fixtures_router
 from backend.app.routers.machine_models import router as machine_models_router
-from backend.app.routers.model_stations import router as model_stations_router
+from backend.app.routers.model_detail import router as model_detail_router
 from backend.app.routers.owners import router as owners_router
 from backend.app.routers.receipts import router as receipts_router
 from backend.app.routers.replacement import router as replacement_router
@@ -222,14 +221,13 @@ app.include_router(customers_router, prefix="/api/v2")
 app.include_router(owners_router, prefix="/api/v2")            # 負責人
 app.include_router(stations_router, prefix="/api/v2")          # 站點
 app.include_router(machine_models_router, prefix="/api/v2")    # 機種
-app.include_router(model_stations_router, prefix="/api/v2")    # 機種站點對應
+app.include_router(model_detail_router, prefix="/api/v2")    # 機種站點對應/治具需求
 
 
 # ============================================================
 # 🧰 治具主資料（Fixture Master）
 # ============================================================
 app.include_router(fixtures_router, prefix="/api/v2")              # 治具清單
-app.include_router(fixture_requirements_router, prefix="/api/v2")  # 治具需求（每站點）
 
 
 # ============================================================

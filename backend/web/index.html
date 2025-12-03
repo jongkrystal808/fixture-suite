@@ -424,136 +424,223 @@
     </section>
 
         <!-- 查詢模塊 -->
-    <section id="tab-query" class="hidden space-y-4">
-      <div class="card p-5 space-y-4">
-        <h3 class="font-semibold text-lg">治具／機種查詢</h3>
+        <section id="tab-query" class="hidden space-y-4">
+          <div class="card p-5 space-y-4">
+            <h3 class="font-semibold text-lg">治具／機種查詢</h3>
 
-        <!-- 切換查詢類型 -->
-        <div class="flex gap-4 items-center">
-          <label class="font-semibold">查詢類型：</label>
-          <select id="queryType" class="input w-60" onchange="switchQueryType()">
-            <option value="fixture">治具查詢</option>
-            <option value="model">機種查詢</option>
-          </select>
-        </div>
+            <!-- 查詢類型 -->
+            <div class="flex gap-4 items-center">
+              <label class="font-semibold">查詢類型：</label>
+              <select id="queryType" class="input w-60" onchange="switchQueryType()">
+                <option value="fixture">治具查詢</option>
+                <option value="model">機種查詢</option>
+              </select>
+            </div>
 
-        <!-- ============================= -->
-        <!-- 🔹 治具查詢區 -->
-        <!-- ============================= -->
-        <div id="fixtureQueryArea" class="space-y-3">
-          <div class="flex items-center gap-4 mb-4">
-          <div>
-            <span class="query-label">治具搜尋：</span>
-            <input id="fixtureSearch" class="query-input" placeholder="輸入治具編號 / 名稱" oninput="debounceLoadFixtures()">
-          </div>
-          <div>
-            <span class="query-label">狀態：</span>
-            <select id="fixtureStatus" class="query-input" onchange="loadFixturesQuery()">
-              <option>全部</option>
-              <option>正常</option>
-              <option>維修中</option>
-              <option>報廢</option>
-            </select>
-          </div>
+            <!-- ====================================================== -->
+            <!-- 🔵 治具查詢 -->
+            <!-- ====================================================== -->
+            <div id="fixtureQueryArea" class="space-y-3">
 
-          <button onclick="loadFixturesQuery()" class="btn btn-primary">搜尋</button>
+              <div class="flex items-center gap-4 mb-4">
+                <div>
+                  <span class="query-label">治具搜尋：</span>
+                  <input id="fixtureSearch"
+                         class="query-input"
+                         placeholder="輸入治具編號 / 名稱"
+                         oninput="debounceLoadFixtures()">
+                </div>
 
-        </div>
+                <div>
+                  <span class="query-label">狀態：</span>
+                  <select id="fixtureStatus" class="query-input" onchange="loadFixturesQuery()">
+                    <option>全部</option>
+                    <option>正常</option>
+                    <option>維修中</option>
+                    <option>報廢</option>
+                  </select>
+                </div>
 
-
-          <div class="overflow-x-auto border rounded-lg shadow-sm">
-            <table class="min-w-full text-sm text-center border-collapse">
-              <thead class="text-gray-700 bg-gray-50 border-b">
-                <tr>
-                  <th class="py-2 px-4 w-24">治具編號</th>
-                  <th class="py-2 px-4 w-32">名稱</th>
-                  <th class="py-2 px-4 w-24">客戶</th>
-                  <th class="py-2 px-4 w-32">類型</th>
-                  <th class="py-2 px-4 w-44">庫存(自購/客供/總)</th>
-                  <th class="py-2 px-4 w-24">狀態</th>
-                  <th class="py-2 px-4 w-24">儲位</th>
-                  <th class="py-2 px-4 w-32">負責人</th>
-                  <th class="py-2 px-4 w-48">備註</th>
-                </tr>
-              </thead>
-              <tbody id="fixtureTable" class="divide-y divide-gray-100 text-gray-800"></tbody>
-            </table>
-              <div id="fixtureQueryPagination" class="flex gap-2 mt-3 justify-center"></div>
-          </div>
-        </div>
-
-        <!-- ============================= -->
-        <!-- 🔹 機種查詢區 -->
-        <!-- ============================= -->
-        <div id="modelQueryArea" class="hidden space-y-3">
-          <div class="flex gap-3">
-            <input id="modelSearch" class="input w-64" placeholder="輸入機種代碼或名稱" oninput="loadModelsQuery()" />
-            <button class="btn btn-primary" onclick="loadModelsQuery()">查詢</button>
-          </div>
-
-          <div class="overflow-x-auto border rounded-lg shadow-sm">
-            <table class="min-w-full text-sm text-center border-collapse">
-              <thead class="text-gray-700 bg-gray-50 border-b">
-                <tr>
-                  <th class="py-2 px-4 w-32">機種代碼</th>
-                  <th class="py-2 px-4 w-40">名稱</th>
-                  <th class="py-2 px-4 w-24">客戶</th>
-                  <th class="py-2 px-4 w-64">備註</th>
-                  <th class="py-2 px-4 w-24">操作</th>
-                </tr>
-              </thead>
-              <tbody id="modelTable" class="divide-y divide-gray-100 text-gray-800"></tbody>
-            </table>
-              <div id="modelQueryPagination" class="flex gap-2 mt-3 justify-center"></div>
+                <button onclick="loadFixturesQuery()" class="btn btn-primary">搜尋</button>
               </div>
-          </div>
 
-          <!-- ============================= -->
-          <!-- 🔹 顯示最大開站數 -->
-          <!-- ============================= -->
-          <div id="maxStationArea" class="hidden mt-5">
-            <h4 class="font-semibold mb-2">最大開站數</h4>
-            <div class="overflow-x-auto border rounded-lg shadow-sm">
-              <table class="min-w-full text-sm text-center border-collapse">
-                <thead class="text-gray-700 bg-gray-50 border-b">
-                  <tr>
-                    <th class="py-2 px-4 w-32">站點代碼</th>
-                    <th class="py-2 px-4 w-40">站點名稱</th>
-                    <th class="py-2 px-4 w-32">最大開站數</th>
-                    <th class="py-2 px-4 w-40">瓶頸治具</th>
-                    <th class="py-2 px-4 w-40">可用/需求數</th>
-                  </tr>
-                </thead>
-                <tbody id="maxStationTable" class="divide-y divide-gray-100 text-gray-800"></tbody>
-              </table>
+              <div class="overflow-x-auto border rounded-lg shadow-sm">
+                <table class="min-w-full text-sm text-center border-collapse">
+                  <thead class="text-gray-700 bg-gray-50 border-b">
+                    <tr>
+                      <th class="py-2 px-4 w-24">治具編號</th>
+                      <th class="py-2 px-4 w-32">名稱</th>
+                      <th class="py-2 px-4 w-24">客戶</th>
+                      <th class="py-2 px-4 w-32">類型</th>
+                      <th class="py-2 px-4 w-44">庫存(自購/客供/總)</th>
+                      <th class="py-2 px-4 w-24">狀態</th>
+                      <th class="py-2 px-4 w-24">儲位</th>
+                      <th class="py-2 px-4 w-32">負責人</th>
+                      <th class="py-2 px-4 w-48">備註</th>
+                    </tr>
+                  </thead>
+                  <tbody id="fixtureTable" class="divide-y divide-gray-100 text-gray-800"></tbody>
+                </table>
+
+                <div id="fixtureQueryPagination"
+                     class="flex gap-2 mt-3 justify-center"></div>
+              </div>
+            </div>
+
+            <!-- ====================================================== -->
+            <!-- 🔵 機種查詢 -->
+            <!-- ====================================================== -->
+            <div id="modelQueryArea" class="hidden space-y-3">
+
+              <div class="flex gap-3">
+                <input id="modelSearch"
+                       class="input w-64"
+                       placeholder="輸入機種代碼或名稱"
+                       oninput="loadModelsQuery()" />
+
+                <button class="btn btn-primary" onclick="loadModelsQuery()">查詢</button>
+              </div>
+
+              <div class="overflow-x-auto border rounded-lg shadow-sm">
+                <table class="min-w-full text-sm text-center border-collapse">
+                  <thead class="text-gray-700 bg-gray-50 border-b">
+                    <tr>
+                      <th class="py-2 px-4 w-32">機種代碼</th>
+                      <th class="py-2 px-4 w-40">名稱</th>
+                      <th class="py-2 px-4 w-24">客戶</th>
+                      <th class="py-2 px-4 w-64">備註</th>
+                      <th class="py-2 px-4 w-24">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="modelTable" class="divide-y divide-gray-100 text-gray-800"></tbody>
+                </table>
+
+                <div id="modelQueryPagination"
+                     class="flex gap-2 mt-3 justify-center"></div>
+              </div>
+
+              <!-- ====================================================== -->
+              <!-- 三段式 UI：站點綁定 + 治具需求設定 -->
+              <!-- ====================================================== -->
+              <div id="msNoModelHint"
+                   class="text-center text-gray-500 py-5">
+                🔍 請先選擇一個機種，才能進行站點綁定與治具需求設定
+              </div>
+
+              <div id="msContent" class="hidden grid grid-cols-2 gap-6 mt-4">
+
+                <!-- ====================================================== -->
+                <!-- 左側：站點綁定 -->
+                <!-- ====================================================== -->
+                <div class="space-y-4">
+
+                  <h4 class="font-semibold text-lg">已綁定站點</h4>
+
+                  <div class="overflow-x-auto border rounded-lg shadow-sm">
+                    <table class="min-w-full text-sm">
+                      <thead class="bg-gray-50 text-gray-600">
+                        <tr>
+                          <th class="py-2 px-3">站點代碼</th>
+                          <th class="py-2 px-3">名稱</th>
+                          <th class="py-2 px-3">治具需求</th>
+                          <th class="py-2 px-3">操作</th>
+                        </tr>
+                      </thead>
+                      <tbody id="msBoundTable"></tbody>
+                    </table>
+                  </div>
+
+                  <h4 class="font-semibold text-lg mt-6">可綁定站點</h4>
+
+                  <div class="overflow-x-auto border rounded-lg shadow-sm">
+                    <table class="min-w-full text-sm">
+                      <thead class="bg-gray-50 text-gray-600">
+                        <tr>
+                          <th class="py-2 px-3">站點代碼</th>
+                          <th class="py-2 px-3">名稱</th>
+                          <th class="py-2 px-3">操作</th>
+                        </tr>
+                      </thead>
+                      <tbody id="msAvailableTable"></tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <!-- ====================================================== -->
+                <!-- 右側：治具需求設定 -->
+                <!-- ====================================================== -->
+                <div class="space-y-4">
+
+                  <h4 class="font-semibold text-lg">
+                    治具需求設定：<span id="reqStationLabel" class="text-indigo-600"></span>
+                  </h4>
+
+                  <!-- 新增治具需求按鈕 -->
+                  <button class="btn btn-primary btn-sm"
+                          onclick="openRequirementModal('create')">
+                    ➕ 新增治具需求
+                  </button>
+
+                  <!-- 已設定治具需求 -->
+                  <div class="overflow-x-auto border rounded-lg shadow-sm">
+                    <table class="min-w-full text-sm">
+                      <thead class="bg-gray-50 text-gray-600">
+                        <tr>
+                          <th class="py-2 px-3">治具 ID</th>
+                          <th class="py-2 px-3">名稱</th>
+                          <th class="py-2 px-3">需求數</th>
+                          <th class="py-2 px-3">備註</th>
+                          <th class="py-2 px-3">操作</th>
+                        </tr>
+                      </thead>
+                      <tbody id="reqTable"></tbody>
+                    </table>
+                  </div>
+
+                </div>
+              </div>
             </div>
           </div>
+        </section>
 
-          <!-- ============================= -->
-          <!-- 🔹 顯示治具需求明細 -->
-          <!-- ============================= -->
-          <div id="stationDetailArea" class="hidden mt-5">
-            <h4 class="font-semibold mb-2">
-              治具需求明細：<span id="stationDetailTitle" class="text-indigo-600"></span>
-            </h4>
-            <div class="overflow-x-auto border rounded-lg shadow-sm">
-              <table class="min-w-full text-sm text-center border-collapse">
-                <thead class="text-gray-700 bg-gray-50 border-b">
-                  <tr>
-                    <th class="py-2 px-4 w-32">治具編號</th>
-                    <th class="py-2 px-4 w-48">治具名稱</th>
-                    <th class="py-2 px-4 w-24">需求數量</th>
-                    <th class="py-2 px-4 w-24">可用數量</th>
-                    <th class="py-2 px-4 w-32">可支援站數</th>
-                  </tr>
-                </thead>
-                <tbody id="stationDetailTable" class="divide-y divide-gray-100 text-gray-800"></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
+<!-- ============================================================ -->
+<!-- 🔵 新增 / 編輯治具需求 Modal（共用） -->
+<!-- ============================================================ -->
+<div id="requirementModal"
+     class="fixed inset-0 bg-black bg-opacity-40 hidden items-center justify-center z-50"
+     style="display:none;">
+  <div class="bg-white rounded-xl shadow-xl p-6 w-[400px] space-y-4">
+
+    <h3 id="reqModalTitle" class="text-lg font-semibold">新增治具需求</h3>
+
+    <!-- 模式：create / edit -->
+    <input type="hidden" id="reqModalMode" />
+    <input type="hidden" id="reqModalReqId" />
+
+    <!-- create 才顯示 -->
+    <div id="reqModalFixtureBlock">
+      <label class="text-sm font-medium">治具編號</label>
+      <input id="reqModalFixtureId" class="input w-full" placeholder="例如：FIX-001" />
+    </div>
+
+    <div>
+      <label class="text-sm font-medium">需求數量</label>
+      <input id="reqModalRequiredQty" type="number" class="input w-full" />
+    </div>
+
+    <div>
+      <label class="text-sm font-medium">備註</label>
+      <textarea id="reqModalNote" class="input w-full" rows="2"></textarea>
+    </div>
+
+    <div class="flex justify-end gap-3">
+      <button class="btn btn-ghost" onclick="closeRequirementModal()">取消</button>
+      <button class="btn btn-primary" onclick="submitRequirementModal()">確認</button>
+    </div>
+
+  </div>
+</div>
+
 
 
 
@@ -1439,20 +1526,26 @@
 
         </div>
 
-        <!-- =========================================== -->
-        <!-- 🟩 Model Detail Drawer -->
-        <!-- =========================================== -->
+        <!-- ================================ -->
+        <!-- 🟦 Model Detail Drawer (v3.7) -->
+        <!-- ================================ -->
         <div id="modelDetailDrawer"
-             class="fixed top-0 right-0 w-full md:w-2/3 lg:w-1/2 h-full bg-white shadow-2xl transform translate-x-full transition-transform duration-300 z-50 overflow-y-auto">
+             class="fixed right-0 top-0 h-full w-[480px] bg-white shadow-xl transform translate-x-full transition-all duration-300 z-50">
 
-          <div class="p-5 border-b flex justify-between">
-            <h2 class="text-xl font-semibold">機種詳情</h2>
-            <button onclick="closeModelDetail()" class="btn btn-ghost text-lg">✕</button>
+          <div class="flex justify-between items-center p-4 border-b">
+            <h2 class="text-lg font-semibold">機種詳情</h2>
+            <button onclick="closeModelDetail()" class="text-gray-500 hover:text-black">✕</button>
           </div>
 
-          <div id="modelDetailContent" class="p-5 space-y-6">
-            <!-- JS會動態放內容 -->
+          <div id="modelDetailContent" class="p-4 overflow-y-auto h-[calc(100%-60px)] text-sm space-y-6">
+
+            <!-- JS 會塞內容 -->
+
           </div>
+
+        </div>
+
+
 
       <!-- Toast -->
       <div id="toast" class="fixed bottom-4 left-1/2 -translate-x-1/2 hidden">
@@ -1523,7 +1616,7 @@
 
             <!-- 機種 -->
             <script src="/web/js/api/api-machine-models.js"></script>
-            <script src="/web/js/app/app-machine-models.js"></script>
+      <script src="/web/js/app/app-machine-models.js?v=20241204"></script>
 
             <!-- ================================ -->
             <!-- 🔧 治具主檔 / 收料 / 退料           -->
