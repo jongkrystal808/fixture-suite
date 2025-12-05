@@ -3,11 +3,18 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="icon" href="/web/favicon.ico" type="image/x-icon">
+  <!-- favicon 放在 /usr/share/nginx/html/favicon.ico -->
+  <link rel="icon" href="/favicon.ico" type="image/x-icon">
+
   <title>治具管理系統</title>
+
+  <!-- Tailwind CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="/web/css/app-main.css">
+
+  <!-- 本地 CSS：對應 /usr/share/nginx/html/css/app-main.css -->
+  <link rel="stylesheet" href="/css/app-main.css">
 </head>
+
 
 <body class="bg-gray-50 text-gray-900">
         <!-- 登入介面 -->
@@ -1568,19 +1575,19 @@
             <!-- ================================ -->
 
             <!-- API 基本設定，如 api()、API_PREFIX、Token 注入、401 處理 -->
-            <script src="/web/js/api/api-config.js"></script>
+            <script src="/js/api/api-config.js"></script>
 
             <!-- 共用工具（如果你有在用就保留） -->
-            <script src="/web/js/utils/storage.js"></script>
-            <script src="/web/js/utils/utils.js"></script>
-            <script src="/web/js/utils/calculations.js"></script>
-            <script src="/web/js/utils/ui-render.js"></script>
+            <script src="/js/utils/storage.js"></script>
+            <script src="/js/utils/utils.js"></script>
+            <script src="/js/utils/calculations.js"></script>
+            <script src="/js/utils/ui-render.js"></script>
 
                         <!-- Shared Modules -->
-            <script src="/web/js/shared/serial-utils.js"></script>
-            <script src="/web/js/shared/export-tools.js"></script>
-            <script src="/web/js/shared/ui-table.js"></script>
-            <script src="/web/js/shared/ui-pagination.js"></script>
+            <script src="/js/shared/serial-utils.js"></script>
+            <script src="/js/shared/export-tools.js"></script>
+            <script src="/js/shared/ui-table.js"></script>
+            <script src="/js/shared/ui-pagination.js"></script>
 
 
             <!-- ================================ -->
@@ -1588,81 +1595,81 @@
             <!-- ================================ -->
 
             <!-- 認證 API：/auth/login, /auth/me -->
-            <script src="/web/js/api/api-auth.js"></script>
+            <script src="/js/api/api-auth.js"></script>
             <!-- 認證與登入 UI 控制（loginModal, doLogin, loadCurrentUser） -->
-            <script src="/web/js/app/app-auth.js"></script>
+            <script src="/js/app/app-auth.js"></script>
 
             <!-- 使用者管理 -->
-            <script src="/web/js/api/api-users.js"></script>
-            <script src="/web/js/app/app-users.js"></script>
+            <script src="/js/api/api-users.js"></script>
+            <script src="/js/app/app-users.js"></script>
 
             <!-- ================================ -->
             <!-- 📇 基礎資料：客戶 / 負責人 / 站點   -->
             <!-- ================================ -->
 
             <!-- 客戶 -->
-            <script src="/web/js/api/api-customers.js"></script>
-            <script src="/web/js/app/app-customers.js"></script>
+            <script src="/js/api/api-customers.js"></script>
+            <script src="/js/app/app-customers.js"></script>
 
             <!-- 負責人 -->
-            <script src="/web/js/api/api-owners.js"></script>
-            <script src="/web/js/app/app-owners.js"></script>
+            <script src="/js/api/api-owners.js"></script>
+            <script src="/js/app/app-owners.js"></script>
 
             <!-- 站點 -->
-            <script src="/web/js/api/api-stations.js"></script>
-            <script src="/web/js/app/app-stations.js"></script>
+            <script src="/js/api/api-stations.js"></script>
+            <script src="/js/app/app-stations.js"></script>
 
             <!-- ================================ -->
             <!-- 🧩 機種 / 站點綁定 / 治具需求        -->
             <!-- ================================ -->
 
             <!-- 機種 -->
-            <script src="/web/js/api/api-machine-models.js"></script>
-      <script src="/web/js/app/app-machine-models.js?v=20241204"></script>
+            <script src="/js/api/api-machine-models.js"></script>
+            <script src="/js/app/app-machine-models.js?v=20241204"></script>
 
             <!-- ================================ -->
             <!-- 🔧 治具主檔 / 收料 / 退料           -->
             <!-- ================================ -->
             <!-- 查詢 -->
-            <script src="/web/js/app/app-query.js"></script>
+            <script src="/js/app/app-query.js"></script>
 
             <!-- 治具主檔 -->
-            <script src="/web/js/api/api-fixtures.js"></script>
-            <script src="/web/js/app/app-fixtures.js"></script>
+            <script src="/js/api/api-fixtures.js"></script>
+            <script src="/js/app/app-fixtures.js"></script>
 
             <!-- 收料 -->
-            <script src="/web/js/api/api-receipts.js"></script>
-            <script src="/web/js/app/app-receipts.js"></script>
+            <script src="/js/api/api-receipts.js"></script>
+            <script src="/js/app/app-receipts.js"></script>
 
             <!-- 退料 -->
-            <script src="/web/js/api/api-returns.js"></script>
-            <script src="/web/js/app/app-returns.js"></script>
+            <script src="/js/api/api-returns.js"></script>
+            <script src="/js/app/app-returns.js"></script>
 
             <!-- ================================ -->
             <!-- 📒 使用紀錄 / 更換紀錄              -->
             <!-- ================================ -->
 
-            <script src="/web/js/api/api-usage.js"></script>
-            <script src="/web/js/app/app-usage.js"></script>
+            <script src="/js/api/api-usage.js"></script>
+            <script src="/js/app/app-usage.js"></script>
 
-            <script src="/web/js/api/api-replacement.js"></script>
-            <script src="/web/js/app/app-replacement.js"></script>
+            <script src="/js/api/api-replacement.js"></script>
+            <script src="/js/app/app-replacement.js"></script>
 
             <!-- ================================ -->
             <!-- 🔢 序號工具 / 統計                  -->
             <!-- ================================ -->
 
-            <script src="/web/js/api/api-serials.js"></script>
-            <script src="/web/js/app/app-serials.js"></script>
+            <script src="/js/api/api-serials.js"></script>
+            <script src="/js/app/app-serials.js"></script>
 
-            <script src="/web/js/api/api-stats.js"></script>
-            <script src="/web/js/app/app-stats.js"></script>
+            <script src="/js/api/api-stats.js"></script>
+            <script src="/js/app/app-stats.js"></script>
 
             <!-- ================================ -->
             <!-- 🏠 主控制（頁面切換/初始化）         -->
             <!-- ================================ -->
 
-            <script src="/web/js/app/app-main.js"></script>
+            <script src="/js/app/app-main.js"></script>
 
   </body>
 </html>
