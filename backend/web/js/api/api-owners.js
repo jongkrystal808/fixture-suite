@@ -101,6 +101,14 @@ async function apiListOwnersSimple() {
   return api(`/owners/simple`);
 }
 
+// api-owners.js
+
+async function apiGetOwnersSimple() {
+  return api("/owners/active");   // <-- 後端已經提供 GET /owners/active
+}
+
+
+
 /* ============================================================
  * 導出全域
  * ============================================================ */
@@ -111,3 +119,4 @@ window.apiCreateOwner = apiCreateOwner;
 window.apiUpdateOwner = apiUpdateOwner;
 window.apiDeleteOwner = apiDeleteOwner;
 window.apiListOwnersSimple = apiListOwnersSimple;
+window.apiGetOwnersSimple = apiGetOwnersSimple;

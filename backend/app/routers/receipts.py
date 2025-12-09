@@ -256,28 +256,6 @@ def create_receipt(
         "message": "收料成功"
     }
 
-    # ====================================
-    # ★★★★★ 庫存更新：收料 → 增加庫存 ★★★★★
-    # ====================================
-    try:
-        if source_type == "customer_supplied":
-            update_sql = """
-                UPDATE fixtures
-                SET customer_supplied_qty = customer_supplied_qty + %s
-                WHERE id = %s AND customer_id = %s
-            """
-        else:  # self_purchased
-            update_sql = """
-                UPDATE fixtures
-                SET self_purchased_qty = self_purchased_qty + %s
-                WHERE id = %s AND customer_id = %s
-            """
-
-        db.execute_update(update_sql, (qty, fixture_id, customer_id))
-
-    except Exception as e:
-        print(f"⚠ [create_receipt] 更新治具庫存失敗 fixture={fixture_id}, qty={qty}: {e}")
-
     return result
 
 

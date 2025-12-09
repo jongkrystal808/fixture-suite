@@ -253,21 +253,6 @@ def create_return(
 
     result["quantity"] = qty
 
-    # ====================================
-    # ★★★★★ 庫存扣減邏輯（客供數）★★★★★
-    # ====================================
-    try:
-        update_sql = """
-            UPDATE fixtures
-            SET customer_supplied_qty = GREATEST(customer_supplied_qty - %s, 0)
-            WHERE id = %s AND customer_id = %s
-        """
-        db.execute_update(update_sql, (qty, fixture_id, customer_id))
-
-    except Exception as e:
-        print(f"⚠ [create_return] 更新庫存失敗 fixture={fixture_id}, qty={qty}: {e}")
-        # 不阻斷主流程
-
     return result
 
 
@@ -281,20 +266,40 @@ def delete_return(
     customer_id: str = Query(...),
     user=Depends(get_current_user)
 ):
+    # 先查出該退料單是否存在，並取得 fixture_id
     return_record = db.execute_query(
-        "SELECT id FROM material_transactions WHERE id=%s AND customer_id=%s AND transaction_type='return'",
+        """
+        SELECT id, fixture_id
+        FROM material_transactions
+        WHERE id=%s AND customer_id=%s AND transaction_type='return'
+        """,
         (return_id, customer_id)
     )
     if not return_record:
         raise HTTPException(404, "退料單不存在")
 
-    # 刪除主表(會自動刪除明細)
+    fixture_id = return_record[0]["fixture_id"]
+
+    # 刪除主表 (ON DELETE CASCADE 會自動刪除明細)
     db.execute_update(
         "DELETE FROM material_transactions WHERE id=%s",
         (return_id,)
     )
 
-    return {"message": "退料單已刪除"}
+    # ★ 刪除後重算該治具庫存（序號 + datecode 一起重算）
+    try:
+        db.execute_query(
+            "CALL sp_update_fixture_by_transaction(%s, %s)",
+            (customer_id, fixture_id)
+        )
+    except Exception as e:
+        # 不讓整個 API 爆掉，但回傳警告訊息
+        return {
+            "message": "退料單已刪除，但重算庫存時發生錯誤",
+            "error": str(e)
+        }
+
+    return {"message": "退料單已刪除並更新庫存"}
 
 
 # ============================================================

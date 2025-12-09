@@ -75,7 +75,7 @@ async function loadReturns() {
 
 
 /* ============================================================
- * 渲染退料表格(9 欄版 - 包含來源欄位)
+ * 渲染退料表格(10 欄版 - 包含來源欄位)
  * ============================================================ */
 function renderReturnTable(rows) {
   const tbody = document.getElementById("returnTable");
@@ -83,62 +83,99 @@ function renderReturnTable(rows) {
 
   if (!rows.length) {
     tbody.innerHTML = `
-      <tr><td colspan="9" class="text-center py-2 text-gray-400">沒有資料</td></tr>
+      <tr><td colspan="10" class="text-center py-2 text-gray-400">沒有資料</td></tr>
     `;
     return;
   }
 
   rows.forEach(r => {
-    // ★ 序號顯示邏輯
+
+    // --------------------------------
+    // ★ Datecode 顯示邏輯
+    // --------------------------------
+    const datecodeText =
+      r.record_type === "datecode"
+        ? `${r.datecode} (${r.quantity || 0} 件)`
+        : (r.datecode || "-");
+
+    // --------------------------------
+    // ★ 序號顯示邏輯（不包含 datecode）
+    // --------------------------------
     let serialText = "-";
-    
+
     if (r.record_type === 'datecode') {
-      // datecode 模式:顯示 "datecode (數量)"
-      serialText = r.datecode ? `${r.datecode} (${r.quantity || 0} 件)` : "-";
-    } else if (r.serial_list) {
+      serialText = "-"; // datecode 不顯示序號
+    }
+    else if (r.serial_list) {
       serialText = r.serial_list;
-    } else if (r.serial_text) {
+    }
+    else if (r.serial_text) {
       serialText = r.serial_text;
-    } else if (r.serials) {
+    }
+    else if (r.serials) {
       serialText = r.serials;
-    } else if (r.serial_start && r.serial_end) {
+    }
+    else if (r.serial_start && r.serial_end) {
       serialText = `${r.serial_start}~${r.serial_end}`;
     }
 
-    // ★ 來源類型顯示(可能包含統計資訊)
+    // --------------------------------
+    // ★ 來源類型顯示（Datecode / 其他）
+    // --------------------------------
     let sourceTypeHtml = "-";
 
-    if (r.source_type_summary) {
-      // 如果後端返回統計資訊 (例如: "自購: 2, 客供: 3")
-      sourceTypeHtml = `<span class="text-xs">${r.source_type_summary}</span>`;
-    } else if (r.source_type) {
-      // 單一來源類型
-      const sourceTypeText = r.source_type === 'self_purchased' ? '自購' : '客供';
-      const badgeClass = r.source_type === 'self_purchased' ? 'badge-info' : 'badge-success';
-      sourceTypeHtml = `<span class="badge ${badgeClass} badge-sm">${sourceTypeText}</span>`;
+    // Datecode 模式：直接依 transaction.source_type 顯示來源（不做統計）
+    if (r.record_type === "datecode") {
+      const txt = r.source_type === "self_purchased" ? "自購" : "客供";
+      const cls = r.source_type === "self_purchased" ? "badge-info" : "badge-success";
+      sourceTypeHtml = `<span class="badge ${cls} badge-sm">${txt} (datecode)</span>`;
     }
 
+    // 非 Datecode：使用序號來源統計
+    else if (r.source_type_summary) {
+      sourceTypeHtml = `<span class="text-xs">${r.source_type_summary}</span>`;
+    }
+
+    // 若統計沒有，但 source_type 存在 → 顯示 badge
+    else if (r.source_type) {
+      const txt = r.source_type === "self_purchased" ? "自購" : "客供";
+      const cls = r.source_type === "self_purchased" ? "badge-info" : "badge-success";
+      sourceTypeHtml = `<span class="badge ${cls} badge-sm">${txt}</span>`;
+    }
+
+
+    // --------------------------------
+    // ★ 完整 10 欄輸出
+    // --------------------------------
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td class="py-2 pr-4">${r.transaction_date || ""}</td>
       <td class="py-2 pr-4">${r.fixture_id}</td>
       <td class="py-2 pr-4">${r.customer_id || "-"}</td>
       <td class="py-2 pr-4">${r.order_no || "-"}</td>
+
       <td class="py-2 pr-4">${sourceTypeHtml}</td>
+
+      <td class="py-2 pr-4">${datecodeText}</td>   <!-- ★ Datecode 來了 -->
+
       <td class="py-2 pr-4">
         <div class="serial-cell">${serialText}</div>
       </td>
+
       <td class="py-2 pr-4">${r.operator || "-"}</td>
       <td class="py-2 pr-4">${r.note || "-"}</td>
+
       <td class="py-2 pr-4">
         <button class="btn btn-ghost text-xs" onclick="deleteReturn(${r.id})">
           刪除
         </button>
       </td>
     `;
+
     tbody.appendChild(tr);
   });
 }
+
 
 /* ============================================================
  * 新增退料(增加 datecode 類型支援)
@@ -157,7 +194,8 @@ async function submitReturn() {
   if (!type) return toast("請選擇退料類型");
 
   const payload = {
-    customer_id: vendor || customer_id,
+    customer_id,
+    vendor: vendor || null,
     fixture_id: fixture,
     order_no: order || null,
     type,

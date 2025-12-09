@@ -143,7 +143,7 @@ function renderReceiptTable(rows) {
 
   if (!rows.length) {
     tbody.innerHTML = `
-      <tr><td colspan="9" class="text-center py-2 text-gray-400">沒有資料</td></tr>
+      <tr><td colspan="10" class="text-center py-2 text-gray-400">沒有資料</td></tr>
     `;
     return;
   }
@@ -151,18 +151,23 @@ function renderReceiptTable(rows) {
   rows.forEach(r => {
     // ★ 序號顯示邏輯
     let serialText = "-";
-    
+
     if (r.record_type === 'datecode') {
-      // datecode 模式:顯示 "datecode (數量)"
-      serialText = r.datecode ? `${r.datecode} (${r.quantity || 0} 件)` : "-";
+      serialText = "-"; // datecode 不顯示序號
     } else if (r.serial_list) {
-      // 一般模式:顯示序號列表
       serialText = r.serial_list;
     }
 
-    // ★ 來源類型顯示
-    const sourceTypeText = r.source_type === 'self_purchased' ? '自購' :
-                          r.source_type === 'customer_supplied' ? '客供' : '-';
+    // ★ datecode 顯示邏輯
+    const datecodeText =
+      r.record_type === "datecode"
+        ? `${r.datecode} (${r.quantity || 0} 件)`
+        : (r.datecode || "-");
+
+    const sourceTypeText =
+      r.source_type === 'self_purchased'
+        ? '自購'
+        : (r.source_type === 'customer_supplied' ? '客供' : '-');
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
@@ -170,16 +175,22 @@ function renderReceiptTable(rows) {
       <td class="py-2 pr-4">${r.fixture_id}</td>
       <td class="py-2 pr-4">${r.customer_id || "-"}</td>
       <td class="py-2 pr-4">${r.order_no || "-"}</td>
+
       <td class="py-2 pr-4">
         <span class="badge ${r.source_type === 'self_purchased' ? 'badge-info' : 'badge-success'} badge-sm">
           ${sourceTypeText}
         </span>
       </td>
+
+      <td class="py-2 pr-4">${datecodeText}</td>   <!-- ★ 正式加入 datecode 欄位 -->
+
       <td class="py-2 pr-4">
         <div class="serial-cell">${serialText}</div>
       </td>
+
       <td class="py-2 pr-4">${r.operator || "-"}</td>
       <td class="py-2 pr-4">${r.note || "-"}</td>
+
       <td class="py-2 pr-4">
         <button class="btn btn-ghost text-xs" onclick="deleteReceipt(${r.id})">刪除</button>
       </td>
@@ -187,6 +198,7 @@ function renderReceiptTable(rows) {
     tbody.appendChild(tr);
   });
 }
+
 
 /* ============================================================
  * 新增收料(增加 datecode 類型支援)

@@ -53,18 +53,28 @@ document.addEventListener("DOMContentLoaded", () => {
  * ============================================================ */
 
 async function loadOwnerDropdown() {
-  try {
-    const owners = await apiGetOwnersSimple();
-    fxOwnerFilter.innerHTML = "";
+    const fxOwnerSelect = document.getElementById("fxOwnerSelect");
+    if (!fxOwnerSelect) {
+        console.warn("fxOwnerSelect element not found in DOM");
+        return;
+    }
+
+    let owners = [];
+    try {
+        owners = await apiGetOwnersSimple();
+    } catch (err) {
+        console.error("載入 owner 失敗", err);
+        return;
+    }
+
+    fxOwnerSelect.innerHTML = `<option value="">全部</option>`;
+
     owners.forEach(o => {
-      fxOwnerFilter.innerHTML += `
-        <option value="${o.id}">${o.primary_owner}</option>
-      `;
+        fxOwnerSelect.innerHTML += `<option value="${o.id}">${o.primary_owner}</option>`;
     });
-  } catch (err) {
-    console.error("載入 owner 失敗", err);
-  }
 }
+
+
 
 /* ============================================================
  * 載入列表

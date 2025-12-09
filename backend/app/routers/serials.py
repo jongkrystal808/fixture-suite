@@ -1,5 +1,5 @@
 """
-序號管理 API (v3.0 修正版)
+序號管理 API (v3.7 修正版)
 Serial Number Management API
 
 重點更動：
@@ -47,8 +47,7 @@ def ensure_fixture(customer_id: str, fixture_id: str):
 # ============================================================
 # 查詢治具所有序號
 # ============================================================
-
-@router.get("", summary="查詢序號列表")
+@router.get("", summary="查詢序號列表（含 datecode）")
 async def list_serials(
     fixture_id: str = Query(...),
     customer_id: str = Query(..., description="客戶名稱"),
@@ -57,6 +56,9 @@ async def list_serials(
 ):
     ensure_fixture(customer_id, fixture_id)
 
+    # ------------------------------
+    # 查詢實體序號 fixture_serials
+    # ------------------------------
     where = ["customer_id=%s", "fixture_id=%s"]
     params = [customer_id, fixture_id]
 
@@ -64,13 +66,60 @@ async def list_serials(
         where.append("serial_number LIKE %s")
         params.append(f"%{search}%")
 
-    sql = f"""
-        SELECT id, customer_id, fixture_id, serial_number, status, receipt_date, created_at
+    sql_real = f"""
+        SELECT 
+            id,
+            customer_id,
+            fixture_id,
+            serial_number,
+            status,
+            receipt_date,
+            created_at,
+            NULL AS quantity,
+            'serial' AS record_type
         FROM fixture_serials
         WHERE {" AND ".join(where)}
         ORDER BY serial_number ASC
     """
-    rows = db.execute_query(sql, tuple(params))
+
+    real_rows = db.execute_query(sql_real, tuple(params))
+
+    # ------------------------------
+    # 查詢 datecode 虛擬序號（來自 transactions）
+    # ------------------------------
+    sql_datecode = """
+        SELECT
+            id,
+            customer_id,
+            fixture_id,
+            datecode AS serial_number,
+            'datecode' AS status,
+            transaction_date AS receipt_date,
+            created_at,
+            quantity,
+            'datecode' AS record_type
+        FROM material_transactions
+        WHERE 
+            record_type = 'datecode'
+            AND customer_id = %s
+            AND fixture_id = %s
+    """
+    datecode_rows = db.execute_query(sql_datecode, (customer_id, fixture_id))
+
+    # search 支援比對 datecode 字串
+    if search:
+        datecode_rows = [
+            r for r in datecode_rows
+            if search in r["serial_number"]
+        ]
+
+    # ------------------------------
+    # 合併兩種序號來源
+    # ------------------------------
+    rows = real_rows + datecode_rows
+
+    # 排序：字母/數字順序
+    rows.sort(key=lambda r: r["serial_number"])
 
     return {
         "total": len(rows),
