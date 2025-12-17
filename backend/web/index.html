@@ -1256,412 +1256,585 @@
 
     </section>
 
+    <!-- =========================================================
+         後台管理（Admin Only）
+    ========================================================= -->
+    <section id="tab-admin" class="hidden">
 
+      <div class="grid grid-cols-12 gap-4">
 
-    <!-- 後台管理(新增:子頁層) -->
-    <section id="tab-admin" class="hidden space-y-4">
-      <!-- 子頁層 -->
-      <div class="flex flex-wrap gap-2">
-        <button class="tab subtab-active" data-subtab="acct">帳號與權限</button>
-        <button class="tab" data-subtab="smtp">SMTP 設定</button>
-        <button class="tab" data-subtab="fixture">治具資料維護</button>
-        <button class="tab" data-subtab="model">機種資料維護</button>
-      </div>
+        <!-- ================= 左側：後台選單 ================= -->
+        <aside class="col-span-2 card p-3 space-y-2">
 
-      <!-- 帳號與權限 -->
-      <div id="subtab-acct" class="card p-5 space-y-4">
-        <h3 class="font-semibold">帳號與權限</h3>
-        <div class="grid md:grid-cols-3 gap-4">
-          <!-- 新增帳戶 -->
-          <div class="border rounded-2xl p-4 space-y-3">
-            <div class="font-semibold text-sm">新增帳戶</div>
-            <div class="grid gap-3">
-              <div class="field"><label class="label-xs">帳號 (id)</label><input id="accAddId" class="input"/></div>
-              <div class="field"><label class="label-xs">密碼</label><input id="accAddPwd" type="password" class="input"/></div>
-              <div class="field"><label class="label-xs">Email</label><input id="accAddMail" type="email" class="input"/></div>
-              <div class="field"><label class="label-xs">權限</label>
-                <select id="accAddRole" class="input">
-                  <option value="user">一般用戶(查詢/增加)</option>
-                  <option value="admin">管理員(查詢/增修刪)</option>
-                </select>
+          <button class="admin-menu btn btn-sm btn-outline w-full" data-admin-page="stations">
+            站點管理
+          </button>
+
+          <button class="admin-menu btn btn-sm btn-outline w-full" data-admin-page="fixtures">
+            治具管理
+          </button>
+
+          <button class="admin-menu btn btn-sm btn-outline w-full" data-admin-page="models">
+            機種管理
+          </button>
+
+          <button class="admin-menu btn btn-sm btn-outline w-full" data-admin-page="owners">
+            負責人管理
+          </button>
+
+          <button class="admin-menu btn btn-sm btn-outline w-full" data-admin-page="systems">
+            系統設定
+          </button>
+
+        </aside>
+
+        <!-- ================= 右側：內容區 ================= -->
+        <div class="col-span-10 space-y-4">
+
+          <!-- ========== 站點管理 ========== -->
+          <div id="admin-stations" class="admin-page card p-5 space-y-4 hidden">
+              <div class="flex items-center justify-between">
+                <h3 class="font-semibold text-lg">站點管理</h3>
+                <button class="btn btn-primary btn-sm" onclick="stOpenStationMasterModal()">新增站點</button>
               </div>
-              <button class="btn btn-primary" onclick="toast('已新增帳戶(模擬)')">新增</button>
+              <div class="border-t pt-3">
+                <div class="flex items-center justify-between mb-1">
+                  <div class="text-sm font-semibold">站點列表</div>
+                  <button class="btn btn-ghost btn-xs" onclick="stLoadStationMasterList()">重新整理</button>
+                </div>
+                <div class="overflow-auto max-h-64 border rounded-xl">
+                  <table class="min-w-full text-xs">
+                    <thead class="bg-gray-50 text-gray-500">
+                      <tr>
+                        <th class="py-1 px-2 text-left">ID</th>
+                        <th class="py-1 px-2 text-left">代碼</th>
+                        <th class="py-1 px-2 text-left">名稱</th>
+                        <th class="py-1 px-2 text-left">備註</th>
+                        <th class="py-1 px-2 text-left">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody id="stTable"></tbody>
+                  </table>
+                </div>
+              </div>
+          </div>
+
+          <!-- ========== 機種管理（三段式） ========== -->
+          <div id="admin-models" class="admin-page card p-5 space-y-3 hidden">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="font-semibold">機種資料維護</h3>
+                <p class="text-xs text-gray-500">
+                  設定機種、對應站點，以及各站點所需治具
+                </p>
+              </div>
+              <div class="flex items-center gap-2">
+                <button class="btn btn-ghost" onclick="mmExportModelsCsv()">匯出機種</button>
+                <button class="btn btn-primary" onclick="mmOpenModelModal('create')">新增機種</button>
+              </div>
             </div>
-          </div>
 
-          <!-- 刪除帳戶 -->
-          <div class="border rounded-2xl p-4 space-y-3">
-            <div class="font-semibold text-sm">刪除帳戶</div>
-            <div class="grid gap-3">
-              <div class="field"><label class="label-xs">帳號 (id)</label><input id="accDelId" class="input"/></div>
-              <div class="field"><label class="label-xs">密碼</label><input id="accDelPwd" type="password" class="input"/></div>
-              <button class="btn btn-ghost" onclick="toast('已刪除帳戶(模擬)')">刪除</button>
+            <!-- ================= 三欄操作區 ================= -->
+            <div class="grid md:grid-cols-3 gap-4 mt-3">
+
+              <!-- ========= 左欄：機種清單 ========= -->
+              <section class="border rounded-2xl p-3 flex flex-col gap-2">
+
+                <div class="flex items-center justify-between">
+                  <h4 class="font-semibold text-sm">① 機種清單</h4>
+                  <span class="text-xs text-gray-400">選擇一個機種</span>
+                </div>
+
+                <div class="field">
+                  <label class="label-xs">搜尋機種</label>
+                  <input
+                    id="mmSearch"
+                    class="input"
+                    placeholder="輸入機種代碼 / 名稱"
+                    onkeydown="if(event.key==='Enter'){ mmLoadModelList(); }"
+                  />
+                </div>
+
+                <div class="flex items-center justify-between">
+                  <button class="btn btn-ghost btn-xs" onclick="mmLoadModelList()">重新整理</button>
+                  <div class="text-xs text-gray-500">
+                    共 <span id="mmCount">0</span> 筆
+                  </div>
+                </div>
+
+                <div class="overflow-auto border rounded-xl max-h-72">
+                  <table class="min-w-full text-xs">
+                    <thead class="bg-gray-50 text-gray-500">
+                      <tr>
+                        <th class="py-1.5 px-2 text-left">機種代碼</th>
+                        <th class="py-1.5 px-2 text-left">機種名稱</th>
+                        <th class="py-1.5 px-2 text-left">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody id="mmTable"></tbody>
+                  </table>
+                </div>
+              </section>
+
+              <!-- ========= 中欄：機種 ↔ 站點 ========= -->
+              <section class="border rounded-2xl p-3 flex flex-col gap-2">
+
+                <div class="flex items-center justify-between">
+                  <h4 class="font-semibold text-sm">
+                    ② 機種站點綁定
+                    <span id="msSelectedModelLabel" class="text-xs text-gray-500"></span>
+                  </h4>
+                  <button class="btn btn-ghost btn-xs" onclick="stOpenStationMasterModal()">
+                    站點主檔
+                  </button>
+                </div>
+
+                <!-- 尚未選機種提示 -->
+                <div id="admin-msNoModelHint" class="text-xs text-gray-500">
+                  請先在左側選擇一個機種。
+                </div>
+
+                <!-- 已選機種內容 -->
+                <div id="admin-msContent" class="space-y-3 hidden">
+
+                  <!-- 已綁定站點 -->
+                  <div>
+                    <div class="flex items-center justify-between">
+                      <div class="text-xs font-semibold">已綁定站點</div>
+                      <button class="btn btn-ghost btn-xs" onclick="msReloadForCurrentModel()">
+                        重新整理
+                      </button>
+                    </div>
+                    <div class="overflow-auto border rounded-xl max-h-32 mt-1">
+                      <table class="min-w-full text-xs">
+                        <thead class="bg-gray-50 text-gray-500">
+                          <tr>
+                            <th class="py-1 px-2 text-left">代碼</th>
+                            <th class="py-1 px-2 text-left">名稱</th>
+                            <th class="py-1 px-2 text-left">操作</th>
+                          </tr>
+                        </thead>
+                        <tbody id="admin-msBoundTable"></tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <!-- 可綁定站點 -->
+                  <div>
+                    <div class="text-xs font-semibold">可綁定站點</div>
+                    <div class="overflow-auto border rounded-xl max-h-32 mt-1">
+                      <table class="min-w-full text-xs">
+                        <thead class="bg-gray-50 text-gray-500">
+                          <tr>
+                            <th class="py-1 px-2 text-left">代碼</th>
+                            <th class="py-1 px-2 text-left">名稱</th>
+                            <th class="py-1 px-2 text-left">操作</th>
+                          </tr>
+                        </thead>
+                        <tbody id="admin-msAvailableTable"></tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                </div>
+              </section>
+
+              <!-- ========= 右欄：治具需求 ========= -->
+              <section class="border rounded-2xl p-3 flex flex-col gap-2">
+
+                <div>
+                  <h4 class="font-semibold text-sm">③ 治具需求設定</h4>
+                  <div class="text-xs text-gray-500">
+                    機種：<span id="frSelectedModelLabel">-</span> /
+                    站點：<span id="frSelectedStationLabel">-</span>
+                  </div>
+                </div>
+
+                <!-- 尚未選擇提示 -->
+                <div id="frNoModelStationHint" class="text-xs text-gray-500">
+                  請先選擇左側機種，再在中間選擇一個已綁定站點。
+                </div>
+
+                <!-- 可操作內容 -->
+                <div id="frContent" class="space-y-3 hidden">
+
+                  <!-- 新增需求 -->
+                  <div class="grid grid-cols-5 gap-2 items-end">
+                    <div class="col-span-3 field">
+                      <label class="label-xs">治具</label>
+                      <select id="frFixtureSelect" class="input">
+                        <option value="">選擇治具...</option>
+                      </select>
+                    </div>
+                    <div class="col-span-1 field">
+                      <label class="label-xs">需求數量</label>
+                      <input id="frQtyInput" type="number" min="1" class="input" value="1" />
+                    </div>
+                    <div class="col-span-1">
+                      <button class="btn btn-primary w-full" onclick="frAddRequirement()">新增</button>
+                    </div>
+                  </div>
+
+                  <!-- 需求清單 -->
+                  <div class="overflow-auto border rounded-xl max-h-64">
+                    <table class="min-w-full text-xs">
+                      <thead class="bg-gray-50 text-gray-500">
+                        <tr>
+                          <th class="py-1 px-2 text-left">治具編號</th>
+                          <th class="py-1 px-2 text-left">治具名稱</th>
+                          <th class="py-1 px-2 text-left">需求數量</th>
+                          <th class="py-1 px-2 text-left">操作</th>
+                        </tr>
+                      </thead>
+                      <tbody id="frTable"></tbody>
+                    </table>
+                  </div>
+
+                </div>
+              </section>
+
             </div>
+
           </div>
 
-          <!-- 修改密碼 -->
-          <div class="border rounded-2xl p-4 space-y-3">
-            <div class="font-semibold text-sm">修改密碼</div>
-            <div class="grid gap-3">
-              <div class="field"><label class="label-xs">帳號 (id)</label><input id="accModId" class="input"/></div>
-              <div class="field"><label class="label-xs">現行密碼</label><input id="accModPwd" type="password" class="input"/></div>
-              <div class="field"><label class="label-xs">新密碼</label><input id="accModNew" type="password" class="input"/></div>
-              <div class="field"><label class="label-xs">Email</label><input id="accModMail" type="email" class="input"/></div>
-              <button class="btn btn-ghost" onclick="toast('已修改密碼(模擬)')">修改</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- SMTP 設定(含更換通知對象) -->
-      <div id="subtab-smtp" class="card p-5 space-y-4 hidden">
-        <h3 class="font-semibold">SMTP 設定</h3>
-        <div class="grid md:grid-cols-3 gap-3">
-          <div class="field"><label class="label-xs">Email</label><input id="smtpEmail" class="input" placeholder="通知寄送 Email"/></div>
-          <div class="field"><label class="label-xs">外送郵件伺服器名稱 (SMTP)</label><input id="smtpHost" class="input" placeholder="smtp.example.com"/></div>
-          <div class="field"><label class="label-xs">埠號 (Port)</label><input id="smtpPort" class="input" placeholder="587"/></div>
-          <div class="field"><label class="label-xs">認證狀態</label>
-            <select id="smtpAuthState" class="input">
-              <option>未認證</option><option>已認證</option>
-            </select>
-          </div>
-          <div class="field"><label class="label-xs">認證帳號</label><input id="smtpUser" class="input" /></div>
-          <div class="field"><label class="label-xs">認證密碼</label><input id="smtpPass" type="password" class="input" /></div>
-          <div class="field"><label class="label-xs">寄件者名稱</label><input id="smtpSenderName" class="input" /></div>
-          <div class="field"><label class="label-xs">寄件者信箱</label><input id="smtpSenderMail" type="email" class="input" /></div>
-        </div>
-        <div class="flex gap-2">
-          <button class="btn btn-primary" onclick="toast('已儲存 SMTP(模擬)')">儲存</button>
-          <button class="btn btn-ghost" onclick="toast('測試寄信(模擬)')">測試寄信</button>
-        </div>
-
-        <div class="pt-2 border-t">
-          <div class="flex items-center justify-between py-3">
-            <h4 class="font-semibold">更換通知對象</h4>
-            <button class="btn btn-ghost" onclick="downloadCSV('owners.csv', toCSV(mockOwners))">匯出負責人</button>
-          </div>
-          <div class="overflow-auto">
-            <table class="min-w-full text-sm">
-              <thead class="text-left text-gray-500">
-                <tr><th class="py-2 pr-4">員編</th><th class="py-2 pr-4">姓名</th><th class="py-2 pr-4">Email</th><th class="py-2 pr-4">操作</th></tr>
-              </thead>
-              <tbody id="ownerTable"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-            <!-- 治具資料維護 -->
-      <div id="subtab-fixture" class="card p-5 space-y-3 hidden">
-        <div class="flex items-center justify-between">
-          <h3 class="font-semibold">治具資料維護</h3>
-          <div class="flex items-center gap-2">
-            <button class="btn btn-ghost" onclick="exportFixturesCsv()">匯出</button>
-            <button class="btn btn-ghost" onclick="downloadCSV('fixtures_template.csv', fixtureTemplate())">下載範本</button>
-            <label class="btn btn-ghost cursor-pointer">
-              <input id="fxCsv" type="file" accept=".xlsx,.csv" class="hidden" onchange="handleFixtureCsv(this)" />
-              匯入 Excel/CSV
-            </label>
-            <button class="btn btn-primary" onclick="openFixtureModal('create')">新增治具</button>
-          </div>
-        </div>
-
-        <!-- 篩選條件 -->
-        <div class="grid md:grid-cols-5 gap-3">
-          <div class="field">
-            <label class="label-xs">關鍵字</label>
-            <input id="fxSearch" class="input" placeholder="治具編號 / 名稱" onkeydown="if(event.key==='Enter'){fxPage=1;loadFixtureList();}" />
-          </div>
-          <div class="field">
-            <label class="label-xs">狀態</label>
-            <select id="fxStatusFilter" class="input" onchange="fxPage=1;loadFixtureList();">
-              <option value="">全部</option>
-              <option value="正常">正常</option>
-              <option value="返還">返還</option>
-              <option value="報廢">報廢</option>
-            </select>
-          </div>
-          <div class="field">
-            <label class="label-xs">負責人 (owner_id)</label>
-            <input id="fxOwnerFilter" class="input" placeholder="ID (選填，可留空)" onkeydown="if(event.key==='Enter'){fxPage=1;loadFixtureList();}" />
-          </div>
-          <div class="field">
-            <label class="label-xs">每頁筆數</label>
-            <select id="fxPageSize" class="input" onchange="fxPage=1;loadFixtureList();">
-              <option value="8">8</option>
-              <option value="20">20</option>
-              <option value="50">50</option>
-            </select>
-          </div>
-          <div class="field flex items-end">
-            <button class="btn btn-ghost w-full" onclick="fxPage=1;loadFixtureList();">重新整理</button>
-          </div>
-        </div>
-
-        <!-- 列表 + 分頁 -->
-        <div class="border-t pt-3">
+          <!-- ========== 治具管理 ========== -->
+          <div id="admin-fixtures" class="admin-page card p-5 space-y-3 hidden">
+          <!-- ===== Header ===== -->
           <div class="flex items-center justify-between">
-            <div class="text-sm text-gray-600">
-              共 <span id="fxCount">0</span> 筆，
-              顯示第 <span id="fxPageNow">1</span> / <span id="fxPageMax">1</span> 頁
+            <div>
+              <h3 class="font-semibold">治具資料維護</h3>
+              <p class="text-xs text-gray-500">
+                管理治具基本資料、數量、狀態與負責人
+              </p>
             </div>
-            <div class="pagination flex items-center gap-2">
-              <button class="btn btn-ghost text-xs" onclick="goFixturePage('first')">«</button>
-              <button class="btn btn-ghost text-xs" onclick="goFixturePage('prev')">上一頁</button>
-              <button class="btn btn-ghost text-xs" onclick="goFixturePage('next')">下一頁</button>
-              <button class="btn btn-ghost text-xs" onclick="goFixturePage('last')">»</button>
+
+            <div class="flex items-center gap-2">
+              <button class="btn btn-ghost" onclick="exportFixturesCsv()">匯出資料</button>
+              <button class="btn btn-ghost"
+                      onclick="downloadCSV('fixtures_template.csv', fixtureTemplate())">
+                下載範本
+              </button>
+
+              <label class="btn btn-ghost cursor-pointer">
+                <input id="fxCsv"
+                       type="file"
+                       accept=".xlsx,.csv"
+                       class="hidden"
+                       onchange="handleFixtureCsv(this)" />
+                匯入 Excel/CSV
+              </label>
+
+              <button class="btn btn-primary" onclick="openFixtureModal('create')">
+                新增治具
+              </button>
             </div>
           </div>
 
-          <div class="overflow-auto mt-2">
-            <table class="min-w-full text-xs md:text-sm">
-              <thead class="text-left text-gray-500">
-                <tr>
-                  <th class="py-2 pr-4">治具編號</th>
-                  <th class="py-2 pr-4">治具名稱</th>
-                  <th class="py-2 pr-4">類型</th>
-                  <th class="py-2 pr-4">自購 / 客供 / 總數</th>
-                  <th class="py-2 pr-4">儲位</th>
-                  <th class="py-2 pr-4">狀態</th>
-                  <th class="py-2 pr-4">更換週期</th>
-                  <th class="py-2 pr-4">負責人</th>
-                  <th class="py-2 pr-4">備註</th>
-                  <th class="py-2 pr-4">操作</th>
-                </tr>
-              </thead>
-              <tbody id="fxTable"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
+          <!-- ===== 查詢 / 篩選 ===== -->
+          <section class="border rounded-2xl p-3">
+            <div class="grid md:grid-cols-5 gap-3">
 
-      <!-- 治具 新增/編輯 Modal -->
-      <div id="fixtureModal" class="fixed inset-0 bg-black/30 backdrop-blur-sm items-center justify-center hidden z-40">
-        <div class="bg-white rounded-2xl shadow-xl max-w-3xl w-full mx-4 p-5 space-y-4">
-          <div class="flex items-center justify-between">
-            <h3 id="fixtureModalTitle" class="font-semibold text-lg">新增治具</h3>
-            <button class="btn btn-ghost text-sm" onclick="closeFixtureModal()">✕</button>
-          </div>
+              <div class="field">
+                <label class="label-xs">關鍵字</label>
+                <input id="fxSearch"
+                       class="input"
+                       placeholder="治具編號 / 名稱"
+                       onkeydown="if(event.key==='Enter'){fxPage=1;loadFixtureList();}" />
+              </div>
 
-          <form id="fixtureForm" class="space-y-3" onsubmit="submitFixtureForm(event)">
-            <div class="grid md:grid-cols-3 gap-3">
-              <div class="field">
-                <label class="label-xs">治具編號 (fixture_id)</label>
-                <input id="fmFixtureId" class="input" placeholder="L-00017" />
-              </div>
-              <div class="field">
-                <label class="label-xs">治具名稱</label>
-                <input id="fmFixtureName" class="input" placeholder="主板測試治具 A" />
-              </div>
-              <div class="field">
-                <label class="label-xs">治具類型</label>
-                <input id="fmFixtureType" class="input" placeholder="測試治具" />
-              </div>
-            </div>
-
-            <div class="grid md:grid-cols-4 gap-3">
-              <div class="field">
-                <label class="label-xs">序號 (serial_number)</label>
-                <input id="fmSerialNumber" class="input" placeholder="SN2025..." />
-              </div>
-              <div class="field">
-                <label class="label-xs">自購數量</label>
-                <input id="fmSelfQty" type="number" min="0" class="input" />
-              </div>
-              <div class="field">
-                <label class="label-xs">客供數量</label>
-                <input id="fmCustomerQty" type="number" min="0" class="input" />
-              </div>
-              <div class="field">
-                <label class="label-xs">儲存位置</label>
-                <input id="fmStorage" class="input" placeholder="倉庫 A-01" />
-              </div>
-            </div>
-
-            <div class="grid md:grid-cols-4 gap-3">
-              <div class="field">
-                <label class="label-xs">更換週期 (數值)</label>
-                <input id="fmCycle" type="number" min="0" step="0.01" class="input" />
-              </div>
-              <div class="field">
-                <label class="label-xs">週期單位 (cycle_unit)</label>
-                <select id="fmCycleUnit" class="input">
-                  <option value="uses">使用次數</option>
-                  <option value="days">天數</option>
-                  <option value="none">無</option>
-                </select>
-              </div>
               <div class="field">
                 <label class="label-xs">狀態</label>
-                <select id="fmStatus" class="input">
+                <select id="fxStatusFilter"
+                        class="input"
+                        onchange="fxPage=1;loadFixtureList();">
+                  <option value="">全部</option>
                   <option value="正常">正常</option>
                   <option value="返還">返還</option>
                   <option value="報廢">報廢</option>
                 </select>
               </div>
+
               <div class="field">
-                <label class="label-xs">負責人 ID (owner_id)</label>
-                <input id="fmOwnerId" type="number" min="0" class="input" />
+                <label class="label-xs">負責人 (owner_id)</label>
+                <input id="fxOwnerFilter"
+                       class="input"
+                       placeholder="ID（可留空）"
+                       onkeydown="if(event.key==='Enter'){fxPage=1;loadFixtureList();}" />
+              </div>
+
+              <div class="field">
+                <label class="label-xs">每頁筆數</label>
+                <select id="fxPageSize"
+                        class="input"
+                        onchange="fxPage=1;loadFixtureList();">
+                  <option value="8">8</option>
+                  <option value="20">20</option>
+                  <option value="50">50</option>
+                </select>
+              </div>
+
+              <div class="field flex items-end">
+                <button class="btn btn-ghost w-full"
+                        onclick="fxPage=1;loadFixtureList();">
+                  重新整理
+                </button>
+              </div>
+
+            </div>
+          </section>
+
+          <!-- ===== 列表 / 分頁 ===== -->
+          <section class="border rounded-2xl p-3 space-y-2">
+
+            <div class="flex items-center justify-between">
+              <div class="text-sm text-gray-600">
+                共 <span id="fxCount">0</span> 筆，
+                顯示第 <span id="fxPageNow">1</span> /
+                <span id="fxPageMax">1</span> 頁
+              </div>
+
+              <div class="pagination flex items-center gap-2">
+                <button class="btn btn-ghost text-xs"
+                        onclick="goFixturePage('first')">«</button>
+                <button class="btn btn-ghost text-xs"
+                        onclick="goFixturePage('prev')">上一頁</button>
+                <button class="btn btn-ghost text-xs"
+                        onclick="goFixturePage('next')">下一頁</button>
+                <button class="btn btn-ghost text-xs"
+                        onclick="goFixturePage('last')">»</button>
               </div>
             </div>
 
-            <div class="field">
-              <label class="label-xs">備註</label>
-              <textarea id="fmNote" class="input" rows="2"></textarea>
-            </div>
-
-            <div class="flex items-center justify-end gap-2 pt-2 border-t">
-              <button type="button" class="btn btn-ghost" onclick="closeFixtureModal()">取消</button>
-              <button type="submit" class="btn btn-primary">儲存</button>
-            </div>
-          </form>
-        </div>
-      </div>
-
-
-      <!-- 機種資料維護（三段式） -->
-      <div id="subtab-model" class="card p-5 space-y-3 hidden">
-        <div class="flex items-center justify-between">
-          <h3 class="font-semibold">機種資料維護(三段式)</h3>
-          <div class="flex items-center gap-2">
-            <button class="btn btn-ghost" onclick="mmExportModelsCsv()">匯出機種</button>
-            <button class="btn btn-primary" onclick="mmOpenModelModal('create')">新增機種</button>
-          </div>
-        </div>
-
-        <!-- 三欄 Layout -->
-        <div class="grid md:grid-cols-3 gap-3 mt-2">
-          <!-- 左：機種清單 -->
-          <div class="border rounded-2xl p-3 flex flex-col gap-2">
-            <div class="flex items-center justify-between gap-2">
-              <div class="font-semibold text-sm">機種清單</div>
-            </div>
-            <div class="field">
-              <label class="label-xs">搜尋</label>
-              <input id="mmSearch" class="input" placeholder="輸入機種代碼/名稱" onkeydown="if(event.key==='Enter'){ mmLoadModelList(); }" />
-            </div>
-            <button class="btn btn-ghost btn-xs self-start" onclick="mmLoadModelList()">重新整理</button>
-            <div class="text-xs text-gray-500">共 <span id="mmCount">0</span> 筆</div>
-            <div class="overflow-auto border rounded-xl max-h-72">
-              <table class="min-w-full text-xs">
-                <thead class="bg-gray-50 text-gray-500">
+            <div class="overflow-auto">
+              <table class="min-w-full text-xs md:text-sm">
+                <thead class="text-left text-gray-500">
                   <tr>
-                    <th class="py-1.5 px-2 text-left">機種代碼</th>
-                    <th class="py-1.5 px-2 text-left">機種名稱</th>
-                    <th class="py-1.5 px-2 text-left">操作</th>
+                    <th class="py-2 pr-4">治具編號</th>
+                    <th class="py-2 pr-4">治具名稱</th>
+                    <th class="py-2 pr-4">類型</th>
+                    <th class="py-2 pr-4">自購 / 客供 / 總數</th>
+                    <th class="py-2 pr-4">儲位</th>
+                    <th class="py-2 pr-4">狀態</th>
+                    <th class="py-2 pr-4">更換週期</th>
+                    <th class="py-2 pr-4">負責人</th>
+                    <th class="py-2 pr-4">備註</th>
+                    <th class="py-2 pr-4">操作</th>
                   </tr>
                 </thead>
-                <tbody id="mmTable"></tbody>
+                <tbody id="fxTable"></tbody>
               </table>
             </div>
-          </div>
 
-          <!-- 中：機種 ↔ 站點 綁定 + 站點 CRUD -->
-          <div class="border rounded-2xl p-3 flex flex-col gap-2">
-            <div class="flex items-center justify-between gap-2">
-              <div class="font-semibold text-sm">
-                機種站點綁定
-                <span id="msSelectedModelLabel" class="text-xs text-gray-500"></span>
-              </div>
-              <button class="btn btn-ghost btn-xs" onclick="stOpenStationMasterModal()">站點主檔維護</button>
-            </div>
+          </section>
 
-            <div id="msNoModelHint" class="text-xs text-gray-500">
-              請先在左側選擇一個機種。
-            </div>
+        </div>
 
-            <div id="msContent" class="space-y-2 hidden">
-              <!-- 已綁定站點 -->
-              <div>
-                <div class="flex items-center justify-between">
-                  <div class="text-xs font-semibold">已綁定站點</div>
-                  <button class="btn btn-ghost btn-xs" onclick="msReloadForCurrentModel()">重新整理</button>
+          <!-- ========== 負責人管理 ========== -->
+          <div id="admin-owners" class="admin-page card p-5 space-y-4 hidden">
+             <h3 class="font-semibold">負責人管理</h3>
+                  <!-- 查詢 -->
+              <div class="grid md:grid-cols-4 gap-3">
+                <div class="field md:col-span-2">
+                  <label class="label-xs">搜尋</label>
+                  <input id="ownerSearch" class="input" placeholder="姓名 / Email" onkeydown="if(event.key==='Enter'){ownerPage=1;loadOwners();}" />
                 </div>
-                <div class="overflow-auto border rounded-xl max-h-32 mt-1">
-                  <table class="min-w-full text-xs">
-                    <thead class="bg-gray-50 text-gray-500">
-                      <tr>
-                        <th class="py-1 px-2 text-left">代碼</th>
-                        <th class="py-1 px-2 text-left">名稱</th>
-                        <th class="py-1 px-2 text-left">操作</th>
-                      </tr>
-                    </thead>
-                    <tbody id="msBoundTable"></tbody>
-                  </table>
-                </div>
-              </div>
 
-              <!-- 可綁定站點 -->
-              <div>
-                <div class="flex items-center justify-between">
-                  <div class="text-xs font-semibold">可綁定站點</div>
-                </div>
-                <div class="overflow-auto border rounded-xl max-h-32 mt-1">
-                  <table class="min-w-full text-xs">
-                    <thead class="bg-gray-50 text-gray-500">
-                      <tr>
-                        <th class="py-1 px-2 text-left">代碼</th>
-                        <th class="py-1 px-2 text-left">名稱</th>
-                        <th class="py-1 px-2 text-left">操作</th>
-                      </tr>
-                    </thead>
-                    <tbody id="msAvailableTable"></tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- 右：治具需求 -->
-          <div class="border rounded-2xl p-3 flex flex-col gap-2">
-            <div class="font-semibold text-sm">
-              治具需求設定
-              <div class="text-xs text-gray-500">
-                機種：<span id="frSelectedModelLabel">-</span> /
-                站點：<span id="frSelectedStationLabel">-</span>
-              </div>
-            </div>
-
-            <div id="frNoModelStationHint" class="text-xs text-gray-500">
-              請先選擇左側機種，再在中間選擇一個「已綁定站點」。
-            </div>
-
-            <div id="frContent" class="space-y-2 hidden">
-              <!-- 新增治具需求 -->
-              <div class="grid grid-cols-5 gap-2 items-end">
-                <div class="col-span-3 field">
-                  <label class="label-xs">治具</label>
-                  <select id="frFixtureSelect" class="input">
-                    <option value="">選擇治具...</option>
+                <div class="field">
+                  <label class="label-xs">狀態</label>
+                  <select id="ownerFilterActive" class="input" onchange="ownerPage=1;loadOwners();">
+                    <option value="">全部</option>
+                    <option value="1">啟用</option>
+                    <option value="0">停用</option>
                   </select>
                 </div>
-                <div class="col-span-1 field">
-                  <label class="label-xs">需求數量</label>
-                  <input id="frQtyInput" type="number" min="1" class="input" value="1" />
-                </div>
-                <div class="col-span-1">
-                  <button class="btn btn-primary w-full" onclick="frAddRequirement()">新增</button>
+
+                <div class="field flex items-end">
+                  <button class="btn btn-primary w-full" onclick="openOwnerAdd()">新增負責人</button>
                 </div>
               </div>
 
-              <!-- 需求清單 -->
-              <div class="overflow-auto border rounded-xl max-h-64 mt-1">
-                <table class="min-w-full text-xs">
-                  <thead class="bg-gray-50 text-gray-500">
+              <!-- 表格 -->
+              <div class="overflow-auto">
+                <table class="min-w-full text-sm">
+                  <thead class="text-left text-gray-500">
                     <tr>
-                      <th class="py-1 px-2 text-left">治具編號</th>
-                      <th class="py-1 px-2 text-left">治具名稱</th>
-                      <th class="py-1 px-2 text-left">需求數量</th>
-                      <th class="py-1 px-2 text-left">操作</th>
+                      <th class="py-2 pr-4">ID</th>
+                      <th class="py-2 pr-4">主負責人</th>
+                      <th class="py-2 pr-4">副負責人</th>
+                      <th class="py-2 pr-4">Email</th>
+                      <th class="py-2 pr-4">狀態</th>
+                      <th class="py-2 pr-4 text-right">操作</th>
                     </tr>
                   </thead>
-                  <tbody id="frTable"></tbody>
+                  <tbody id="ownerTable"></tbody>
                 </table>
+                <div id="ownerPagination" class="flex gap-2 mt-3 justify-center"></div>
               </div>
-            </div>
+        </div>
+
+
+          <!-- ========== 系統設定（SMTP） ========== -->
+          <div id="admin-system" class="admin-page card p-5 space-y-4 hidden">
+            <h3 class="font-semibold">SMTP / 系統設定</h3>
+                <div class="grid md:grid-cols-3 gap-3">
+                  <div class="field"><label class="label-xs">Email</label><input id="smtpEmail" class="input" placeholder="通知寄送 Email"/></div>
+                  <div class="field"><label class="label-xs">外送郵件伺服器名稱 (SMTP)</label><input id="smtpHost" class="input" placeholder="smtp.example.com"/></div>
+                  <div class="field"><label class="label-xs">埠號 (Port)</label><input id="smtpPort" class="input" placeholder="587"/></div>
+                  <div class="field"><label class="label-xs">認證狀態</label>
+                    <select id="smtpAuthState" class="input">
+                      <option>未認證</option><option>已認證</option>
+                    </select>
+                  </div>
+                  <div class="field"><label class="label-xs">認證帳號</label><input id="smtpUser" class="input" /></div>
+                  <div class="field"><label class="label-xs">認證密碼</label><input id="smtpPass" type="password" class="input" /></div>
+                  <div class="field"><label class="label-xs">寄件者名稱</label><input id="smtpSenderName" class="input" /></div>
+                  <div class="field"><label class="label-xs">寄件者信箱</label><input id="smtpSenderMail" type="email" class="input" /></div>
+                </div>
+                <div class="flex gap-2">
+                  <button class="btn btn-primary" onclick="toast('已儲存 SMTP(模擬)')">儲存</button>
+                  <button class="btn btn-ghost" onclick="toast('測試寄信(模擬)')">測試寄信</button>
+                </div>
           </div>
+
         </div>
       </div>
+
+      <!-- ================= Modal 區（一定要在這層） ================= -->
+
+      <!-- ================= 治具 新增 / 編輯 Modal ================= -->
+        <div id="fixtureModal"
+             class="fixed inset-0 bg-black/30 backdrop-blur-sm items-center justify-center hidden z-40">
+
+          <div class="bg-white rounded-2xl shadow-xl max-w-3xl w-full mx-4 p-5 space-y-4">
+
+            <!-- ===== Header ===== -->
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 id="fixtureModalTitle" class="font-semibold text-lg">
+                  新增治具
+                </h3>
+                <p class="text-xs text-gray-500">
+                  建立或修改治具的基本資料與使用設定
+                </p>
+              </div>
+              <button class="btn btn-ghost text-sm" onclick="closeFixtureModal()">✕</button>
+            </div>
+
+            <!-- ===== Form ===== -->
+            <form id="fixtureForm"
+                  class="space-y-4"
+                  onsubmit="submitFixtureForm(event)">
+
+              <!-- === 基本資料 === -->
+              <section class="space-y-2">
+                <h4 class="text-sm font-semibold text-gray-700">基本資料</h4>
+
+                <div class="grid md:grid-cols-3 gap-3">
+                  <div class="field">
+                    <label class="label-xs">治具編號 (fixture_id)</label>
+                    <input id="fmFixtureId" class="input" placeholder="L-00017" />
+                  </div>
+                  <div class="field">
+                    <label class="label-xs">治具名稱</label>
+                    <input id="fmFixtureName" class="input" placeholder="主板測試治具 A" />
+                  </div>
+                  <div class="field">
+                    <label class="label-xs">治具類型</label>
+                    <input id="fmFixtureType" class="input" placeholder="測試治具" />
+                  </div>
+                </div>
+
+                <div class="grid md:grid-cols-4 gap-3">
+                  <div class="field">
+                    <label class="label-xs">序號 (serial_number)</label>
+                    <input id="fmSerialNumber" class="input" placeholder="SN2025..." />
+                  </div>
+                  <div class="field">
+                    <label class="label-xs">儲存位置</label>
+                    <input id="fmStorage" class="input" placeholder="倉庫 A-01" />
+                  </div>
+                </div>
+              </section>
+
+              <!-- === 數量設定 === -->
+              <section class="space-y-2">
+                <h4 class="text-sm font-semibold text-gray-700">數量設定</h4>
+
+                <div class="grid md:grid-cols-2 gap-3">
+                  <div class="field">
+                    <label class="label-xs">自購數量</label>
+                    <input id="fmSelfQty" type="number" min="0" class="input" />
+                  </div>
+                  <div class="field">
+                    <label class="label-xs">客供數量</label>
+                    <input id="fmCustomerQty" type="number" min="0" class="input" />
+                  </div>
+                </div>
+              </section>
+
+              <!-- === 使用 / 狀態設定 === -->
+              <section class="space-y-2">
+                <h4 class="text-sm font-semibold text-gray-700">使用與狀態</h4>
+
+                <div class="grid md:grid-cols-4 gap-3">
+                  <div class="field">
+                    <label class="label-xs">更換週期 (數值)</label>
+                    <input id="fmCycle"
+                           type="number"
+                           min="0"
+                           step="0.01"
+                           class="input" />
+                  </div>
+
+                  <div class="field">
+                    <label class="label-xs">週期單位</label>
+                    <select id="fmCycleUnit" class="input">
+                      <option value="uses">使用次數</option>
+                      <option value="days">天數</option>
+                      <option value="none">無</option>
+                    </select>
+                  </div>
+
+                  <div class="field">
+                    <label class="label-xs">狀態</label>
+                    <select id="fmStatus" class="input">
+                      <option value="正常">正常</option>
+                      <option value="返還">返還</option>
+                      <option value="報廢">報廢</option>
+                    </select>
+                  </div>
+
+                  <div class="field">
+                    <label class="label-xs">負責人 ID (owner_id)</label>
+                    <input id="fmOwnerId" type="number" min="0" class="input" />
+                  </div>
+                </div>
+              </section>
+
+              <!-- === 備註 === -->
+              <section class="space-y-2">
+                <h4 class="text-sm font-semibold text-gray-700">備註</h4>
+                <div class="field">
+                  <textarea id="fmNote" class="input" rows="2"></textarea>
+                </div>
+              </section>
+
+              <!-- ===== Actions ===== -->
+              <div class="flex items-center justify-end gap-2 pt-3 border-t">
+                <button type="button"
+                        class="btn btn-ghost"
+                        onclick="closeFixtureModal()">
+                  取消
+                </button>
+                <button type="submit" class="btn btn-primary">
+                  儲存
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+
 
       <!-- 機種 Modal -->
       <div id="mmModelModal" class="fixed inset-0 bg-black/30 backdrop-blur-sm items-center justify-center hidden z-40">
@@ -1693,61 +1866,44 @@
         </div>
       </div>
 
-      <!-- 站點 Master Modal -->
-      <div id="stStationModal" class="fixed inset-0 bg-black/30 backdrop-blur-sm items-center justify-center hidden z-40">
-        <div class="bg-white rounded-2xl shadow-xl max-w-3xl w-full mx-4 p-5 space-y-4">
-          <div class="flex items-center justify-between">
-            <h3 class="font-semibold text-lg">站點主檔維護</h3>
-            <button class="btn btn-ghost text-sm" onclick="stCloseStationMasterModal()">✕</button>
-          </div>
-          <div class="grid md:grid-cols-3 gap-3">
-            <div class="field">
-              <label class="label-xs">站點代碼 (station_code)</label>
-              <input id="stCode" class="input" placeholder="如 T1_MP" />
-            </div>
-            <div class="field">
-              <label class="label-xs">站點名稱</label>
-              <input id="stName" class="input" placeholder="如 T1 量產" />
-            </div>
-            <div class="field">
-              <label class="label-xs">備註</label>
-              <input id="stNote" class="input" />
-            </div>
-          </div>
-          <div class="flex items-center justify-between">
-            <div class="text-xs text-gray-500">
-              編輯模式：<span id="stModeLabel">新增</span>
-            </div>
-            <div class="flex gap-2">
-              <button class="btn btn-ghost btn-xs" onclick="stResetForm()">清空</button>
-              <button class="btn btn-primary btn-xs" onclick="stSubmitForm()">儲存</button>
-            </div>
-          </div>
 
-          <div class="border-t pt-3">
-            <div class="flex items-center justify-between mb-1">
-              <div class="text-sm font-semibold">站點列表</div>
-              <button class="btn btn-ghost btn-xs" onclick="stLoadStationMasterList()">重新整理</button>
+        <!-- ===============================
+             站點新增 / 編輯 Modal（全域）
+             =============================== -->
+        <div id="stationModal"
+             class="fixed inset-0 bg-black/30 backdrop-blur-sm hidden z-50 flex items-center justify-center">
+
+          <div class="bg-white rounded-2xl shadow-xl w-full max-w-xl p-5 space-y-4">
+            <div class="flex items-center justify-between">
+              <h3 id="stationModalTitle" class="font-semibold text-lg">新增站點</h3>
+              <button class="btn btn-ghost btn-sm" onclick="closeStationModal()">✕</button>
             </div>
-            <div class="overflow-auto max-h-64 border rounded-xl">
-              <table class="min-w-full text-xs">
-                <thead class="bg-gray-50 text-gray-500">
-                  <tr>
-                    <th class="py-1 px-2 text-left">ID</th>
-                    <th class="py-1 px-2 text-left">代碼</th>
-                    <th class="py-1 px-2 text-left">名稱</th>
-                    <th class="py-1 px-2 text-left">備註</th>
-                    <th class="py-1 px-2 text-left">操作</th>
-                  </tr>
-                </thead>
-                <tbody id="stTable"></tbody>
-              </table>
+
+            <div class="grid md:grid-cols-2 gap-3">
+              <div class="field">
+                <label class="label-xs">站點代碼</label>
+                <input id="stCode" class="input" />
+              </div>
+
+              <div class="field">
+                <label class="label-xs">站點名稱</label>
+                <input id="stName" class="input" />
+              </div>
+
+              <div class="field md:col-span-2">
+                <label class="label-xs">備註</label>
+                <input id="stNote" class="input" />
+              </div>
+            </div>
+
+            <div class="flex justify-end gap-2 pt-3">
+              <button class="btn btn-ghost btn-sm" onclick="closeStationModal()">取消</button>
+              <button class="btn btn-primary btn-sm" onclick="stSubmitForm()">儲存</button>
             </div>
           </div>
         </div>
-      </div>
-</section>
 
+    </section>
 
         <!-- ================================ -->
         <!-- 🟦 Fixture Detail Drawer        -->
@@ -1788,16 +1944,14 @@
         </div>
 
 
-
       <!-- Toast -->
       <div id="toast" class="fixed bottom-4 left-1/2 -translate-x-1/2 hidden">
         <div class="bg-gray-900 text-white px-4 py-2 rounded-xl shadow-lg">訊息</div>
       </div>
 
 
-
-</div>
-
+    </div>
+  </main>
                 <!-- 引入 JavaScript -->
             <!-- ================================ -->
 
@@ -1831,6 +1985,7 @@
             <script src="/js/api/api-auth.js"></script>
             <!-- 認證與登入 UI 控制（loginModal, doLogin, loadCurrentUser） -->
             <script src="/js/app/app-auth.js"></script>
+            <script src="/js/app/app-admin.js"></script>
 
             <!-- 使用者管理 -->
             <script src="/js/api/api-users.js"></script>
@@ -1859,6 +2014,7 @@
             <!-- 機種 -->
             <script src="/js/api/api-machine-models.js"></script>
             <script src="/js/app/app-machine-models.js?v=20241204"></script>
+            <script src="/js/app/app-machine-models-mt.js"></script>
 
             <!-- ================================ -->
             <!-- 🔧 治具主檔 / 收料 / 退料           -->
@@ -1870,6 +2026,7 @@
             <!-- 治具主檔 -->
             <script src="/js/api/api-fixtures.js"></script>
             <script src="/js/app/app-fixtures.js"></script>
+            <script src="/js/app/app-fixtures-mt.js"></script>
 
             <!-- 收料 -->
             <script src="/js/api/api-receipts.js"></script>
@@ -1947,7 +2104,6 @@
       switchLogTab("usage");
     });
     </script>
-
 
   </body>
 </html>

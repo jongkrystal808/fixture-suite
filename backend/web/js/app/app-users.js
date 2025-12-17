@@ -21,6 +21,12 @@ let userPageSize = 20;
 
 document.addEventListener("DOMContentLoaded", () => {
 
+  // 🔐 僅 admin 可使用
+  if (!window.currentUser || window.currentUser.role !== "admin") {
+    console.warn("Not admin — skip user module init");
+    return;
+  }
+
   // 🔥 若本頁根本沒有 userTable，停止執行
   if (!document.getElementById("userTable")) {
     console.warn("User table not found — skip user module init");

@@ -27,6 +27,40 @@
       title: "後台管理"
     }
   };
+  // admin 子頁切換
+    document.querySelectorAll(".admin-menu").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const page = btn.dataset.adminPage;
+        switchAdminPage(page);
+      });
+    });
+
+    function switchAdminPage(page) {
+      // 隱藏所有 admin 子頁
+      document.querySelectorAll(".admin-page").forEach(el => {
+        el.classList.add("hidden");
+      });
+
+      // 顯示指定頁
+      const target = document.getElementById(`admin-${page}`);
+      if (target) {
+        target.classList.remove("hidden");
+      }
+
+      // 更新按鈕樣式
+      document.querySelectorAll(".admin-menu").forEach(btn => {
+        btn.classList.remove("btn-primary");
+        btn.classList.add("btn-outline");
+      });
+
+      const activeBtn = document.querySelector(
+        `.admin-menu[data-admin-page="${page}"]`
+      );
+      if (activeBtn) {
+        activeBtn.classList.add("btn-primary");
+        activeBtn.classList.remove("btn-outline");
+      }
+    }
 
   const tabButtons = Array.from(document.querySelectorAll("[data-tab]"));
   const sections = {};

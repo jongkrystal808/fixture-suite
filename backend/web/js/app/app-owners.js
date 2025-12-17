@@ -19,6 +19,12 @@ let ownerPageSize = 20;
  * ============================================================ */
 document.addEventListener("DOMContentLoaded", () => {
 
+  // 🔐 admin only
+  if (!window.currentUser || window.currentUser.role !== "admin") {
+    console.warn("Not admin — skip owners module init");
+    return;
+  }
+
   // 🔥 若頁面中沒有 ownerTable，直接跳過 owners 模組
   if (!document.getElementById("ownerTable")) {
     console.warn("Owner table not found — skip owners module init");
@@ -58,44 +64,34 @@ async function loadOwners() {
 /* ============================================================
  * 表格渲染
  * ============================================================ */
-function renderOwnerTable(rows) {
-  const tbody = document.getElementById("ownerTable");
-  if (!tbody) return;   // 防呆
+function renderOwnerTable(list) {
+  const table = document.getElementById("ownerTable");
+  if (!table) return;
 
-  tbody.innerHTML = "";
+  table.innerHTML = "";
 
-  if (!rows || rows.length === 0) {
-    tbody.innerHTML = `
-      <tr>
-        <td colspan="6" class="text-center py-4 text-gray-400">
-          查無資料
-        </td>
-      </tr>
+  if (!Array.isArray(list) || list.length === 0) {
+    table.innerHTML = `
+      <tr><td colspan="5" class="text-center text-gray-400 py-6">查無資料</td></tr>
     `;
     return;
   }
 
-  rows.forEach(o => {
-    const tr = document.createElement("tr");
-
-    tr.innerHTML = `
-      <td class="py-2 px-2">${o.id}</td>
-      <td class="py-2 px-2">${o.primary_owner}</td>
-      <td class="py-2 px-2">${o.secondary_owner || ""}</td>
-      <td class="py-2 px-2">${o.email || ""}</td>
-      <td class="py-2 px-2">
-        ${o.is_active 
-          ? "<span class='text-green-600'>啟用</span>" 
-          : "<span class='text-red-600'>停用</span>"
-        }
-      </td>
-      <td class="py-2 px-2 text-right">
-        <button class="btn btn-xs btn-outline" onclick="openOwnerEdit(${o.id})">編輯</button>
-        <button class="btn btn-xs btn-error" onclick="deleteOwner(${o.id})">刪除</button>
-      </td>
-    `;
-
-    tbody.appendChild(tr);
+  list.forEach(o => {
+    table.insertAdjacentHTML("beforeend", `
+      <tr>
+        <td>${o.id}</td>
+        <td>${o.owner_name}</td>
+        <td>${o.email || ""}</td>
+        <td>${o.note || ""}</td>
+        <td class="text-right">
+          <button class="btn btn-xs btn-outline"
+                  onclick="openOwnerEdit('${o.id}')">編輯</button>
+          <button class="btn btn-xs btn-error"
+                  onclick="deleteOwner('${o.id}')">刪除</button>
+        </td>
+      </tr>
+    `);
   });
 }
 
@@ -129,38 +125,46 @@ function openOwnerAdd() {
   document.getElementById("ownerForm").reset();
   document.getElementById("ownerFormMode").value = "add";
   document.getElementById("ownerModalTitle").innerText = "新增負責人";
-  ownerModal.showModal();
+  openOwnerModal();
 }
+
 
 async function submitOwnerForm() {
   const mode = document.getElementById("ownerFormMode").value;
 
-  const payload = {
-    primary_owner: document.getElementById("o_primary").value.trim(),
-    secondary_owner: document.getElementById("o_secondary").value.trim() || null,
-    email: document.getElementById("o_email").value.trim() || null,
-    is_active: document.getElementById("o_active").checked,
-    note: document.getElementById("o_note").value.trim() || null
-  };
+  const id = document.getElementById("o_id").value.trim();
+  const name = document.getElementById("o_name").value.trim();
+  const email = document.getElementById("o_email").value.trim();
+  const note = document.getElementById("o_note").value || null;
 
-  if (!payload.primary_owner) return toast("請輸入負責人姓名");
+  if (!id || !name) {
+    alert("代碼與姓名不可為空");
+    return;
+  }
+
+  const payload = {
+    id,
+    owner_name: name,
+    email: email || null,
+    note,
+    is_active: true
+  };
 
   try {
     if (mode === "add") {
-      await apiCreateOwner(payload);
-      toast("新增負責人成功");
+      await apiJson("/owners", payload, "POST");
+      toast("新增成功");
     } else {
-      const id = document.getElementById("ownerFormId").value;
-      await apiUpdateOwner(id, payload);
+      await apiJson(`/owners/${id}`, payload, "PUT");
       toast("更新成功");
     }
 
-    ownerModal.close();
+    closeOwnerModal();
     loadOwners();
 
   } catch (err) {
     console.error(err);
-    toast("操作失敗", "error");
+    toast(err?.data?.detail || "儲存失敗", "error");
   }
 }
 
@@ -169,34 +173,36 @@ async function submitOwnerForm() {
  * ============================================================ */
 
 async function openOwnerEdit(id) {
-  const data = await apiGetOwner(id);
+  const data = await api(`/owners/${id}`);
 
   document.getElementById("ownerFormMode").value = "edit";
-  document.getElementById("ownerFormId").value = id;
+  document.getElementById("ownerModalTitle").innerText = "編輯負責人";
 
-  document.getElementById("o_primary").value = data.primary_owner;
-  document.getElementById("o_secondary").value = data.secondary_owner || "";
+  document.getElementById("o_id").value = data.id;
+  document.getElementById("o_name").value = data.owner_name;
   document.getElementById("o_email").value = data.email || "";
-  document.getElementById("o_active").checked = data.is_active;
   document.getElementById("o_note").value = data.note || "";
 
-  document.getElementById("ownerModalTitle").innerText = "編輯負責人";
-  ownerModal.showModal();
+  openOwnerModal();
 }
+
 
 /* ============================================================
  * 刪除負責人
  * ============================================================ */
-
 async function deleteOwner(id) {
-  if (!confirm("確定要刪除該負責人？")) return;
+  if (!confirm(`確定刪除負責人 ${id}？`)) return;
 
   try {
-    await apiDeleteOwner(id);
+    await api(`/owners/${id}`, { method: "DELETE" });
     toast("已刪除");
     loadOwners();
   } catch (err) {
     console.error(err);
-    toast("刪除失敗", "error");
+    toast(
+      err?.data?.detail || "此負責人已有治具或站點關聯，無法刪除",
+      "error"
+    );
   }
 }
+

@@ -1,12 +1,29 @@
 /**
- * 站點管理前端控制 (v3.0)
- * 對應 index.html 站點主檔維護 Modal
+ * 站點管理前端控制（Clean v3.1）
+ * 檔案：/web/js/app/app-stations.js
  *
- * ✔ 新版 UI：stStationModal
- * ✔ 正確 DOM：stCode, stName, stNote, stTable
- * ✔ 使用 customer_id（每個 API 必須帶）
- * ✔ 無舊版 stationTable / stationSearch 內容
+ * ✔ 僅支援 stStationModal（div-based）
+ * ✔ station 主鍵統一使用 id
+ * ✔ 無任何舊版 API / 舊命名相容層
+ * ✔ HTML 入口只需 stOpenStationMasterModal()
  */
+
+/* ============================================================
+ * 初始化
+ * ============================================================ */
+
+document.addEventListener("DOMContentLoaded", () => {
+  if (!window.currentUser || window.currentUser.role !== "admin") return;
+
+  if (!window.currentCustomerId) {
+    toast("請先選擇客戶", "warning");
+    return;
+  }
+
+  if (document.getElementById("stTable")) {
+    stLoadStationMasterList();
+  }
+});
 
 /* ============================================================
  * 工具
@@ -17,42 +34,38 @@ function getCurrentCustomerId() {
 }
 
 /* ============================================================
- * 載入站點主檔清單
+ * 載入站點列表
  * ============================================================ */
 
 async function stLoadStationMasterList() {
   const customer_id = getCurrentCustomerId();
-  if (!customer_id) {
-    console.warn("未選擇客戶，無法載入站點");
-    return;
-  }
+  if (!customer_id) return;
 
   try {
     const rows = await apiListStations({ customer_id });
-
     const tbody = document.getElementById("stTable");
     tbody.innerHTML = "";
 
-    if (!rows.length) {
+    if (!rows || !rows.length) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="5" class="text-center py-2 text-gray-400">無資料</td>
+          <td colspan="4" class="text-center py-2 text-gray-400">無資料</td>
         </tr>`;
       return;
     }
 
     rows.forEach(s => {
       const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td class="py-1 px-2">${s.id}</td>
-        <td class="py-1 px-2">${s.station_id}</td>
-        <td class="py-1 px-2">${s.station_name || "-"}</td>
-        <td class="py-1 px-2">${s.note || "-"}</td>
-        <td class="py-1 px-2 text-right">
-          <button class="btn btn-xs btn-outline" onclick="stEdit('${s.station_id}')">編輯</button>
-          <button class="btn btn-xs btn-error" onclick="stDelete('${s.station_id}')">刪除</button>
-        </td>
-      `;
+        tr.innerHTML = `
+          <td class="py-1 px-2">${s.id}</td>
+          <td class="py-1 px-2">${s.id}</td>
+          <td class="py-1 px-2">${s.station_name || "-"}</td>
+          <td class="py-1 px-2">${s.note || "-"}</td>
+          <td class="py-1 px-2 text-right">
+            <button class="btn btn-xs btn-outline" onclick="stEdit('${s.id}')">編輯</button>
+            <button class="btn btn-xs btn-error" onclick="stDelete('${s.id}')">刪除</button>
+          </td>
+        `;
       tbody.appendChild(tr);
     });
 
@@ -63,42 +76,58 @@ async function stLoadStationMasterList() {
 }
 
 /* ============================================================
- * 新增 / 編輯 Modal 控制
+ * Modal 控制
  * ============================================================ */
 
 function stResetForm() {
+  stIsEdit = false;
+  stEditingId = null;
+
   document.getElementById("stCode").value = "";
+  document.getElementById("stCode").disabled = false;
+
   document.getElementById("stName").value = "";
   document.getElementById("stNote").value = "";
-  document.getElementById("stModeLabel").innerText = "新增";
+
+  document.getElementById("stationModalTitle").innerText = "新增站點";
 }
 
+
+
 function stOpenStationMasterModal() {
-  stResetForm();
-  document.getElementById("stStationModal").classList.remove("hidden");
-  document.getElementById("stStationModal").style.display = "flex";
+  const modal = document.getElementById("stationModal");
+  modal.classList.remove("hidden");
+  modal.style.display = "flex";
 }
 
 function stCloseStationMasterModal() {
-  document.getElementById("stStationModal").style.display = "none";
-  document.getElementById("stStationModal").classList.add("hidden");
+  const modal = document.getElementById("stationModal");
+  modal.classList.add("hidden");
 }
+
 
 /* ============================================================
  * 編輯
  * ============================================================ */
-
 async function stEdit(stationId) {
   const customer_id = getCurrentCustomerId();
+  if (!customer_id) return;
 
   try {
-    const data = await apiGetStation({ customer_id, station_id: stationId });
+    const data = await apiGetStation({
+      customer_id,
+      station_id: stationId
+    });
 
-    document.getElementById("stCode").value = data.station_id;
+    stIsEdit = true;
+    stEditingId = stationId;
+
+    document.getElementById("stCode").value = data.id;
+    document.getElementById("stCode").disabled = true; // ⭐ PK 不可改
     document.getElementById("stName").value = data.station_name;
     document.getElementById("stNote").value = data.note || "";
 
-    document.getElementById("stModeLabel").innerText = "編輯";
+    document.getElementById("stationModalTitle").innerText = "編輯站點";
 
     stOpenStationMasterModal();
   } catch (err) {
@@ -107,10 +136,10 @@ async function stEdit(stationId) {
   }
 }
 
-/* ============================================================
- * 儲存（新增 / 修改）
- * ============================================================ */
 
+/* ============================================================
+ * 儲存（新增 / 更新）
+ * ============================================================ */
 async function stSubmitForm() {
   const customer_id = getCurrentCustomerId();
   if (!customer_id) return toast("請先選擇客戶");
@@ -122,21 +151,22 @@ async function stSubmitForm() {
   if (!code) return toast("請輸入站點代碼");
   if (!name) return toast("請輸入站點名稱");
 
-  const payload = {
-    customer_id,
-    station_id: code,
-    station_name: name,
-    note
-  };
-
-  const isEdit = document.getElementById("stModeLabel").innerText === "編輯";
-
   try {
-    if (isEdit) {
-      await apiUpdateStation(payload);
+    if (stIsEdit) {
+      await apiUpdateStation({
+        customer_id,
+        station_id: stEditingId,
+        station_name: name,
+        note
+      });
       toast("更新成功");
     } else {
-      await apiCreateStation(payload);
+      await apiCreateStation({
+        customer_id,
+        station_id: code,
+        station_name: name,
+        note
+      });
       toast("新增成功");
     }
 
@@ -150,66 +180,42 @@ async function stSubmitForm() {
 }
 
 /* ============================================================
- * 刪除
+ * 刪除（唯一入口）
  * ============================================================ */
 
 async function stDelete(stationId) {
-  if (!confirm("確定刪除此站點？")) return;
+  if (!stationId) return;
 
-  const customer_id = getCurrentCustomerId();
+  if (!confirm(`確定要刪除站點 ${stationId}？`)) return;
 
   try {
-    await apiDeleteStation({ customer_id, station_id: stationId });
-    toast("已刪除");
+    await api(`/stations/${stationId}`, {
+      method: "DELETE",
+      params: { customer_id: getCurrentCustomerId() }
+    });
+
+    toast("站點已刪除");
     stLoadStationMasterList();
+
   } catch (err) {
     console.error(err);
     toast("刪除失敗", "error");
   }
 }
 
-/* ============================================================
- * 🟩 重新計算最大可開站數（依model_id）
- * ============================================================ */
-async function recalculateMaxStations() {
-  if (!currentSelectedModel) {
-    toast("請先選擇機種");
-    return;
-  }
-
-  const customer_id = getCurrentCustomerId();
-  if (!customer_id) {
-    toast("無 customer_id");
-    return;
-  }
-
-  try {
-    // 呼叫後端重新計算（你後端 detail 已包含 max_stations）
-    const detail = await apiGetModelDetail(currentSelectedModel);
-
-    // 更新 Drawer：若正在開啟，也重新渲染
-    if (typeof openModelDetail === "function") {
-      openModelDetail(currentSelectedModel);
-    }
-
-    toast("最大可開站數已重新計算");
-  } catch (err) {
-    console.error("recalculateMaxStations() failed:", err);
-    toast("重新計算失敗", "error");
-  }
+function closeStationModal() {
+  stCloseStationMasterModal();
 }
 
-// 全域
-window.recalculateMaxStations = recalculateMaxStations;
+window.closeStationModal = closeStationModal;
 
 /* ============================================================
- * 導出全域
+ * 全域導出（HTML 只允許呼叫這些）
  * ============================================================ */
 
 window.stOpenStationMasterModal = stOpenStationMasterModal;
 window.stCloseStationMasterModal = stCloseStationMasterModal;
 window.stLoadStationMasterList = stLoadStationMasterList;
 window.stSubmitForm = stSubmitForm;
-window.stResetForm = stResetForm;
 window.stEdit = stEdit;
 window.stDelete = stDelete;
