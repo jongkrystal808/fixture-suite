@@ -76,6 +76,7 @@ async function doLogin() {
 
 function doLogout() {
   localStorage.removeItem("auth_token");
+  localStorage.removeItem("current_customer_id"); // ★ 關鍵
 
   const display = document.getElementById("currentUserDisplay");
   const btnLogin = document.getElementById("btnLogin");
@@ -84,6 +85,11 @@ function doLogout() {
   if (display) display.textContent = "未登入";
   if (btnLogin) btnLogin.style.display = "inline-flex";
   if (btnLogout) btnLogout.style.display = "none";
+
+    window.currentCustomerId = null;
+  window.currentUser = null;
+
+  location.reload();
 
   showLoginModal();
 }
@@ -169,6 +175,17 @@ function confirmCustomerSelection() {
 
   document.getElementById("customerSelectModal").close();
   location.reload(); // 切換客戶後重新載入頁面
+}
+function afterLoginSuccess() {
+  const cid = localStorage.getItem("current_customer_id");
+
+  if (!cid) {
+    // 第一次登入 → 一定要選客戶
+    document.getElementById("customerSelectModal").showModal();
+  } else {
+    // 已有客戶 → 顯示在 header
+    setCurrentCustomer(cid);
+  }
 }
 
 /* ============================================================

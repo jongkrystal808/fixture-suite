@@ -15,6 +15,11 @@ from pydantic import BaseModel
 from backend.app.dependencies import get_current_user, get_current_admin
 from backend.app.database import db
 
+from fastapi import APIRouter, Depends, Query, UploadFile, File, HTTPException
+from fastapi.responses import StreamingResponse
+from io import BytesIO
+from openpyxl import Workbook, load_workbook
+
 router = APIRouter(
     prefix="/models",
     tags=["機種 Machine Models"],
@@ -46,6 +51,128 @@ from datetime import datetime
 class ModelResponse(ModelBase):
     created_at: Optional[datetime] = None
 
+
+# ✅ 下載樣本
+@router.get("/template", summary="下載機種匯入樣本（XLSX）")
+async def download_models_template(
+    user=Depends(get_current_user)
+):
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "models"
+
+    # 欄位：你可以依你 DB 欄位調整
+    ws.append(["id", "model_name", "note"])
+
+    # 範例兩筆
+    ws.append(["AWK-1137C", "AWK-1137C", "備註示例"])
+    ws.append(["EDS-108S", "EDS-108S", ""])
+
+    bio = BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+
+    return StreamingResponse(
+        bio,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="models_import_template.xlsx"'}
+    )
+
+
+# ✅ 匯出（依 customer_id）
+@router.get("/export", summary="匯出機種（XLSX）")
+async def export_models_xlsx(customer_id: str = Query(...), user=Depends(get_current_user)):
+    # 你自己的 DB 查詢（請換成你實際 table 欄位）
+    rows = db.execute_query(
+        """
+        SELECT id, model_name, note
+        FROM machine_models
+        WHERE customer_id = %s
+        ORDER BY id
+        """,
+        (customer_id,)
+    )
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "models"
+    ws.append(["id", "model_name", "note"])
+
+    for r in rows:
+        ws.append([r["id"], r.get("model_name", ""), r.get("note", "")])
+
+    bio = BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+
+    return StreamingResponse(
+        bio,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="models_{customer_id}.xlsx"'}
+    )
+
+
+# ✅ 匯入（XLSX）
+@router.post("/import", summary="匯入機種（XLSX）")
+async def import_models_xlsx(
+    customer_id: str = Query(...),
+    file: UploadFile = File(...),
+    user=Depends(get_current_user)
+):
+    if not file.filename.lower().endswith(".xlsx"):
+        raise HTTPException(status_code=400, detail="只接受 .xlsx 檔案")
+
+    content = await file.read()
+    wb = load_workbook(BytesIO(content))
+    if "models" not in wb.sheetnames:
+        raise HTTPException(status_code=400, detail='XLSX 需包含 "models" 工作表')
+
+    ws = wb["models"]
+
+    # 讀 header
+    header = [c.value for c in next(ws.iter_rows(min_row=1, max_row=1))]
+    required = ["id", "model_name", "note"]
+    if header[:3] != required:
+        raise HTTPException(status_code=400, detail=f"欄位錯誤，前 3 欄必須是：{required}")
+
+    imported = 0
+    updated = 0
+    skipped = 0
+
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if not row or not row[0] or not row[1]:
+            skipped += 1
+            continue
+
+        model_id = str(row[0]).strip()
+        model_name = str(row[1]).strip()
+        note = (str(row[2]).strip() if row[2] is not None else "")
+
+        # upsert：存在就更新，不存在就新增（你也可改成「存在就跳過」）
+        exist = db.execute_query(
+            "SELECT id FROM machine_models WHERE customer_id=%s AND id=%s",
+            (customer_id, model_id)
+        )
+
+        if exist:
+            db.execute_update(
+                "UPDATE machine_models SET model_name=%s, note=%s WHERE customer_id=%s AND id=%s",
+                (model_name, note, customer_id, model_id)
+            )
+            updated += 1
+        else:
+            db.execute_update(
+                "INSERT INTO machine_models (customer_id, id, model_name, note) VALUES (%s,%s,%s,%s)",
+                (customer_id, model_id, model_name, note)
+            )
+            imported += 1
+
+    return {
+        "message": "匯入完成",
+        "imported": imported,
+        "updated": updated,
+        "skipped": skipped
+    }
 
 # ============================================================
 # List Models (GET)
@@ -202,3 +329,4 @@ async def delete_model(
         raise HTTPException(404, "機種不存在")
 
     return None
+

@@ -1,430 +1,847 @@
 /* ============================================================
- * app-machine-models.js  (v4.5 - 語法修正版)
- * 新版三段式 UI：
- * 1) 綁定站點
- * 2) 每站治具需求 CRUD
- * 3) 最大可開站數
- *
- * 對應後端 router：/model-detail/*
+ * STAGE MODE (後台三段式 UI 專用)
+ * Stage① 機種清單
+ * Stage② 機種 ↔ 站點
+ * Stage③ 治具需求
  * ============================================================ */
+
+// ===== Modal 狀態 =====
+let meCurrentModelId = null;
+let meCurrentStationId = null;
+
+// ===== Drawer 專用狀態（與 Stage 完全隔離）=====
+let drawerSelectedModel = null;
+
+let stage3FixtureSearchTimer = null;
+
 
 function getCurrentCustomerId() {
   return localStorage.getItem("current_customer_id");
 }
 
-let currentSelectedModel = null;
-let currentSelectedStation = null;
-
 /* ============================================================
- * 重新載入綁定站點 + 可綁定站點
+ * 機種清單
  * ============================================================ */
-async function msReloadForCurrentModel() {
+
+async function mmLoadModelList() {
   const customer_id = getCurrentCustomerId();
-  if (!customer_id || !currentSelectedModel) return;
+  if (!customer_id) return alert("請先選擇客戶");
 
-  // 綁定站點
-  const bound = await apiListModelStations(currentSelectedModel);
+  const search = document.getElementById("mmSearch")?.value.trim() || "";
 
-  // 可綁定站點
-  const available = await apiListAvailableStationsForModel(currentSelectedModel);
+  const params = { customer_id };
+  if (search) params.search = search;
 
-  renderBoundStationsTable(bound);
-  renderAvailableStationsTable(available);
-
-  document.getElementById("msNoModelHint")?.classList.add("hidden");
-  document.getElementById("msContent")?.classList.remove("hidden");
+  try {
+    const list = await apiListMachineModels(params);
+    renderMachineModelTable(list);
+  } catch (err) {
+    console.error(err);
+    toast("載入機種清單失敗", "error");
+  }
 }
 
-/* --------------------- 綁定站點列表 ----------------------- */
-function renderBoundStationsTable(rows) {
-  const tbody = document.getElementById("msBoundTable");
-  tbody.innerHTML = "";
+function renderMachineModelTable(list) {
+  const tbody = document.getElementById("mmTable");
+  const count = document.getElementById("mmCount");
+  if (!tbody) return;
 
-  if (!rows || rows.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="3" class="text-gray-400 py-1 text-center">無資料</td></tr>`;
+  tbody.innerHTML = "";
+  count && (count.textContent = list?.length || 0);
+
+  if (!list?.length) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="3" class="py-4 text-center text-gray-400">
+          無資料
+        </td>
+      </tr>`;
     return;
   }
 
-  rows.forEach((s) => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td class="py-1 px-2">${s.station_id}</td>
-      <td class="py-1 px-2">${s.station_name || "-"}</td>
-      <td class="py-1 px-2 text-right flex gap-2 justify-end">
-        <button class="btn btn-xs btn-outline"
-            onclick="openStationRequirements('${s.station_id}', '${s.station_name}')">
-          治具需求
-        </button>
-        <button class="btn btn-xs btn-ghost"
-            onclick="msUnbindStation('${s.station_id}')">
-          移除
-        </button>
-      </td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
-/* --------------------- 可綁定站點 ----------------------- */
-function renderAvailableStationsTable(rows) {
-  const tbody = document.getElementById("msAvailableTable");
-  tbody.innerHTML = "";
-
-  if (!rows || rows.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="3" class="text-gray-400 py-1 text-center">無可綁定站點</td></tr>`;
-    return;
-  }
-
-  rows.forEach((s) => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td class="py-1 px-2">${s.station_id}</td>
-      <td class="py-1 px-2">${s.station_name || "-"}</td>
-      <td class="py-1 px-2 text-right">
-        <button class="btn btn-primary btn-xs"
-                onclick="msBindStation('${s.station_id}')">綁定</button>
-      </td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
-/* --------------------- 綁定站點 ----------------------- */
-async function msBindStation(stationId) {
-  await apiBindStationToModel(currentSelectedModel, stationId);
-  msReloadForCurrentModel();
-}
-
-/* --------------------- 解除綁定 ----------------------- */
-async function msUnbindStation(stationId) {
-  await apiUnbindStationFromModel(currentSelectedModel, stationId);
-  msReloadForCurrentModel();
-}
-
-/* ============================================================
- * 🔥 打開「治具需求編輯」 (某站點)
- * ============================================================ */
-async function openStationRequirements(stationId, stationName) {
-  currentSelectedStation = stationId;
-
-  const model_id = currentSelectedModel;
-
-  document.getElementById("stationDetailArea").classList.remove("hidden");
-  document.getElementById("stationDetailTitle").textContent = `${stationId} - ${stationName}`;
-
-  loadStationRequirements(model_id, stationId);
-}
-
-/* ------------------------------------------------------------
- * 讀取該站點所有治具需求
- * ------------------------------------------------------------ */
-async function loadStationRequirements(model_id, station_id) {
-  const list = await apiListFixtureRequirements(model_id, station_id);
-  renderStationRequirements(list);
-}
-
-/* ------------------------------------------------------------
- * 渲染列表
- * ------------------------------------------------------------ */
-function renderStationRequirements(list) {
-  const tbody = document.getElementById("stationDetailTable");
-  tbody.innerHTML = "";
-
-  if (!list.length) {
-    tbody.innerHTML = `<tr><td colspan="5" class="py-3 text-gray-400 text-center">
-        尚未設定治具需求
-    </td></tr>`;
-    return;
-  }
-
-  list.forEach((r) => {
-    const max_station = r.required_qty > 0
-      ? Math.floor((r.available_qty || 0) / r.required_qty)
-      : "-";
-
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${r.fixture_id}</td>
-      <td>${r.fixture_name}</td>
-      <td>${r.required_qty}</td>
-      <td>${r.available_qty}</td>
-      <td>${max_station}</td>
-      <td class="py-1 flex gap-2 justify-center">
-        <button class="btn btn-xs btn-outline"
-            onclick="openEditRequirementModal(${r.id}, ${r.required_qty}, '${r.note || ""}')">
-          編輯
-        </button>
-        <button class="btn btn-xs btn-error text-white"
-            onclick="deleteRequirement(${r.id})">
+  list.forEach(m => {
+    tbody.insertAdjacentHTML("beforeend", `
+      <tr>
+        <td class="px-3 py-2">${m.id}</td>
+        <td class="px-3 py-2">${m.model_name}</td>
+        <td class="px-3 py-2">
+          <button class="btn btn-xs btn-outline"
+                  onclick="openModelEditModal('${m.id}')">
+            修改
+          </button>
+           <button class="btn btn-error btn-xs"
+                onclick="stageDeleteModel('${m.id}')">
           刪除
         </button>
-      </td>
-    `;
-    tbody.appendChild(tr);
+        </td>
+      </tr>
+    `);
   });
 }
 
-/* ============================================================
- * 🟦 Modal：新增治具需求
- * ============================================================ */
-function openAddRequirementModal() {
-  document.getElementById("reqModalTitle").textContent = "新增治具需求";
-  document.getElementById("reqModalRequiredQty").value = "";
-  document.getElementById("reqModalFixtureId").value = "";
-  document.getElementById("reqModalNote").value = "";
-  document.getElementById("reqModalMode").value = "create";
-  document.getElementById("requirementModal").style.display = "flex";
+
+async function stageDeleteModel(modelId) {
+  if (!modelId) return;
+
+  const ok = confirm(
+    `⚠️ 確定要刪除機種「${modelId}」？\n\n` +
+    `此操作會：\n` +
+    `• 刪除該機種\n` +
+    `• 解除所有站點綁定\n` +
+    `• 刪除所有治具需求\n\n` +
+    `⚠️ 此操作無法復原`
+  );
+
+  if (!ok) return;
+
+  try {
+    await apiDeleteMachineModel(modelId);
+
+    toast(`機種 ${modelId} 已刪除`);
+
+    // 🔄 只需要刷新機種清單
+    await mmLoadModelList();
+
+  } catch (err) {
+    console.error(err);
+    toast(err.message || "刪除失敗", "error");
+  }
 }
 
-function closeRequirementModal() {
-  document.getElementById("requirementModal").style.display = "none";
-}
 
 /* ============================================================
- * 🟧 Modal：編輯治具需求
+ * 機種編輯 Modal
  * ============================================================ */
-function openEditRequirementModal(id, qty, note) {
-  document.getElementById("reqModalTitle").textContent = "編輯治具需求";
-  document.getElementById("reqModalMode").value = "edit";
-  document.getElementById("reqModalReqId").value = id;
-  document.getElementById("reqModalRequiredQty").value = qty;
-  document.getElementById("reqModalNote").value = note || "";
-  document.getElementById("requirementModal").style.display = "flex";
+
+async function openModelEditModal(modelId) {
+  meCurrentModelId = modelId;
+  meCurrentStationId = null;
+
+  const modal = document.getElementById("modelEditModal");
+  modal.classList.remove("hidden");
+
+  document.getElementById("meModelId").textContent = `（${modelId}）`;
+  document.getElementById("meSelectedStationLabel").textContent = "";
+
+  await meReloadStations();
 }
 
+function closeModelEditModal() {
+  meCurrentModelId = null;
+  meCurrentStationId = null;
+
+  document.getElementById("modelEditModal")
+    ?.classList.add("hidden");
+}
+
+
 /* ============================================================
- * 新增 or 編輯治具需求的提交按鈕
+ * Modal：站點綁定
  * ============================================================ */
-async function submitRequirementModal() {
-  const mode = document.getElementById("reqModalMode").value;
-  const model_id = currentSelectedModel;
-  const station_id = currentSelectedStation;
 
-  const required_qty = parseInt(document.getElementById("reqModalRequiredQty").value);
-  const note = document.getElementById("reqModalNote").value;
+async function meReloadStations() {
+  if (!meCurrentModelId) return;
 
-  if (mode === "create") {
-    const fixture_id = document.getElementById("reqModalFixtureId").value;
-    if (!fixture_id) return alert("請輸入治具編號");
+  const customer_id = getCurrentCustomerId();
 
-    await apiCreateFixtureRequirement(model_id, station_id, {
-      fixture_id,
-      required_qty,
-      note,
-    });
+  const detail = await apiGetModelDetail(meCurrentModelId);
+  const bound = detail.stations || [];
 
-  } else {
-    const req_id = document.getElementById("reqModalReqId").value;
+  const allStations = await apiListStations({ customer_id });
+  const boundIds = new Set(bound.map(s => s.station_id));
+  const available = allStations.filter(s => !boundIds.has(s.id));
 
-    await apiUpdateFixtureRequirement(req_id, {
-      required_qty,
-      note,
-    });
+  renderMeStations(bound, available);
+}
+
+function renderMeStations(bound, available) {
+  const box = document.getElementById("meStationPanel");
+  if (!box) return;
+
+  box.innerHTML = `
+    <div class="mb-4">
+      <div class="text-xs font-semibold mb-1">已綁定站點</div>
+      ${bound.length
+        ? bound.map(s => `
+            <div class="flex items-center justify-between py-1">
+              <span class="text-sm">
+                ${s.station_id} - ${s.station_name || ""}
+              </span>
+              <div class="flex gap-1">
+                <button class="btn btn-xs btn-outline"
+                        onclick="meSelectStation('${s.station_id}', '${s.station_name || ""}')">
+                  治具
+                </button>
+                <button class="btn btn-xs btn-error"
+                        onclick="meUnbindStation('${s.station_id}')">
+                  解綁
+                </button>
+              </div>
+            </div>
+          `).join("")
+        : `<div class="text-xs text-gray-400">尚未綁定站點</div>`
+      }
+    </div>
+
+    <div>
+      <div class="text-xs font-semibold mb-1">可綁定站點</div>
+      ${available.length
+        ? available.map(s => `
+            <div class="flex items-center justify-between py-1">
+              <span class="text-sm">
+                ${s.id} - ${s.station_name}
+              </span>
+              <button class="btn btn-xs btn-primary"
+                      onclick="meBindStation('${s.id}', '${s.station_name}')">
+                綁定
+              </button>
+            </div>
+          `).join("")
+        : `<div class="text-xs text-gray-400">無可綁定站點</div>`
+      }
+    </div>
+  `;
+}
+
+async function meBindStation(stationId) {
+  await apiBindStation({
+    customer_id: getCurrentCustomerId(),
+    model_id: meCurrentModelId,
+    station_id: stationId,
+  });
+  toast("站點已綁定");
+  await meReloadStations();
+}
+
+async function meUnbindStation(stationId) {
+  const detail = await apiGetModelDetail(meCurrentModelId);
+  const count = (detail.requirements || [])
+    .filter(r => r.station_id === stationId).length;
+
+  if (!confirm(`此站點目前有 ${count} 筆治具需求，確定要解綁並刪除？`)) {
+    return;
   }
 
-  closeRequirementModal();
-  loadStationRequirements(model_id, station_id);
+  await apiUnbindStation({
+    customer_id: getCurrentCustomerId(),
+    model_id: meCurrentModelId,
+    station_id: stationId,
+  });
+
+  toast("站點已解綁");
+
+  if (meCurrentStationId === stationId) {
+    meCurrentStationId = null;
+    document.getElementById("meFixturePanel").innerHTML =
+      `<div class="text-xs text-gray-400">請選擇站點</div>`;
+  }
+
+  await meReloadStations();
 }
 
 /* ============================================================
- * 刪除治具需求
+ * Modal：選擇站點 → 治具需求
  * ============================================================ */
-async function deleteRequirement(req_id) {
-  if (!confirm("確定要刪除這筆治具需求嗎？")) return;
 
-  await apiDeleteFixtureRequirement(req_id);
-  loadStationRequirements(currentSelectedModel, currentSelectedStation);
+async function meSelectStation(stationId, stationName) {
+  meCurrentStationId = stationId;
+
+  document.getElementById("meSelectedStationLabel").textContent =
+    `${stationId} ${stationName || ""}`;
+
+  await meReloadFixtures();
 }
 
 
+async function meReloadFixtures() {
+  const panel = document.getElementById("meFixturePanel");
+  if (!panel) return;
+
+  if (!meCurrentModelId || !meCurrentStationId) {
+    panel.innerHTML = `<div class="text-xs text-gray-400">請選擇站點</div>`;
+    return;
+  }
+
+  const detail = await apiGetModelDetail(meCurrentModelId);
+
+  const requirements = (detail.requirements || [])
+    .filter(r => r.station_id === meCurrentStationId);
+
+  renderMeFixturePanel(requirements);
+}
+
+
+function renderMeFixturePanel(requirements) {
+  const panel = document.getElementById("meFixturePanel");
+
+  panel.innerHTML = `
+    <!-- 新增治具需求 -->
+    <div class="mb-3 relative">
+      <label class="label-xs">新增治具（輸入治具編號）</label>
+      <input
+        id="meFixtureInput"
+        class="input"
+        placeholder="例如 C-0008"
+        autocomplete="off"
+        oninput="meSearchFixture(this.value)"
+      />
+      <div
+        id="meFixtureSuggest"
+        class="absolute left-0 right-0 top-full z-50
+               bg-white border rounded-xl shadow
+               mt-1 hidden max-h-60 overflow-auto text-sm">
+      </div>
+    </div>
+
+    <div class="flex gap-2 mb-4">
+      <input id="meFixtureQty" type="number" min="1"
+             class="input w-24" value="1" />
+      <button class="btn btn-primary"
+              onclick="meAddRequirement()">
+        新增
+      </button>
+    </div>
+
+    <!-- 已綁治具 -->
+    <div class="border rounded-xl overflow-auto max-h-64">
+      <table class="min-w-full text-xs">
+        <thead class="bg-gray-50 text-gray-500">
+          <tr>
+            <th class="py-1 px-2 text-left">治具</th>
+            <th class="py-1 px-2 text-left">需求</th>
+            <th class="py-1 px-2 text-left">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${
+            requirements.length
+              ? requirements.map(r => `
+                  <tr>
+                    <td class="px-2 py-1">
+                      ${r.fixture_id}
+                    </td>
+                    <td class="px-2 py-1">
+                      ${r.required_qty}
+                    </td>
+                    <td class="px-2 py-1">
+                      <button class="btn btn-xs btn-outline"
+                        onclick="meEditRequirement(${r.id}, ${r.required_qty})">
+                        修改
+                      </button>
+                      <button class="btn btn-xs btn-error"
+                        onclick="meDeleteRequirement(${r.id})">
+                        刪除
+                      </button>
+                    </td>
+                  </tr>
+                `).join("")
+              : `<tr>
+                   <td colspan="3"
+                       class="text-center text-gray-400 py-4">
+                     尚未設定治具需求
+                   </td>
+                 </tr>`
+          }
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+
+let meSelectedFixtureId = null;
+let meFixtureSearchTimer = null;
+
+async function meSearchFixture(keyword) {
+  const box = document.getElementById("meFixtureSuggest");
+  meSelectedFixtureId = null;
+
+  clearTimeout(meFixtureSearchTimer);
+
+  if (!keyword || keyword.length < 2) {
+    box.classList.add("hidden");
+    return;
+  }
+
+  meFixtureSearchTimer = setTimeout(async () => {
+    const customer_id = getCurrentCustomerId();
+
+    const resp = await apiSearchFixtures({
+      customer_id: getCurrentCustomerId(),
+      q: keyword,
+      limit: 20,
+    });
+
+const results = Array.isArray(resp) ? resp : [];
+
+
+    // 排除已綁
+    const detail = await apiGetModelDetail(meCurrentModelId);
+    const boundIds = new Set(
+      (detail.requirements || [])
+        .filter(r => r.station_id === meCurrentStationId)
+        .map(r => r.fixture_id)
+    );
+
+    const filtered = results.filter(f => !boundIds.has(f.fixture_id));
+
+    box.innerHTML = filtered.length
+      ? filtered.map(f => `
+          <div class="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+               onclick="meSelectFixture('${f.fixture_id}')">
+            ${f.fixture_id}
+          </div>
+        `).join("")
+      : `<div class="px-3 py-2 text-gray-400">無符合治具</div>`;
+
+    box.classList.remove("hidden");
+  }, 300);
+}
+
+function meSelectFixture(fixtureId) {
+  meSelectedFixtureId = fixtureId;
+  document.getElementById("meFixtureInput").value = fixtureId;
+  document.getElementById("meFixtureSuggest").classList.add("hidden");
+}
+
+
+async function meAddRequirement() {
+  const qty = Number(document.getElementById("meFixtureQty").value);
+
+  if (!meSelectedFixtureId || qty <= 0) {
+    return toast("請選擇治具並輸入數量", "warning");
+  }
+
+  await apiAddRequirement({
+    customer_id: getCurrentCustomerId(),
+    model_id: meCurrentModelId,
+    station_id: meCurrentStationId,
+    fixture_id: meSelectedFixtureId,
+    required_qty: qty,
+  });
+
+  toast("新增成功");
+  meSelectedFixtureId = null;
+  document.getElementById("meFixtureInput").value = "";
+
+  await meReloadFixtures();
+}
+
+async function meEditRequirement(reqId, qty) {
+  const newQty = Number(prompt("輸入新需求數量", qty));
+  if (!newQty || newQty <= 0) return;
+
+  await apiUpdateRequirement(reqId, { required_qty: newQty });
+  toast("已更新");
+  await meReloadFixtures();
+}
+
+async function meDeleteRequirement(reqId) {
+  if (!confirm("確定刪除這筆治具需求？")) return;
+
+  await apiDeleteRequirement(reqId);
+  toast("已刪除");
+  await meReloadFixtures();
+}
+
+
+
+
+
+
 /* ============================================================
- * 🟦 Model Detail Drawer（v4.5 語法修正版）
+ * 機種新增 / 編輯 Modal（最小可用版）
  * ============================================================ */
-async function openModelDetail(modelId) {
-  currentSelectedModel = modelId;
+
+function mmOpenModelModal(mode, modelId = null) {
+  const modal = document.getElementById("mmModelModal");
+  const title = document.getElementById("mmModelModalTitle");
+  const form = document.getElementById("mmModelForm");
+
+  if (!modal || !form) {
+    console.error("mmModelModal or mmModelForm not found");
+    return;
+  }
+
+  form.reset();
+  form.dataset.mode = mode;
+  form.dataset.id = modelId || "";
+
+  if (mode === "create") {
+    title.textContent = "新增機種";
+    document.getElementById("mmModelId").disabled = false;
+  } else {
+    title.textContent = "編輯機種";
+    document.getElementById("mmModelId").disabled = true;
+  }
+
+  modal.classList.remove("hidden");
+}
+
+// 一定要掛到 window，HTML onclick 才找得到
+window.mmOpenModelModal = mmOpenModelModal;
+
+function mmCloseModelModal() {
+  const modal = document.getElementById("mmModelModal");
+  if (!modal) return;
+
+  modal.classList.add("hidden");
+
+  // （可選）清掉表單與狀態
+  const form = document.getElementById("mmModelForm");
+  form?.reset();
+
+  // 清除 dataset，避免殘留狀態
+  if (form) {
+    delete form.dataset.mode;
+    delete form.dataset.id;
+  }
+}
+
+// ⚠️ 一定要掛到 window，HTML onclick 才找得到
+window.mmCloseModelModal = mmCloseModelModal;
+
+
+async function submitModelForm() {
+  const form = document.getElementById("mmModelForm");
+  if (!form) return;
+
+  const mode = form.dataset.mode;
+  const modelId = document.getElementById("mmModelId").value.trim();
+  const modelName = document.getElementById("mmModelName").value.trim();
+  const note = document.getElementById("mmModelNote")?.value || "";
+
+  if (!modelId || !modelName) {
+    return toast("請填寫機種代碼與名稱", "warning");
+  }
+
+  const payload = {
+    customer_id: getCurrentCustomerId(),
+    id: modelId,
+    model_name: modelName,
+    note,
+  };
+
+  try {
+    if (mode === "create") {
+      await apiCreateMachineModel(payload);
+      toast("機種新增成功");
+    } else {
+      await apiUpdateMachineModel(modelId, payload);
+      toast("機種更新成功");
+    }
+
+    // 關閉機種基本資料 Modal
+    document.getElementById("mmModelModal")?.classList.add("hidden");
+
+    // 重新載入機種清單
+    await mmLoadModelList();
+
+  } catch (err) {
+    console.error(err);
+    toast(err.message || "儲存失敗", "error");
+  }
+}
+
+window.submitModelForm = submitModelForm;
+
+
+let stage3SelectedFixtureId = null;
+
+async function stage3SearchFixture(keyword) {
+  const box = document.getElementById("frFixtureSuggest");
+  stage3SelectedFixtureId = null;
+
+  if (!keyword || keyword.length < 2) {
+    box.classList.add("hidden");
+    box.innerHTML = "";
+    return;
+  }
+
+  // debounce，避免每打一次字就打 API
+  clearTimeout(stage3FixtureSearchTimer);
+  stage3FixtureSearchTimer = setTimeout(async () => {
+    try {
+      const customer_id = getCurrentCustomerId();
+
+      // 🔥 使用 fixtures API（你已經有）
+      const res = await apiListFixtures({
+        customer_id,
+        search: keyword,
+        limit: 20,
+      });
+
+      const list = res.fixtures || [];
+
+      if (!list.length) {
+        box.innerHTML = `
+          <div class="px-3 py-2 text-xs text-gray-400">
+            查無符合治具
+          </div>`;
+        box.classList.remove("hidden");
+        return;
+      }
+
+      box.innerHTML = list.map(f => `
+        <div
+          class="px-3 py-2 text-xs cursor-pointer hover:bg-gray-100"
+          onclick="stage3SelectFixture('${f.id}', '${f.fixture_name}')"
+        >
+          <span class="font-mono">${f.id}</span>
+          <span class="text-gray-500"> - ${f.fixture_name}</span>
+        </div>
+      `).join("");
+
+      box.classList.remove("hidden");
+    } catch (err) {
+      console.error(err);
+      box.classList.add("hidden");
+    }
+  }, 300);
+}
+
+
+function stage3SelectFixture(fixtureId, fixtureName) {
+  stage3SelectedFixtureId = fixtureId;
+
+  document.getElementById("frFixtureInput").value =
+    `${fixtureId} - ${fixtureName}`;
+
+  const box = document.getElementById("frFixtureSuggest");
+  box.innerHTML = "";
+  box.classList.add("hidden");
+}
+
+
+function downloadBlob(blob, filename) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+async function mmExportModelsXlsx() {
+  const token = localStorage.getItem("auth_token");
+  const customer_id = getCurrentCustomerId();
+
+  if (!customer_id) {
+    return toast("尚未選擇客戶", "warning");
+  }
+
+  const url = `/api/v2/models/export?customer_id=${encodeURIComponent(customer_id)}`;
+
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || "匯出失敗");
+    }
+
+    // ✅ 關鍵：一定要 blob
+    const blob = await res.blob();
+
+    // ✅ 瀏覽器下載
+    const downloadUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = `models_${customer_id}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+
+    document.body.removeChild(a);
+    URL.revokeObjectURL(downloadUrl);
+
+  } catch (err) {
+    console.error(err);
+    toast("機種匯出失敗", "error");
+  }
+}
+
+window.mmExportModelsXlsx = mmExportModelsXlsx;
+
+
+async function mmDownloadModelsTemplate() {
+  const token = localStorage.getItem("auth_token");
+  const customer_id = getCurrentCustomerId();
+
+  if (!customer_id) {
+    return toast("尚未選擇客戶", "warning");
+  }
+
+  try {
+    const res = await fetch(
+      `/api/v2/models/template?customer_id=${customer_id}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    if (!res.ok) {
+      throw new Error("下載失敗");
+    }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "models_import_template.xlsx";
+    a.click();
+
+    URL.revokeObjectURL(url);
+
+  } catch (err) {
+    console.error(err);
+    toast("下載範本失敗", "error");
+  }
+}
+
+window.mmDownloadModelsTemplate = mmDownloadModelsTemplate;
+
+
+
+async function mmImportModels(file) {
+  console.log("📦 file =", file);
+  console.log("📄 file.name =", file?.name);
+  console.log("📄 file.type =", file?.type);
+
+  if (!file) return;
+
+  if (!file.name.toLowerCase().endsWith(".xlsx")) {
+    return toast("僅支援 .xlsx Excel 檔案", "warning");
+  }
+
+  const token = localStorage.getItem("auth_token");
+  const customer_id = getCurrentCustomerId();
+
+  if (!customer_id) {
+    return toast("尚未選擇客戶", "warning");
+  }
+
+  const fd = new FormData();
+  fd.append("file", file);
+
+  try {
+    const res = await fetch(
+      `/api/v2/models/import?customer_id=${encodeURIComponent(customer_id)}`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          // ⚠️ 不要加 Content-Type，瀏覽器會自己處理 multipart
+        },
+        body: fd,
+      }
+    );
+
+    let data = null;
+    try {
+      data = await res.json();
+    } catch {
+      data = null;
+    }
+
+    if (!res.ok) {
+      throw new Error(data?.detail || "匯入失敗");
+    }
+
+    // ✅ 對齊後端欄位
+    toast(
+      `匯入完成：新增 ${data.imported} 筆、更新 ${data.updated} 筆、跳過 ${data.skipped} 筆`
+    );
+
+    await mmLoadModelList();
+
+  } catch (err) {
+    console.error(err);
+    toast(err.message || "匯入失敗", "error");
+  }
+}
+
+window.mmImportModels = mmImportModels;
+
+/* 🔧 給 HTML onchange 用的轉接函式（如果你有用） */
+function mmImportModelsXlsx(file) {
+  if (!file) return;
+  mmImportModels(file);
+}
+window.mmImportModelsXlsx = mmImportModelsXlsx;
+
+
+/* ============================================================
+ * DRAWER MODE (機種詳情 Drawer 專用)
+ * ============================================================ */
+async function openModelDetailDrawer(modelId) {
+  drawerSelectedModel = modelId;   // ✅ Drawer 自己用
 
   const drawer = document.getElementById("modelDetailDrawer");
   const box = document.getElementById("modelDetailContent");
+
+  if (!drawer || !box) return;
 
   drawer.classList.remove("translate-x-full");
   box.innerHTML = `<div class="p-4 text-gray-500">載入中...</div>`;
 
   try {
     const data = await apiGetModelDetail(modelId);
-    const m = data.model;
-    const stations = data.stations;
-    const requirements = data.requirements;
-    const capacity = data.capacity;
-
-    box.innerHTML = `
-<section class="space-y-6">
-
-  <!-- Tabs: 分頁選項 -->
-  <div class="border-b border-gray-200">
-    <ul class="flex space-x-4">
-      <li>
-        <button id="tab-basic" 
-                class="tab-button px-4 py-2 text-sm font-medium text-gray-600 hover:text-blue-600 border-b-2 border-transparent transition-colors" 
-                onclick="showTab('basic')">
-          基本資料
-        </button>
-      </li>
-      <li>
-        <button id="tab-stations" 
-                class="tab-button px-4 py-2 text-sm font-medium text-gray-600 hover:text-blue-600 border-b-2 border-transparent transition-colors" 
-                onclick="showTab('stations')">
-          綁定站點
-        </button>
-      </li>
-      <li>
-        <button id="tab-requirements" 
-                class="tab-button px-4 py-2 text-sm font-medium text-gray-600 hover:text-blue-600 border-b-2 border-transparent transition-colors" 
-                onclick="showTab('requirements')">
-          治具需求
-        </button>
-      </li>
-      <li>
-        <button id="tab-capacity" 
-                class="tab-button px-4 py-2 text-sm font-medium text-gray-600 hover:text-blue-600 border-b-2 border-transparent transition-colors" 
-                onclick="showTab('capacity')">
-          最大開站數
-        </button>
-      </li>
-    </ul>
-  </div>
-
-  <!-- 基本資料 -->
-  <div id="basic" class="tab-content p-4">
-    <div class="border p-4 rounded-xl bg-white shadow-md">
-      <h3 class="text-lg font-semibold mb-3">基本資料</h3>
-      <div class="grid grid-cols-2 gap-3 text-sm">
-        <div><span class="font-medium text-gray-700">機種代碼：</span>${m.id}</div>
-        <div><span class="font-medium text-gray-700">名稱：</span>${m.model_name}</div>
-        <div><span class="font-medium text-gray-700">客戶：</span>${m.customer_id}</div>
-        <div class="col-span-2"><span class="font-medium text-gray-700">備註：</span>${m.note || "-"}</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 綁定站點 -->
-  <div id="stations" class="tab-content p-4 hidden">
-    <div class="border p-4 rounded-xl bg-white shadow-md">
-      <h3 class="text-lg font-semibold mb-3">綁定站點</h3>
-      ${stations.length
-        ? `<ul class="list-disc pl-6 text-sm space-y-1">${stations.map(
-            (s) => `<li>${s.station_id} - ${s.station_name}</li>`
-          ).join("")}</ul>`
-        : `<p class="text-gray-500 text-sm">無綁定站點</p>`
-      }
-    </div>
-  </div>
-
-  <!-- 治具需求 -->
-  <div id="requirements" class="tab-content p-4 hidden">
-    <div class="border p-4 rounded-xl bg-white shadow-md">
-      <h3 class="text-lg font-semibold mb-3">每站治具需求</h3>
-      <div class="space-y-3">
-      ${requirements.length
-        ? requirements
-            .map(
-              (r) => `
-          <div class="border rounded-lg p-3 bg-gray-50 text-sm space-y-1">
-            <div><span class="font-medium text-gray-700">站點：</span>${r.station_id}</div>
-            <div><span class="font-medium text-gray-700">治具：</span>${r.fixture_id} - ${r.fixture_name}</div>
-            <div><span class="font-medium text-gray-700">需求數量：</span>${r.required_qty}</div>
-            <div><span class="font-medium text-gray-700">可用數量：</span>${r.available_qty}</div>
-          </div>`
-            )
-            .join("")
-        : `<p class="text-gray-500 text-sm">無治具需求</p>`
-      }
-      </div>
-    </div>
-  </div>
-
-  <!-- 最大開站數 -->
-  <div id="capacity" class="tab-content p-4 hidden">
-    <div class="border p-4 rounded-xl bg-white shadow-md">
-      <h3 class="text-lg font-semibold mb-3">最大可開站數</h3>
-      <div class="space-y-3">
-      ${capacity.length
-        ? capacity
-            .map(
-              (c) => `
-          <div class="border rounded-lg p-3 bg-green-50 text-sm space-y-1">
-            <div><span class="font-medium text-gray-700">站點：</span>${c.station_id}</div>
-            <div><span class="font-medium text-green-700">最大可開：</span>${c.max_station} 站</div>
-            <div class="text-xs text-gray-600 mt-1">
-              (瓶頸治具：${c.bottleneck_fixture_id}，可提供 ${c.bottleneck_qty})
-            </div>
-          </div>`
-            )
-            .join("")
-        : `<p class="text-gray-500 text-sm">未計算或無資料</p>`
-      }
-      </div>
-    </div>
-  </div>
-
-</section>
-    `;
-
-    showTab('basic');
-
-  } catch (error) {
-    console.error('載入機種詳情失敗:', error);
-    box.innerHTML = `<div class="p-4 text-red-500">載入失敗：${error.message}</div>`;
+    renderModelDetailDrawer(data);
+  } catch (err) {
+    console.error(err);
+    box.innerHTML = `<div class="p-4 text-red-500">載入失敗</div>`;
   }
 }
 
-/* ============================================================
- * Tab 切換函數
- * ============================================================ */
-function showTab(tabName) {
-  const tabContent = document.getElementById(tabName);
-  const tabButton = document.getElementById(`tab-${tabName}`);
 
-  if (!tabContent || !tabButton) {
-    console.error(`Tab or tab button with ID "${tabName}" not found.`);
-    return;
-  }
+function renderModelDetailDrawer(data) {
+  const { model, stations, requirements, capacity } = data;
+  const box = document.getElementById("modelDetailContent");
 
-  // 隱藏所有 tab 內容
-  const tabs = document.querySelectorAll('.tab-content');
-  tabs.forEach(tab => tab.classList.add('hidden'));
+  box.innerHTML = `
+    <section class="space-y-6">
+      <!-- 基本資料 -->
+      <div>
+        <h3 class="font-semibold">${model.id}</h3>
+        <p>${model.model_name}</p>
+      </div>
 
-  // 移除所有按鈕的 active 樣式
-  const buttons = document.querySelectorAll('.tab-button');
-  buttons.forEach(button => {
-    button.classList.remove('text-blue-600', 'border-blue-600');
-    button.classList.add('text-gray-600', 'border-transparent');
-  });
+      <!-- 綁定站點 -->
+      <div>
+        <h4>綁定站點</h4>
+        <ul>
+          ${stations.map(s => `<li>${s.station_id} - ${s.station_name}</li>`).join("")}
+        </ul>
+      </div>
 
-  // 顯示被選中的 tab 內容並高亮按鈕
-  tabContent.classList.remove('hidden');
-  tabButton.classList.remove('text-gray-600', 'border-transparent');
-  tabButton.classList.add('text-blue-600', 'border-blue-600');
+      <!-- 最大開站數 -->
+      <div>
+        <h4>最大可開站數</h4>
+        ${capacity.map(c => `
+          <div>${c.station_id}：${c.max_station}</div>
+        `).join("")}
+      </div>
+    </section>
+  `;
 }
 
-
-/* ============================================================
- * 關閉 Drawer
- * ============================================================ */
-function closeModelDetail() {
-  document.getElementById("modelDetailDrawer").classList.add("translate-x-full");
+function closeModelDetailDrawer() {
+    drawerSelectedModel = null;  // 清乾淨，避免誤用
+    document.getElementById("modelDetailDrawer")
+    ?.classList.add("translate-x-full");
 }
 
-/* ============================================================
- * Export Functions
- * ============================================================ */
-window.msReloadForCurrentModel = msReloadForCurrentModel;
-window.msBindStation = msBindStation;
-window.msUnbindStation = msUnbindStation;
-window.openStationRequirements = openStationRequirements;
-window.openAddRequirementModal = openAddRequirementModal;
-window.openEditRequirementModal = openEditRequirementModal;
-window.submitRequirementModal = submitRequirementModal;
-window.deleteRequirement = deleteRequirement;
-window.openModelDetail = openModelDetail;
-window.closeModelDetail = closeModelDetail;
-window.showTab = showTab;
+/* Drawer Tab 專用 */
+function drawerShowTab(tabName) {
+  document.querySelectorAll("#modelDetailContent .tab-content")
+    .forEach(el => el.classList.add("hidden"));
+  document.getElementById(tabName)?.classList.remove("hidden");
+}

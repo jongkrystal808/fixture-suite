@@ -28,23 +28,26 @@ function apiListAvailableStations(params) {
 //  3️⃣ 綁定站點
 //////////////////////////////
 
-function apiBindStation(params) {
+function apiBindStation({ customer_id, model_id, station_id }) {
   return api("/model-detail/stations", {
     method: "POST",
-    body: params,
+    params: { customer_id, model_id },
+    body: JSON.stringify({ station_id }),
   });
 }
+
 
 //////////////////////////////
 //  4️⃣ 取消綁定
 //////////////////////////////
 
-function apiUnbindStation(params) {
+function apiUnbindStation({ customer_id, model_id, station_id }) {
   return api("/model-detail/stations", {
     method: "DELETE",
-    params,
+    params: { customer_id, model_id, station_id },
   });
 }
+
 
 //////////////////////////////
 //  5️⃣ 查詢某站點的治具需求
@@ -57,24 +60,24 @@ function apiListRequirements(params) {
 //////////////////////////////
 //  6️⃣ 新增治具需求
 //////////////////////////////
-
 function apiAddRequirement(data) {
   return api("/model-detail/requirements", {
     method: "POST",
-    body: data,
+    body: JSON.stringify(data),
   });
 }
+
 
 //////////////////////////////
 //  7️⃣ 更新治具需求
 //////////////////////////////
-
 function apiUpdateRequirement(req_id, data) {
   return api(`/model-detail/requirements/${req_id}`, {
     method: "PUT",
-    body: data,
+    body: JSON.stringify(data),
   });
 }
+
 
 //////////////////////////////
 //  8️⃣ 刪除治具需求

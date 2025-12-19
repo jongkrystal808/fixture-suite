@@ -8,11 +8,40 @@
  */
 
 /* ============================================================
+ * 🔐 Admin Only Guard（後台模組語意宣告）
+ * ============================================================ */
+(function () {
+  if (!window.currentUser || window.currentUser.role !== "admin") {
+    console.warn("[app-owners] not admin, module disabled");
+    return;
+  }
+})();
+
+
+/* ============================================================
  * 分頁狀態
  * ============================================================ */
 
 let ownerPage = 1;
 let ownerPageSize = 20;
+
+/* ============================================================
+ * 🧭 Admin Sidebar Entry
+ * 後台管理 → 負責人管理
+ * ============================================================ */
+function loadAdminOwners() {
+  // admin 檢查（保險，不重複執行 init）
+  if (!window.currentUser || window.currentUser.role !== "admin") {
+    toast("無權限", "error");
+    return;
+  }
+
+  ownerPage = 1;
+  loadOwners();
+}
+
+window.loadAdminOwners = loadAdminOwners;
+
 
 /* ============================================================
  * 初始化

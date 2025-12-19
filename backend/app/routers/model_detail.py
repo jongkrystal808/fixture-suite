@@ -188,7 +188,6 @@ async def bind_station(
 # --------------------------------------------------------------
 # 4️⃣ 移除綁定
 # --------------------------------------------------------------
-
 @router.delete("/stations")
 async def unbind_station(
     customer_id: str = Query(...),
@@ -199,19 +198,34 @@ async def unbind_station(
     ensure_model(customer_id, model_id)
     ensure_station(customer_id, station_id)
 
+    # 1️⃣ 先刪除該站點下所有治具需求
+    db.execute_update(
+        """
+        DELETE FROM fixture_requirements
+        WHERE customer_id=%s
+          AND model_id=%s
+          AND station_id=%s
+        """,
+        (customer_id, model_id, station_id)
+    )
+
+    # 2️⃣ 再刪除站點綁定
     affected = db.execute_update(
         """
         DELETE FROM model_stations
-        WHERE customer_id=%s AND model_id=%s AND station_id=%s
+        WHERE customer_id=%s
+          AND model_id=%s
+          AND station_id=%s
         """,
         (customer_id, model_id, station_id)
     )
 
     if affected == 0:
-        raise HTTPException(404, "綁定不存在")
+        raise HTTPException(404, "站點尚未綁定")
 
-    return {"message": "移除成功"}
-
+    return {
+        "message": "站點已解綁，並已刪除該站點下所有治具需求"
+    }
 
 # --------------------------------------------------------------
 # 5️⃣ 查詢某站點的治具需求

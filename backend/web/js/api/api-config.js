@@ -127,6 +127,8 @@ function api(path, options = {}) {
     if (!res.ok) {
       console.error(`❌ API ERROR: ${path}`, res.status, data);
 
+  console.error("❌ API ERROR DATA:", JSON.stringify(data, null, 2));
+
       const err = new Error(
         `API ${path} failed: ${res.status} ${data?.detail || res.statusText || ""}`
       );

@@ -81,12 +81,14 @@ async function apiGetFixture(id) {
  *
  * ⚠ customer_id 不用傳，由 token 決定
  */
-async function apiCreateFixture(fixture) {
+function apiCreateFixture(data) {
   return api("/fixtures", {
     method: "POST",
-    body: JSON.stringify(fixture)
+    params: { customer_id: data.customer_id }, // ✅ query
+    body: data                                  // ✅ body 只放 fixture 資料
   });
 }
+
 
 /**
  * 更新治具（FixtureUpdate）
@@ -164,3 +166,62 @@ async function apiGetFixtureStatus(customer_id) {
 
 window.apiGetFixtureStatistics = apiGetFixtureStatistics;
 window.apiGetFixtureStatus = apiGetFixtureStatus;
+
+
+function apiSearchFixtures(params = {}) {
+  const q = new URLSearchParams();
+
+  if (params.customer_id) q.set("customer_id", params.customer_id);
+  if (params.q) q.set("q", params.q);
+  if (params.limit) q.set("limit", params.limit);
+
+  return api(`/fixtures/search?${q.toString()}`);
+}
+
+window.apiSearchFixtures = apiSearchFixtures;
+
+
+/**
+ * ===============================
+ * Fixtures Import / Export API
+ * ===============================
+ */
+
+/**
+ * 匯出治具（XLSX）
+ * - 直接用 window.open
+ * - 避免 fetch + blob 處理
+ */
+function apiExportFixturesXlsx(customer_id) {
+  window.open(
+    `/api/v2/fixtures/export?customer_id=${encodeURIComponent(customer_id)}`,
+    "_blank"
+  );
+}
+
+/**
+ * 下載治具匯入樣本（XLSX）
+ */
+function apiDownloadFixturesTemplate() {
+  window.open(`/api/v2/fixtures/template`, "_blank");
+}
+
+/**
+ * 匯入治具（XLSX）
+ */
+async function apiImportFixturesXlsx(customer_id, file) {
+  const fd = new FormData();
+  fd.append("file", file);
+
+  return api(`/fixtures/import`, {
+    method: "POST",
+    params: { customer_id },
+    body: fd,
+    // ⚠️ api() 偵測到 FormData 時，不能強制加 Content-Type
+  });
+}
+
+/* ===== 導出到全域（對齊 models） ===== */
+window.apiExportFixturesXlsx = apiExportFixturesXlsx;
+window.apiDownloadFixturesTemplate = apiDownloadFixturesTemplate;
+window.apiImportFixturesXlsx = apiImportFixturesXlsx;

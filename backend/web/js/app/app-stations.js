@@ -9,6 +9,40 @@
  */
 
 /* ============================================================
+ * 🔐 Admin Only Guard（後台模組語意宣告）
+ * ============================================================ */
+(function () {
+  if (!window.currentUser || window.currentUser.role !== "admin") {
+    console.warn("[app-stations] not admin, module disabled");
+    return;
+  }
+})();
+
+
+/* ============================================================
+ * 狀態變數（全域）
+ * ============================================================ */
+let stIsEdit = false;
+let stEditingId = null;
+
+/* ============================================================
+ * 🧭 Admin Sidebar Entry
+ * 後台管理 → 站點管理
+ * ============================================================ */
+function loadAdminStations() {
+  const customer_id = getCurrentCustomerId();
+  if (!customer_id) {
+    toast("請先選擇客戶", "warning");
+    return;
+  }
+
+  stLoadStationMasterList();
+}
+
+window.loadAdminStations = loadAdminStations;
+
+
+/* ============================================================
  * 初始化
  * ============================================================ */
 
@@ -93,11 +127,9 @@ function stResetForm() {
 }
 
 
-
 function stOpenStationMasterModal() {
   const modal = document.getElementById("stationModal");
   modal.classList.remove("hidden");
-  modal.style.display = "flex";
 }
 
 function stCloseStationMasterModal() {
@@ -114,9 +146,8 @@ async function stEdit(stationId) {
   if (!customer_id) return;
 
   try {
-    const data = await apiGetStation({
-      customer_id,
-      station_id: stationId
+    const data = await apiGetStation(stationId, {
+      params: { customer_id }
     });
 
     stIsEdit = true;
@@ -155,18 +186,18 @@ async function stSubmitForm() {
     if (stIsEdit) {
       await apiUpdateStation({
         customer_id,
-        station_id: stEditingId,
+        id: stEditingId,
         station_name: name,
         note
       });
       toast("更新成功");
     } else {
       await apiCreateStation({
-        customer_id,
-        station_id: code,
-        station_name: name,
-        note
-      });
+          customer_id,
+          id: code,              // ✅ 改成 id
+          station_name: name,
+          note
+        });
       toast("新增成功");
     }
 
@@ -204,8 +235,14 @@ async function stDelete(stationId) {
 }
 
 function closeStationModal() {
-  stCloseStationMasterModal();
+  const modal = document.getElementById("stationModal");
+  if (!modal) {
+    console.error("stationModal not found");
+    return;
+  }
+  modal.classList.add("hidden");
 }
+
 
 window.closeStationModal = closeStationModal;
 

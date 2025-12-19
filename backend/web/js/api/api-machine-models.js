@@ -1,158 +1,86 @@
 /**
- * 機種 / 站點 / 治具需求 API (v3.5)
- *
- * 後端 Router:
- * - /models
- * - /models/{id}
- * - /models/{id}/detail   <-- ★ 新增 for 機種詳細頁
- * - /stations
- * - /model-detail
- * - /fixture-requirements
+ * api-machine-models.js
+ * 僅負責「機種」CRUD
  */
 
-/* ============================================================
- * 🔵 機種列表（支援 search / skip / limit） ← 查詢頁需要
- * ============================================================ */
+/* ================= 機種列表 ================= */
 async function apiListMachineModels(params = {}) {
   const q = new URLSearchParams();
 
-  // ❗必須帶 customer_id
   if (params.customer_id) q.set("customer_id", params.customer_id);
-
-  if (params.search) q.set("q", params.search);   // 後端是 q，不是 search
+  if (params.search) q.set("q", params.search);
   if (params.skip !== undefined) q.set("skip", params.skip);
   if (params.limit !== undefined) q.set("limit", params.limit);
 
   return api(`/models?${q.toString()}`);
 }
 
-
-/* ============================================================
- * 🔵 單一機種基本資料
- * ============================================================ */
+/* ================= 單一機種 ================= */
 async function apiGetMachineModel(modelId) {
   return api(`/models/${encodeURIComponent(modelId)}`);
 }
 
-/* ============================================================
- * 🔵 機種詳細資料（Model Detail Drawer 用） ← ★需要 customer_id
- * ============================================================ */
-async function apiGetModelDetail(modelId) {
-  const customerId = localStorage.getItem("current_customer_id");
-  if (!customerId) {
-    throw new Error("未選擇客戶，無法查詢機種詳情");
-  }
-
-  const qs = `customer_id=${encodeURIComponent(customerId)}`;
-
-  return api(`/models/${encodeURIComponent(modelId)}/detail?${qs}`);
-}
-
-/* ============================================================
- * 🔵 新增機種
- * ============================================================ */
+/* ================= 新增 ================= */
 async function apiCreateMachineModel(payload) {
   return api("/models", {
     method: "POST",
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
   });
 }
 
-/* ============================================================
- * 🔵 修改機種
- * ============================================================ */
+/* ================= 修改 ================= */
 async function apiUpdateMachineModel(modelId, payload) {
   return api(`/models/${encodeURIComponent(modelId)}`, {
     method: "PUT",
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
   });
 }
 
-/* ============================================================
- * 🔵 刪除機種
- * ============================================================ */
+/* ================= 刪除 ================= */
 async function apiDeleteMachineModel(modelId) {
   return api(`/models/${encodeURIComponent(modelId)}`, {
-    method: "DELETE"
+    method: "DELETE",
   });
 }
 
-/* ============================================================
- * 🔵 機種 ↔ 站點 綁定
- * ============================================================ */
-async function apiListModelStations(modelId) {
-  return api(`/model-detail/${encodeURIComponent(modelId)}`);
-}
-
-async function apiListAvailableStationsForModel(modelId) {
-  return api(`/model-detail/${encodeURIComponent(modelId)}/available`);
-}
-
-async function apiBindStationToModel(modelId, stationId) {
-  return api(`/model-detail/${encodeURIComponent(modelId)}`, {
-    method: "POST",
-    body: JSON.stringify({ station_id: stationId })
-  });
-}
-
-async function apiUnbindStationFromModel(modelId, stationId) {
-  return api(`/model-detail/${encodeURIComponent(modelId)}/${encodeURIComponent(stationId)}`, {
-    method: "DELETE"
-  });
-}
-
-/* ============================================================
- * 🔵 治具需求 fixture_requirements
- * ============================================================ */
-async function apiListFixtureRequirements(modelId, stationId) {
-  return api(`/fixture-requirements/${encodeURIComponent(modelId)}/${encodeURIComponent(stationId)}`);
-}
-
-async function apiCreateFixtureRequirement(modelId, stationId, payload) {
-  return api(`/fixture-requirements/${encodeURIComponent(modelId)}/${encodeURIComponent(stationId)}`, {
-    method: "POST",
-    body: JSON.stringify(payload)
-  });
-}
-
-async function apiUpdateFixtureRequirement(reqId, payload) {
-  return api(`/fixture-requirements/item/${reqId}`, {
-    method: "PUT",
-    body: JSON.stringify(payload)
-  });
-}
-
-async function apiDeleteFixtureRequirement(reqId) {
-  return api(`/fixture-requirements/item/${reqId}`, {
-    method: "DELETE"
-  });
-}
-async function apiGetMachineModelDetail(modelId) {
-  return api(`/models/${modelId}/detail`);
-}
-
+/* ================= Model Detail ================= */
 async function apiGetModelDetail(modelId) {
   const customer_id = localStorage.getItem("current_customer_id");
-  return api(`/model-detail/${modelId}/detail?customer_id=${customer_id}`);
+  return api(`/model-detail/${modelId}/detail`, {
+    params: { customer_id },
+  });
 }
 
+function apiExportModelsXlsx(customer_id) {
+  // 直接下載：不要用 fetch，避免 blob 處理麻煩
+  window.open(`/api/v2/models/export?customer_id=${encodeURIComponent(customer_id)}`, "_blank");
+}
 
-/* ============================================================
- * 🔵 導出到全域
- * ============================================================ */
+function apiDownloadModelsTemplate() {
+  window.open(`/api/v2/models/template`, "_blank");
+}
+
+async function apiImportModelsXlsx(customer_id, file) {
+  const fd = new FormData();
+  fd.append("file", file);
+
+  return api(`/models/import`, {
+    method: "POST",
+    params: { customer_id },
+    body: fd,
+    // ⚠️ 你的 api() 若會預設 JSON header，需讓它偵測 FormData 時不要強塞 Content-Type
+  });
+}
+
+window.apiExportModelsXlsx = apiExportModelsXlsx;
+window.apiDownloadModelsTemplate = apiDownloadModelsTemplate;
+window.apiImportModelsXlsx = apiImportModelsXlsx;
+
+
+/* ================= 導出 ================= */
 window.apiListMachineModels = apiListMachineModels;
 window.apiGetMachineModel = apiGetMachineModel;
-window.apiGetModelDetail = apiGetModelDetail;
 window.apiCreateMachineModel = apiCreateMachineModel;
 window.apiUpdateMachineModel = apiUpdateMachineModel;
 window.apiDeleteMachineModel = apiDeleteMachineModel;
-
-window.apiListModelStations = apiListModelStations;
-window.apiListAvailableStationsForModel = apiListAvailableStationsForModel;
-window.apiBindStationToModel = apiBindStationToModel;
-window.apiUnbindStationFromModel = apiUnbindStationFromModel;
-
-window.apiListFixtureRequirements = apiListFixtureRequirements;
-window.apiCreateFixtureRequirement = apiCreateFixtureRequirement;
-window.apiUpdateFixtureRequirement = apiUpdateFixtureRequirement;
-window.apiDeleteFixtureRequirement = apiDeleteFixtureRequirement;
+window.apiGetModelDetail = apiGetModelDetail;

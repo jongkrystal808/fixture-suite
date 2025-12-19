@@ -9,6 +9,18 @@
  * ✔ owner / status 篩選
  */
 
+
+/* ============================================================
+ * 🔐 Admin Only Guard（後台模組宣告）
+ * ============================================================ */
+(function () {
+  if (!window.currentUser || window.currentUser.role !== "admin") {
+    console.warn("[app-fixtures] not admin, module disabled");
+    return;
+  }
+})();
+
+
 /* ============================================================
  * 取得 customer_id
  * ============================================================ */
@@ -33,6 +45,24 @@ window.apiGetOwnersSimple = apiGetOwnersSimple;
  * ============================================================ */
 
 let fxPage = 1;
+
+/* ============================================================
+ * 🧭 Admin Sidebar Entry
+ * 後台管理 → 治具管理
+ * ============================================================ */
+function loadAdminFixtures() {
+  const customer_id = getCurrentCustomerId();
+  if (!customer_id) {
+    alert("請先選擇客戶");
+    return;
+  }
+
+  fxPage = 1;
+  loadFixtureList();
+}
+
+window.loadAdminFixtures = loadAdminFixtures;
+
 
 const fxTable = document.getElementById("fxTable");
 const fxCount = document.getElementById("fxCount");
@@ -269,6 +299,7 @@ async function submitFixtureForm(e) {
   const payload = {
     customer_id,
     id: document.getElementById("fmFixtureId").value.trim(),
+      fixture_id: document.getElementById("fmFixtureId").value.trim(),
     fixture_name: document.getElementById("fmFixtureName").value.trim(),
     fixture_type: document.getElementById("fmFixtureType").value.trim(),
     serial_number: document.getElementById("fmSerialNumber").value.trim(),
@@ -344,3 +375,216 @@ fxPageSizeSelect?.addEventListener("change", () => {
   fxPage = 1;
   loadFixtureList();
 });
+
+window.mmOpenModelModal = mmOpenModelModal;
+
+//export fixtures
+async function exportFixtures() {
+  const params = {
+    search: document.getElementById("fixtureSearch")?.value,
+    status: document.getElementById("fixtureStatus")?.value,
+    owner_id: document.getElementById("fixtureOwner")?.value,
+  };
+
+  const res = await api("/fixtures/export", {
+    params,
+  });
+
+  // 後端直接回傳檔案
+  window.location.href = apiURL("/fixtures/export") + "?" +
+    new URLSearchParams(params).toString();
+}
+
+
+//import fixtures
+async function importFixtures(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  const fd = new FormData();
+  fd.append("file", file);
+
+  try {
+    await api("/fixtures/import", {
+      method: "POST",
+      body: fd,
+    });
+
+    alert("匯入完成");
+    loadFixtures(); // 重新整理
+  } catch (err) {
+    alert("匯入失敗：" + err.message);
+  } finally {
+    input.value = "";
+  }
+}
+
+//download import template
+function downloadFixtureTemplate() {
+  window.location.href = apiURL("/fixtures/import/template");
+}
+
+function downloadBlob(blob, filename) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+async function fxExportFixturesXlsx() {
+  const token = localStorage.getItem("auth_token");
+  const customer_id = getCurrentCustomerId();
+
+  if (!customer_id) {
+    return toast("尚未選擇客戶", "warning");
+  }
+
+  const url =
+    `/api/v2/fixtures/export?customer_id=${encodeURIComponent(customer_id)}`;
+
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || "匯出失敗");
+    }
+
+    // ✅ 一定要 blob
+    const blob = await res.blob();
+
+    // ✅ 瀏覽器下載
+    const downloadUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = `fixtures_${customer_id}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+
+    document.body.removeChild(a);
+    URL.revokeObjectURL(downloadUrl);
+
+  } catch (err) {
+    console.error(err);
+    toast("治具匯出失敗", "error");
+  }
+}
+
+window.fxExportFixturesXlsx = fxExportFixturesXlsx;
+
+
+async function fxDownloadFixturesTemplate() {
+  const token = localStorage.getItem("auth_token");
+  const customer_id = getCurrentCustomerId();
+
+  if (!customer_id) {
+    return toast("尚未選擇客戶", "warning");
+  }
+
+  try {
+    const res = await fetch(
+      `/api/v2/fixtures/template?customer_id=${encodeURIComponent(customer_id)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    if (!res.ok) {
+      throw new Error("下載失敗");
+    }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "fixtures_import_template.xlsx";
+    a.click();
+
+    URL.revokeObjectURL(url);
+
+  } catch (err) {
+    console.error(err);
+    toast("下載治具範本失敗", "error");
+  }
+}
+
+window.fxDownloadFixturesTemplate = fxDownloadFixturesTemplate;
+
+
+async function fxImportFixtures(file) {
+  console.log("📦 file =", file);
+  console.log("📄 file.name =", file?.name);
+  console.log("📄 file.type =", file?.type);
+
+  if (!file) return;
+
+  if (!file.name.toLowerCase().endsWith(".xlsx")) {
+    return toast("僅支援 .xlsx Excel 檔案", "warning");
+  }
+
+  const token = localStorage.getItem("auth_token");
+  const customer_id = getCurrentCustomerId();
+
+  if (!customer_id) {
+    return toast("尚未選擇客戶", "warning");
+  }
+
+  const fd = new FormData();
+  fd.append("file", file);
+
+  try {
+    const res = await fetch(
+      `/api/v2/fixtures/import?customer_id=${encodeURIComponent(customer_id)}`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          // ⚠️ 不要手動加 Content-Type
+        },
+        body: fd,
+      }
+    );
+
+    let data = null;
+    try {
+      data = await res.json();
+    } catch {
+      data = null;
+    }
+
+    if (!res.ok) {
+      throw new Error(data?.detail || "匯入失敗");
+    }
+
+    // ✅ 對齊後端回傳結構
+    toast(
+      `匯入完成：新增 ${data.imported} 筆、更新 ${data.updated} 筆、跳過 ${data.skipped} 筆`
+    );
+
+    await loadFixtures(); // 🔁 重新載入治具列表
+
+  } catch (err) {
+    console.error(err);
+    toast(err.message || "匯入治具失敗", "error");
+  }
+}
+
+window.fxImportFixtures = fxImportFixtures;
+
+function fxImportFixturesXlsx(file) {
+  if (!file) return;
+  fxImportFixtures(file);
+}
+
+window.fxImportFixturesXlsx = fxImportFixturesXlsx;
+

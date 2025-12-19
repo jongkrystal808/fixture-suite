@@ -1,6 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File
+from fastapi.responses import StreamingResponse
+from openpyxl import Workbook
+from io import BytesIO
 from typing import Optional, List
 import traceback
+from fastapi import APIRouter, Depends, Query, UploadFile, File, HTTPException
+from fastapi.responses import StreamingResponse
+from openpyxl import Workbook, load_workbook
+from io import BytesIO
 from backend.app.database import db
 from backend.app.dependencies import get_current_user, get_current_admin
 from backend.app.models.fixture import (
@@ -23,30 +30,36 @@ router = APIRouter(
 # ============================================================
 # 建立治具 (CREATE)
 # ============================================================
-
 @router.post("", response_model=FixtureResponse, summary="建立新治具")
 async def create_fixture(
     data: FixtureCreate,
+    customer_id: str = Query(..., description="客戶 ID"),
     current_user: dict = Depends(get_current_user)
 ):
     try:
-        # 檢查客戶存在
+        # -------------------------------------------------
+        # 1️⃣ 檢查客戶存在
+        # -------------------------------------------------
         customer_check = "SELECT id FROM customers WHERE id = %s"
-        if not db.execute_query(customer_check, (data.customer_id,)):
+        if not db.execute_query(customer_check, (customer_id,)):
             raise HTTPException(status_code=400, detail="客戶不存在")
 
-        # 檢查治具是否重複（同客戶）
+        # -------------------------------------------------
+        # 2️⃣ 檢查治具是否重複（同客戶）
+        # -------------------------------------------------
         exist_check = """
             SELECT id FROM fixtures
             WHERE id = %s AND customer_id = %s
         """
-        if db.execute_query(exist_check, (data.id, data.customer_id)):
+        if db.execute_query(exist_check, (data.fixture_id, customer_id)):
             raise HTTPException(
                 status_code=400,
-                detail=f"治具 {data.id} 已存在於客戶 {data.customer_id} 下"
+                detail=f"治具 {data.fixture_id} 已存在於客戶 {customer_id} 下"
             )
 
-        # 插入新治具（v3.0 欄位）
+        # -------------------------------------------------
+        # 3️⃣ 插入新治具
+        # -------------------------------------------------
         insert_sql = """
             INSERT INTO fixtures (
                 id,
@@ -81,8 +94,8 @@ async def create_fixture(
         """
 
         params = (
-            data.id,
-            data.customer_id,
+            data.fixture_id,
+            customer_id,                     # ✅ 改用 query 的 customer_id
             data.fixture_name,
             data.fixture_type,
             data.serial_number,
@@ -98,13 +111,52 @@ async def create_fixture(
 
         db.execute_update(insert_sql, params)
 
-        # 回傳剛建立的治具
-        return await get_fixture(data.id, data.customer_id)
+        # -------------------------------------------------
+        # 4️⃣ 回傳剛建立的治具
+        # -------------------------------------------------
+        return await get_fixture(data.fixture_id, customer_id)
 
     except Exception as e:
         print("❌ [create_fixture] ERROR:\n", traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"建立治具失敗: {repr(e)}")
 
+
+
+# ============================================================
+# 🔍 治具模糊搜尋（一定要在 /{fixture_id} 之前）
+# ============================================================
+@router.get("/search", summary="治具模糊搜尋（for Modal / Stage）")
+async def search_fixtures(
+    customer_id: str = Query(...),
+    q: str = Query(..., min_length=1),
+    limit: int = Query(20, le=50),
+    user=Depends(get_current_user)
+):
+    try:
+        rows = db.execute_query(
+            """
+            SELECT id AS fixture_id, fixture_name
+            FROM fixtures
+            WHERE customer_id = %s
+              AND LOWER(id) LIKE LOWER(%s)
+            ORDER BY id
+            LIMIT %s
+            """,
+            (customer_id, f"%{q}%", limit)
+        )
+
+        # 🔥 重點：搜尋「找不到」不是錯誤
+        return rows or []
+
+    except HTTPException:
+        # 🔥 不要包 HTTPException
+        raise
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"查詢治具失敗: {str(e)}"
+        )
 
 # ============================================================
 # 取得治具詳情 (READ)
@@ -416,6 +468,8 @@ async def fixture_statistics(customer_id: str = Query(...)):
         raise HTTPException(status_code=500, detail=f"查詢統計資料失敗: {repr(e)}")
 
 
+
+
 # ============================================================
 # 取得治具完整詳細資料 (DETAIL)
 # ============================================================
@@ -543,3 +597,254 @@ async def get_fixture_detail(
     except Exception as e:
         print("❌ [get_fixture_detail] ERROR:\n", traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"查詢治具詳細資料失敗: {repr(e)}")
+
+
+@router.get("/template", summary="下載治具匯入樣本（XLSX）")
+async def download_fixtures_template(
+    user=Depends(get_current_user)
+):
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "fixtures"
+
+    ws.append([
+        "id",
+        "fixture_name",
+        "fixture_type",
+        "storage_location",
+        "replacement_cycle",
+        "cycle_unit",
+        "status",
+        "note",
+    ])
+
+    ws.append([
+        "FX-001",
+        "治具範例一",
+        "ICT",
+        "A01",
+        1000,
+        "uses",
+        "正常",
+        "備註示例",
+    ])
+    ws.append([
+        "FX-002",
+        "治具範例二",
+        "",
+        "",
+        "",
+        "none",
+        "正常",
+        "",
+    ])
+
+    bio = BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+
+    return StreamingResponse(
+        bio,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet"
+        ),
+        headers={
+            "Content-Disposition":
+            'attachment; filename="fixtures_import_template.xlsx"'
+        }
+    )
+
+
+@router.get("/export", summary="匯出治具（XLSX）")
+async def export_fixtures_xlsx(
+    customer_id: str = Query(...),
+    user=Depends(get_current_user)
+):
+    rows = db.execute_query(
+        """
+        SELECT
+            id,
+            fixture_name,
+            fixture_type,
+            storage_location,
+            replacement_cycle,
+            cycle_unit,
+            status,
+            note
+        FROM fixtures
+        WHERE customer_id = %s
+        ORDER BY id
+        """,
+        (customer_id,)
+    )
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "fixtures"
+
+    ws.append([
+        "id",
+        "fixture_name",
+        "fixture_type",
+        "storage_location",
+        "replacement_cycle",
+        "cycle_unit",
+        "status",
+        "note",
+    ])
+
+    for r in rows:
+        ws.append([
+            r["id"],
+            r.get("fixture_name", ""),
+            r.get("fixture_type", ""),
+            r.get("storage_location", ""),
+            r.get("replacement_cycle", ""),
+            r.get("cycle_unit", ""),
+            r.get("status", ""),
+            r.get("note", ""),
+        ])
+
+    bio = BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+
+    return StreamingResponse(
+        bio,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet"
+        ),
+        headers={
+            "Content-Disposition":
+            f'attachment; filename="fixtures_{customer_id}.xlsx"'
+        }
+    )
+
+
+
+@router.post("/import", summary="匯入治具（XLSX）")
+async def import_fixtures_xlsx(
+    customer_id: str = Query(...),
+    file: UploadFile = File(...),
+    user=Depends(get_current_user)
+):
+    if not file.filename.lower().endswith(".xlsx"):
+        raise HTTPException(status_code=400, detail="只接受 .xlsx 檔案")
+
+    content = await file.read()
+    wb = load_workbook(BytesIO(content))
+
+    if "fixtures" not in wb.sheetnames:
+        raise HTTPException(
+            status_code=400,
+            detail='XLSX 需包含 "fixtures" 工作表'
+        )
+
+    ws = wb["fixtures"]
+
+    header = [c.value for c in next(ws.iter_rows(min_row=1, max_row=1))]
+    required = [
+        "id",
+        "fixture_name",
+        "fixture_type",
+        "storage_location",
+        "replacement_cycle",
+        "cycle_unit",
+        "status",
+        "note",
+    ]
+
+    if header[:len(required)] != required:
+        raise HTTPException(
+            status_code=400,
+            detail=f"欄位錯誤，前 {len(required)} 欄必須是：{required}"
+        )
+
+    imported = 0
+    updated = 0
+    skipped = 0
+
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if not row or not row[0] or not row[1]:
+            skipped += 1
+            continue
+
+        fixture_id = str(row[0]).strip()
+        fixture_name = str(row[1]).strip()
+
+        fixture_type = row[2] or ""
+        storage_location = row[3] or ""
+        replacement_cycle = row[4]
+        cycle_unit = row[5] or "uses"
+        status = row[6] or "正常"
+        note = row[7] or ""
+
+        exist = db.execute_query(
+            "SELECT id FROM fixtures WHERE customer_id=%s AND id=%s",
+            (customer_id, fixture_id)
+        )
+
+        if exist:
+            db.execute_update(
+                """
+                UPDATE fixtures
+                SET
+                    fixture_name=%s,
+                    fixture_type=%s,
+                    storage_location=%s,
+                    replacement_cycle=%s,
+                    cycle_unit=%s,
+                    status=%s,
+                    note=%s
+                WHERE customer_id=%s AND id=%s
+                """,
+                (
+                    fixture_name,
+                    fixture_type,
+                    storage_location,
+                    replacement_cycle,
+                    cycle_unit,
+                    status,
+                    note,
+                    customer_id,
+                    fixture_id,
+                )
+            )
+            updated += 1
+        else:
+            db.execute_update(
+                """
+                INSERT INTO fixtures (
+                    customer_id,
+                    id,
+                    fixture_name,
+                    fixture_type,
+                    storage_location,
+                    replacement_cycle,
+                    cycle_unit,
+                    status,
+                    note
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                """,
+                (
+                    customer_id,
+                    fixture_id,
+                    fixture_name,
+                    fixture_type,
+                    storage_location,
+                    replacement_cycle,
+                    cycle_unit,
+                    status,
+                    note,
+                )
+            )
+            imported += 1
+
+    return {
+        "message": "匯入完成",
+        "imported": imported,
+        "updated": updated,
+        "skipped": skipped,
+    }

@@ -65,6 +65,16 @@
           </div>
           <div class="flex items-center gap-2">
             <span class="pill border-gray-300" id="clock">--:--</span>
+              <!-- 目前客戶（可點擊切換） -->
+            <span
+              id="currentCustomerDisplay"
+              class="pill border-gray-300 cursor-pointer hidden"
+              title="點擊切換客戶"
+              onclick="openCustomerSwitch()"
+            >
+              客戶：--
+            </span>
+
             <span id="currentUserDisplay" class="text-xs text-gray-600">未登入</span>
 
             <!-- 登入按鈕 -->
@@ -1295,7 +1305,7 @@
           <div id="admin-stations" class="admin-page card p-5 space-y-4 hidden">
               <div class="flex items-center justify-between">
                 <h3 class="font-semibold text-lg">站點管理</h3>
-                <button class="btn btn-primary btn-sm" onclick="stOpenStationMasterModal()">新增站點</button>
+                <button class="btn btn-primary btn-sm" onclick="stResetForm(); stOpenStationMasterModal();">新增站點</button>
               </div>
               <div class="border-t pt-3">
                 <div class="flex items-center justify-between mb-1">
@@ -1319,183 +1329,75 @@
               </div>
           </div>
 
-          <!-- ========== 機種管理（三段式） ========== -->
-          <div id="admin-models" class="admin-page card p-5 space-y-3 hidden">
-            <div class="flex items-center justify-between">
-              <div>
-                <h3 class="font-semibold">機種資料維護</h3>
-                <p class="text-xs text-gray-500">
-                  設定機種、對應站點，以及各站點所需治具
-                </p>
-              </div>
-              <div class="flex items-center gap-2">
-                <button class="btn btn-ghost" onclick="mmExportModelsCsv()">匯出機種</button>
-                <button class="btn btn-primary" onclick="mmOpenModelModal('create')">新增機種</button>
-              </div>
+
+                <!-- ========== 機種管理 ========== -->
+        <div id="admin-models" class="admin-page card p-6 space-y-4 hidden">
+
+          <!-- Header -->
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="font-semibold text-lg">機種資料維護</h3>
+              <p class="text-xs text-gray-500">
+                管理機種，並設定站點與治具需求
+              </p>
             </div>
-
-            <!-- ================= 三欄操作區 ================= -->
-            <div class="grid md:grid-cols-3 gap-4 mt-3">
-
-              <!-- ========= 左欄：機種清單 ========= -->
-              <section class="border rounded-2xl p-3 flex flex-col gap-2">
-
-                <div class="flex items-center justify-between">
-                  <h4 class="font-semibold text-sm">① 機種清單</h4>
-                  <span class="text-xs text-gray-400">選擇一個機種</span>
-                </div>
-
-                <div class="field">
-                  <label class="label-xs">搜尋機種</label>
-                  <input
-                    id="mmSearch"
-                    class="input"
-                    placeholder="輸入機種代碼 / 名稱"
-                    onkeydown="if(event.key==='Enter'){ mmLoadModelList(); }"
-                  />
-                </div>
-
-                <div class="flex items-center justify-between">
-                  <button class="btn btn-ghost btn-xs" onclick="mmLoadModelList()">重新整理</button>
-                  <div class="text-xs text-gray-500">
-                    共 <span id="mmCount">0</span> 筆
-                  </div>
-                </div>
-
-                <div class="overflow-auto border rounded-xl max-h-72">
-                  <table class="min-w-full text-xs">
-                    <thead class="bg-gray-50 text-gray-500">
-                      <tr>
-                        <th class="py-1.5 px-2 text-left">機種代碼</th>
-                        <th class="py-1.5 px-2 text-left">機種名稱</th>
-                        <th class="py-1.5 px-2 text-left">操作</th>
-                      </tr>
-                    </thead>
-                    <tbody id="mmTable"></tbody>
-                  </table>
-                </div>
-              </section>
-
-              <!-- ========= 中欄：機種 ↔ 站點 ========= -->
-              <section class="border rounded-2xl p-3 flex flex-col gap-2">
-
-                <div class="flex items-center justify-between">
-                  <h4 class="font-semibold text-sm">
-                    ② 機種站點綁定
-                    <span id="msSelectedModelLabel" class="text-xs text-gray-500"></span>
-                  </h4>
-                  <button class="btn btn-ghost btn-xs" onclick="stOpenStationMasterModal()">
-                    站點主檔
-                  </button>
-                </div>
-
-                <!-- 尚未選機種提示 -->
-                <div id="admin-msNoModelHint" class="text-xs text-gray-500">
-                  請先在左側選擇一個機種。
-                </div>
-
-                <!-- 已選機種內容 -->
-                <div id="admin-msContent" class="space-y-3 hidden">
-
-                  <!-- 已綁定站點 -->
-                  <div>
-                    <div class="flex items-center justify-between">
-                      <div class="text-xs font-semibold">已綁定站點</div>
-                      <button class="btn btn-ghost btn-xs" onclick="msReloadForCurrentModel()">
-                        重新整理
-                      </button>
-                    </div>
-                    <div class="overflow-auto border rounded-xl max-h-32 mt-1">
-                      <table class="min-w-full text-xs">
-                        <thead class="bg-gray-50 text-gray-500">
-                          <tr>
-                            <th class="py-1 px-2 text-left">代碼</th>
-                            <th class="py-1 px-2 text-left">名稱</th>
-                            <th class="py-1 px-2 text-left">操作</th>
-                          </tr>
-                        </thead>
-                        <tbody id="admin-msBoundTable"></tbody>
-                      </table>
-                    </div>
-                  </div>
-
-                  <!-- 可綁定站點 -->
-                  <div>
-                    <div class="text-xs font-semibold">可綁定站點</div>
-                    <div class="overflow-auto border rounded-xl max-h-32 mt-1">
-                      <table class="min-w-full text-xs">
-                        <thead class="bg-gray-50 text-gray-500">
-                          <tr>
-                            <th class="py-1 px-2 text-left">代碼</th>
-                            <th class="py-1 px-2 text-left">名稱</th>
-                            <th class="py-1 px-2 text-left">操作</th>
-                          </tr>
-                        </thead>
-                        <tbody id="admin-msAvailableTable"></tbody>
-                      </table>
-                    </div>
-                  </div>
-
-                </div>
-              </section>
-
-              <!-- ========= 右欄：治具需求 ========= -->
-              <section class="border rounded-2xl p-3 flex flex-col gap-2">
-
-                <div>
-                  <h4 class="font-semibold text-sm">③ 治具需求設定</h4>
-                  <div class="text-xs text-gray-500">
-                    機種：<span id="frSelectedModelLabel">-</span> /
-                    站點：<span id="frSelectedStationLabel">-</span>
-                  </div>
-                </div>
-
-                <!-- 尚未選擇提示 -->
-                <div id="frNoModelStationHint" class="text-xs text-gray-500">
-                  請先選擇左側機種，再在中間選擇一個已綁定站點。
-                </div>
-
-                <!-- 可操作內容 -->
-                <div id="frContent" class="space-y-3 hidden">
-
-                  <!-- 新增需求 -->
-                  <div class="grid grid-cols-5 gap-2 items-end">
-                    <div class="col-span-3 field">
-                      <label class="label-xs">治具</label>
-                      <select id="frFixtureSelect" class="input">
-                        <option value="">選擇治具...</option>
-                      </select>
-                    </div>
-                    <div class="col-span-1 field">
-                      <label class="label-xs">需求數量</label>
-                      <input id="frQtyInput" type="number" min="1" class="input" value="1" />
-                    </div>
-                    <div class="col-span-1">
-                      <button class="btn btn-primary w-full" onclick="frAddRequirement()">新增</button>
-                    </div>
-                  </div>
-
-                  <!-- 需求清單 -->
-                  <div class="overflow-auto border rounded-xl max-h-64">
-                    <table class="min-w-full text-xs">
-                      <thead class="bg-gray-50 text-gray-500">
-                        <tr>
-                          <th class="py-1 px-2 text-left">治具編號</th>
-                          <th class="py-1 px-2 text-left">治具名稱</th>
-                          <th class="py-1 px-2 text-left">需求數量</th>
-                          <th class="py-1 px-2 text-left">操作</th>
-                        </tr>
-                      </thead>
-                      <tbody id="frTable"></tbody>
-                    </table>
-                  </div>
-
-                </div>
-              </section>
-
+            <div class="flex items-center gap-2">
+                <button class="btn btn-outline btn-sm" onclick="mmExportModelsXlsx()">匯出 XLSX</button>
+                <button class="btn btn-outline btn-sm" onclick="mmDownloadModelsTemplate()">下載樣本</button>
+                <label class="btn btn-ghost cursor-pointer">
+                              <input
+                                id="mmImportModels"
+                                type="file"
+                                accept=".xlsx"
+                                class="hidden"
+                                onchange="mmImportModels(this.files[0])"
+                              />
+                              匯入 Excel
+                </label>
+                <!-- ✅ 主操作 -->
+                <button class="btn btn-primary btn-sm"
+                        onclick="mmOpenModelModal('create')">
+                 新增機種
+                </button>
             </div>
-
           </div>
+
+          <!-- 機種清單 -->
+          <section class="border rounded-2xl p-4 space-y-3 bg-white">
+
+            <div class="flex items-center justify-between">
+              <div class="field w-64">
+                <input
+                  id="mmSearch"
+                  class="input"
+                  placeholder="搜尋機種代碼 / 名稱"
+                  onkeydown="if(event.key==='Enter'){ mmLoadModelList(); }"
+                />
+              </div>
+
+              <div class="flex items-center gap-3 text-xs text-gray-500">
+                共 <span id="mmCount">0</span> 筆
+                <button class="btn btn-ghost btn-xs" onclick="mmLoadModelList()">重新整理</button>
+              </div>
+            </div>
+
+            <div class="overflow-auto border rounded-xl max-h-[70vh]">
+              <table class="min-w-full text-sm">
+                <thead class="bg-gray-50 text-gray-500">
+                  <tr>
+                    <th class="px-3 py-2 text-left">機種代碼</th>
+                    <th class="px-3 py-2 text-left">機種名稱</th>
+                    <th class="px-3 py-2 text-left w-32">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="mmTable"></tbody>
+              </table>
+            </div>
+
+          </section>
+        </div>
+
+
 
           <!-- ========== 治具管理 ========== -->
           <div id="admin-fixtures" class="admin-page card p-5 space-y-3 hidden">
@@ -1507,26 +1409,27 @@
                 管理治具基本資料、數量、狀態與負責人
               </p>
             </div>
+                <div class="flex items-center gap-2">
+                   <button class="btn btn-outline btn-sm" onclick="fxExportFixturesXlsx()">
+                    匯出 XLSX
+                  </button>
 
-            <div class="flex items-center gap-2">
-              <button class="btn btn-ghost" onclick="exportFixturesCsv()">匯出資料</button>
-              <button class="btn btn-ghost"
-                      onclick="downloadCSV('fixtures_template.csv', fixtureTemplate())">
-                下載範本
-              </button>
+                  <button class="btn btn-outline btn-sm" onclick="fxDownloadFixturesTemplate()">
+                    下載樣本
+                  </button>
 
-              <label class="btn btn-ghost cursor-pointer">
-                <input id="fxCsv"
-                       type="file"
-                       accept=".xlsx,.csv"
-                       class="hidden"
-                       onchange="handleFixtureCsv(this)" />
-                匯入 Excel/CSV
-              </label>
-
-              <button class="btn btn-primary" onclick="openFixtureModal('create')">
-                新增治具
-              </button>
+                  <label class="btn btn-ghost btn-sm cursor-pointer">
+                    <input type="file"
+                           accept=".xlsx"
+                           class="hidden"
+                           onchange="fxImportFixtures(this.files[0])" />
+                    匯入 Excel
+                  </label>
+                <!-- ✅ 主操作 -->
+                <button class="btn btn-primary btn-sm"
+                        onclick="openFixtureModal('create')">
+                 新增治具
+                </button>
             </div>
           </div>
 
@@ -1671,7 +1574,6 @@
                 <div id="ownerPagination" class="flex gap-2 mt-3 justify-center"></div>
               </div>
         </div>
-
 
           <!-- ========== 系統設定（SMTP） ========== -->
           <div id="admin-system" class="admin-page card p-5 space-y-4 hidden">
@@ -1860,16 +1762,13 @@
             </div>
             <div class="flex items-center justify-end gap-2 pt-2 border-t">
               <button type="button" class="btn btn-ghost" onclick="mmCloseModelModal()">取消</button>
-              <button type="submit" class="btn btn-primary">儲存</button>
+              <button type="button" class="btn btn-primary" onclick="submitModelForm()">儲存</button>
             </div>
           </form>
         </div>
       </div>
 
-
-        <!-- ===============================
-             站點新增 / 編輯 Modal（全域）
-             =============================== -->
+        <!-- 站點新增 / 編輯 Modal -->
         <div id="stationModal"
              class="fixed inset-0 bg-black/30 backdrop-blur-sm hidden z-50 flex items-center justify-center">
 
@@ -1900,6 +1799,71 @@
               <button class="btn btn-ghost btn-sm" onclick="closeStationModal()">取消</button>
               <button class="btn btn-primary btn-sm" onclick="stSubmitForm()">儲存</button>
             </div>
+          </div>
+        </div>
+
+        <!-- ========== 機種編輯 Modal ========== -->
+        <div id="modelEditModal"
+             class="fixed inset-0 z-50 bg-black/40 hidden">
+
+          <div class="absolute inset-6 bg-white rounded-2xl shadow-xl
+                      flex flex-col">
+
+            <!-- Header -->
+            <div class="px-6 py-4 border-b flex items-center justify-between">
+              <div>
+                <h3 class="font-semibold text-lg">
+                  編輯機種
+                  <span id="meModelId" class="text-sm text-gray-500"></span>
+                </h3>
+                <p class="text-xs text-gray-500">
+                  設定站點綁定與治具需求
+                </p>
+              </div>
+              <button class="btn btn-ghost" onclick="closeModelEditModal()">✕</button>
+            </div>
+
+            <!-- Content -->
+            <div class="flex-1 grid grid-cols-2 gap-6 p-6 overflow-hidden">
+
+              <!-- 左：站點綁定 -->
+              <section class="border rounded-xl p-4 overflow-auto">
+                <div class="flex items-center justify-between mb-2">
+                  <h4 class="font-semibold">站點綁定</h4>
+                  <button class="btn btn-ghost btn-xs" onclick="meReloadStations()">
+                    重新整理
+                  </button>
+                </div>
+
+                <div id="meStationPanel">
+                  <!-- JS render：已綁 / 可綁站點 -->
+                </div>
+              </section>
+
+              <!-- 右：治具需求 -->
+              <section class="border rounded-xl p-4 overflow-auto">
+                <div class="mb-2">
+                  <h4 class="font-semibold">
+                    治具需求
+                    <span id="meSelectedStationLabel"
+                          class="text-xs text-gray-500"></span>
+                  </h4>
+                </div>
+
+                <div id="meFixturePanel">
+                  <div class="text-xs text-gray-400">
+                    請先在左側選擇一個站點
+                  </div>
+                </div>
+              </section>
+
+            </div>
+
+            <!-- Footer -->
+            <div class="px-6 py-4 border-t text-right">
+              <button class="btn btn-outline" onclick="closeModelEditModal()">關閉</button>
+            </div>
+
           </div>
         </div>
 
@@ -2014,7 +1978,8 @@
             <!-- 機種 -->
             <script src="/js/api/api-machine-models.js"></script>
             <script src="/js/app/app-machine-models.js?v=20241204"></script>
-            <script src="/js/app/app-machine-models-mt.js"></script>
+            <script src="/js/api/api-model-detail.js"></script>
+            <script src="/js/app/app-machine-models.js"></script>
 
             <!-- ================================ -->
             <!-- 🔧 治具主檔 / 收料 / 退料           -->
@@ -2026,7 +1991,6 @@
             <!-- 治具主檔 -->
             <script src="/js/api/api-fixtures.js"></script>
             <script src="/js/app/app-fixtures.js"></script>
-            <script src="/js/app/app-fixtures-mt.js"></script>
 
             <!-- 收料 -->
             <script src="/js/api/api-receipts.js"></script>
@@ -2103,6 +2067,18 @@
       // ---- 4) 預設顯示使用記錄 ----
       switchLogTab("usage");
     });
+    </script>
+    <script>
+            document.addEventListener("click", e => {
+          const box = document.getElementById("frFixtureSuggest");
+          const input = document.getElementById("frFixtureInput");
+          if (!box || !input) return;
+
+          if (!box.contains(e.target) && e.target !== input) {
+            box.classList.add("hidden");
+          }
+        });
+
     </script>
 
   </body>
