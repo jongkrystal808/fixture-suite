@@ -236,30 +236,32 @@ function goFixturePage(action) {
 /* ============================================================
  * Modal：新增 / 編輯
  * ============================================================ */
-
 function openFixtureModal(mode, id = null) {
   fmForm.reset();
   fmForm.dataset.mode = mode;
   fmForm.dataset.id = id || "";
 
   const title = document.getElementById("fixtureModalTitle");
+  const idInput = document.getElementById("fmFixtureId");
 
   if (mode === "create") {
     title.textContent = "新增治具";
-    fixtureModal.classList.remove("hidden");
+    idInput.disabled = false;   // ✅ 可輸入
   } else {
     title.textContent = "編輯治具";
+    idInput.disabled = true;    // 🔒 編輯不可改主鍵
     loadFixtureDetailToForm(id);
   }
 
   fixtureModal.style.display = "flex";
 }
 
+
 async function loadFixtureDetailToForm(id) {
   try {
     const data = await apiGetFixture(id);
 
-    document.getElementById("fmFixtureId").value = data.id;
+    document.getElementById("fmFixtureId").value = data.fixture_id || data.id;
     document.getElementById("fmFixtureName").value = data.fixture_name;
     document.getElementById("fmFixtureType").value = data.fixture_type;
     document.getElementById("fmSerialNumber").value = data.serial_number || "";
@@ -286,7 +288,6 @@ window.closeFixtureModal = closeFixtureModal;
 /* ============================================================
  * Modal 送出
  * ============================================================ */
-
 async function submitFixtureForm(e) {
   e.preventDefault();
 
@@ -296,10 +297,14 @@ async function submitFixtureForm(e) {
   const mode = fmForm.dataset.mode;
   const id = fmForm.dataset.id;
 
+  const fixture_id = document.getElementById("fmFixtureId").value.trim();
+
+  // 🔒 基本驗證
+  if (!fixture_id && mode === "create") {
+    return toast("治具編號為必填", "warning");
+  }
+
   const payload = {
-    customer_id,
-    id: document.getElementById("fmFixtureId").value.trim(),
-      fixture_id: document.getElementById("fmFixtureId").value.trim(),
     fixture_name: document.getElementById("fmFixtureName").value.trim(),
     fixture_type: document.getElementById("fmFixtureType").value.trim(),
     serial_number: document.getElementById("fmSerialNumber").value.trim(),
@@ -313,9 +318,14 @@ async function submitFixtureForm(e) {
     note: document.getElementById("fmNote").value.trim(),
   };
 
+  // ✅ fixture_id 只在 create 時送
+  if (mode === "create") {
+    payload.fixture_id = fixture_id;
+  }
+
   try {
     if (mode === "create") {
-      await apiCreateFixture(payload);
+      await apiCreateFixture(payload, customer_id); // customer_id 只走 query
       toast("新增成功");
     } else {
       await apiUpdateFixture(id, payload);
@@ -329,19 +339,31 @@ async function submitFixtureForm(e) {
     toast("治具操作失敗", "error");
   }
 }
+
 window.submitFixtureForm = submitFixtureForm;
 
 /* ============================================================
  * 刪除治具
  * ============================================================ */
-
 async function deleteFixture(id) {
+  if (
+    !id ||
+    typeof id !== "string" ||
+    id === "-" ||
+    id === "undefined" ||
+    id === "[object Object]"
+  ) {
+    toast("治具資料異常，請重新整理", "error");
+    return;
+  }
+
   if (!confirm(`確定要刪除治具 ${id}？`)) return;
 
   const customer_id = getCurrentCustomerId();
+  if (!customer_id) return toast("尚未選擇客戶", "warning");
 
   try {
-    await apiDeleteFixture({ customer_id, fixture_id: id });
+    await apiDeleteFixture(id, customer_id);
     toast("刪除成功");
     loadFixtureList();
   } catch (err) {
@@ -349,6 +371,7 @@ async function deleteFixture(id) {
     toast("刪除失敗", "error");
   }
 }
+
 
 /* ============================================================
  * 綁定查詢 UI
@@ -411,7 +434,7 @@ async function importFixtures(input) {
     });
 
     alert("匯入完成");
-    loadFixtures(); // 重新整理
+    loadFixtureList(); // 重新整理
   } catch (err) {
     alert("匯入失敗：" + err.message);
   } finally {
@@ -571,7 +594,8 @@ async function fxImportFixtures(file) {
       `匯入完成：新增 ${data.imported} 筆、更新 ${data.updated} 筆、跳過 ${data.skipped} 筆`
     );
 
-    await loadFixtures(); // 🔁 重新載入治具列表
+    await loadFixtureList();
+ // 🔁 重新載入治具列表
 
   } catch (err) {
     console.error(err);

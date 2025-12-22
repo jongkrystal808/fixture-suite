@@ -63,8 +63,14 @@ async function apiListFixturesStatus(options = {}) {
  */
 async function apiGetFixture(id) {
   const customer_id = _getCurrentCustomerId();
-  return api(`/fixtures/${encodeURIComponent(id)}?customer_id=${customer_id}`);
+  if (!customer_id) {
+    throw new Error("apiGetFixture: customer_id missing");
+  }
+  return api(`/fixtures/${encodeURIComponent(id)}`, {
+    params: { customer_id }
+  });
 }
+
 
 /**
  * 建立治具（FixtureCreate）
@@ -79,13 +85,26 @@ async function apiGetFixture(id) {
  * cycle_unit
  * note
  *
- * ⚠ customer_id 不用傳，由 token 決定
+ * ⚠ customer_id 必須由 query 傳入（由呼叫端或 current customer context 決定）
  */
-function apiCreateFixture(data) {
+/**
+ * 建立治具（FixtureCreate）
+ * customer_id 只走 query，不進 body
+ */
+function apiCreateFixture(data, customer_id) {
+  const cid = customer_id || _getCurrentCustomerId();
+  if (!cid) {
+    throw new Error("apiCreateFixture: customer_id is required");
+  }
+
+  // 🔒 保證 body 乾淨（不含 customer_id）
+  const body = { ...data };
+  delete body.customer_id;
+
   return api("/fixtures", {
     method: "POST",
-    params: { customer_id: data.customer_id }, // ✅ query
-    body: data                                  // ✅ body 只放 fixture 資料
+    params: { customer_id: cid },
+    body
   });
 }
 
@@ -94,20 +113,40 @@ function apiCreateFixture(data) {
  * 更新治具（FixtureUpdate）
  */
 async function apiUpdateFixture(fixtureId, patch) {
+  if (!fixtureId) {
+    throw new Error("apiUpdateFixture: fixtureId is required");
+  }
+
+  // 🔒 不要自己 stringify
+  const body = { ...patch };
+  delete body.fixture_id; // 主鍵不可改，雙保險
+
   return api(`/fixtures/${encodeURIComponent(fixtureId)}`, {
     method: "PUT",
-    body: JSON.stringify(patch)
+    body
   });
 }
+
 
 /**
  * 刪除治具（後端要求 fixture_id）
  */
-async function apiDeleteFixture(fixtureId) {
-  return api(`/fixtures/${encodeURIComponent(fixtureId)}`, {
-    method: "DELETE"
+async function apiDeleteFixture(fixture_id, customer_id) {
+  const cid = customer_id || _getCurrentCustomerId();
+
+  if (!fixture_id || typeof fixture_id !== "string") {
+    throw new Error("apiDeleteFixture: invalid fixture_id");
+  }
+  if (!cid) {
+    throw new Error("apiDeleteFixture: customer_id missing");
+  }
+
+  return api(`/fixtures/${encodeURIComponent(fixture_id)}`, {
+    method: "DELETE",
+    params: { customer_id: cid },
   });
 }
+
 
 /**
  * 下拉選單：取得簡易治具清單
