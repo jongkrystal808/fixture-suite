@@ -1,5 +1,5 @@
 """
-統計與儀表板 API (v3.0)
+統計與儀表板 API (v3.0 - Fixed)
 使用 v3.0 Material Transactions 結構
 """
 
@@ -64,13 +64,13 @@ async def get_summary(
         (customer_id,)
     )
 
-    # ✔ 退料熱門 TOP 5
+    # ✔ 退料熱門 TOP 5（修正：GROUP_BY -> GROUP BY）
     recent_returns = db.execute_query(
         """
         SELECT fixture_id, SUM(quantity) AS count
         FROM material_transactions
         WHERE customer_id=%s AND transaction_type='return'
-        GROUP_BY fixture_id
+        GROUP BY fixture_id
         ORDER BY count DESC
         LIMIT 5
         """,
@@ -147,6 +147,10 @@ async def get_serial_status(
 
     return db.execute_query(sql, tuple(params))
 
+# ============================================================
+# 5. 單治具使用統計
+# ============================================================
+
 @router.get("/fixture-usage", summary="單治具使用統計（使用次數 / 更換次數 / 最近使用）")
 async def get_fixture_usage(
     fixture_id: str = Query(...),
@@ -190,6 +194,10 @@ async def get_fixture_usage(
         "replacement_count": replacement_count,
         "recent_usage": recent_usage
     }
+
+# ============================================================
+# 6. 整個機種治具需求總表
+# ============================================================
 
 @router.get("/model-requirements", summary="整個機種治具需求總表")
 async def get_model_requirements(
