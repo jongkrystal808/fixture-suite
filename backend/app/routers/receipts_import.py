@@ -1,5 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
-from datetime import datetime, date
+from datetime import date
 import pandas as pd
 
 from backend.app.database import db
@@ -15,99 +15,128 @@ async def import_receipts(
     user=Depends(get_current_user)
 ):
     """
-    匯入收料 Excel — 對應前端「廠商(customer_id) + batch/individual」格式
+    收料 Excel 匯入（batch 專用）
+    - 正確呼叫 sp_material_receipt
+    - 單筆失敗不影響其他筆
+    - 回傳每一筆的結果訊息
     """
+
     if not file.filename.lower().endswith(".xlsx"):
-        raise HTTPException(400, "請使用 .xlsx 匯入")
+        raise HTTPException(status_code=400, detail="請使用 .xlsx 檔案")
 
     # 讀取 Excel
     try:
         df = pd.read_excel(file.file)
     except Exception as e:
-        raise HTTPException(400, f"匯入格式錯誤：{str(e)}")
+        raise HTTPException(status_code=400, detail=f"Excel 讀取失敗：{str(e)}")
 
-    # 前端 UI 格式
-    required_cols = ["vendor", "order_no", "fixture_id",
-                     "type", "serial_start", "serial_end", "note"]
+    # 必要欄位（batch 模式）
+    required_cols = [
+        "vendor",        # customer_id
+        "order_no",
+        "fixture_id",
+        "type",          # batch
+        "serial_start",
+        "serial_end",
+        "note"
+    ]
     missing = [c for c in required_cols if c not in df.columns]
     if missing:
-        raise HTTPException(400, f"缺少欄位：{missing}")
+        raise HTTPException(status_code=400, detail=f"缺少欄位：{missing}")
 
     total_created = 0
-    messages = []
+    results = []
 
-    for _, row in df.iterrows():
-        # 1. customer_id = vendor 欄位
-        customer_id = str(row["vendor"]).strip()
-        if not customer_id:
-            continue
-
-        fixture_id = str(row["fixture_id"]).strip()
-        if not fixture_id:
-            continue
-
-        order_no = str(row.get("order_no", "")).strip()
-        note = str(row.get("note", "")).strip()
-
-        # 2. 決定序號列表
-        typ = str(row["type"]).strip().lower()
-        serials = ""
-
-        if typ == "batch":
-            start = row.get("serial_start")
-            end = row.get("serial_end")
-            try:
-                serials = ",".join(str(i) for i in range(int(start), int(end) + 1))
-            except Exception:
-                raise HTTPException(400, f"序號起迄格式錯誤：{start}~{end}")
-        else:  # individual (少量序號) → 目前你的 UI 沒有 serials 欄位
-            # 若未來需要少量序號可增加 columns
-            continue
-
-        if not serials:
-            continue
-
-        # 3. source_type 固定：自購（可改成 customer_supplied）
-        source_type = "customer_supplied"
+    for idx, row in df.iterrows():
+        row_no = idx + 1
 
         try:
+            # === 1. 基本欄位 ===
+            row_customer_id = str(row.get("vendor", "")).strip()
+            if not row_customer_id:
+                raise ValueError("vendor(customer_id) 為空")
+
+            fixture_id = str(row.get("fixture_id", "")).strip()
+            if not fixture_id:
+                raise ValueError("fixture_id 為空")
+
+            order_no = str(row.get("order_no", "")).strip()
+            note = str(row.get("note", "")).strip()
+
+            record_type = str(row.get("type", "")).strip().lower()
+            if record_type != "batch":
+                raise ValueError(f"目前僅支援 batch，收到：{record_type}")
+
+            # === 2. 產生序號清單 ===
+            start = row.get("serial_start")
+            end = row.get("serial_end")
+
+            try:
+                start_i = int(start)
+                end_i = int(end)
+            except Exception:
+                raise ValueError(f"序號起迄格式錯誤：{start} ~ {end}")
+
+            if start_i > end_i:
+                raise ValueError("serial_start 不可大於 serial_end")
+
+            serials = ",".join(str(i) for i in range(start_i, end_i + 1))
+
+            if not serials:
+                raise ValueError("序號清單為空")
+
+            # === 3. 固定來源類型（可自行改）===
+            source_type = "customer_supplied"
+
+            # === 4. 呼叫 SP（⚠️ 參數順序正確）===
             with db.get_cursor() as cursor:
                 cursor.execute(
                     """
                     CALL sp_material_receipt(
                         %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s,
+                        %s, %s, %s,
+                        %s, %s, %s,
                         @tid, @msg
                     )
                     """,
                     (
-                        customer_id,
-                        fixture_id,
-                        date.today(),
-                        order_no,
-                        source_type,
-                        serials,
-                        user["username"],
-                        note,
-                        user["id"],
+                        row_customer_id,      # p_customer_id
+                        fixture_id,           # p_fixture_id
+                        order_no,             # p_order_no
+                        source_type,          # p_source_type
+                        user["username"],     # p_operator
+                        note,                 # p_note
+                        user["id"],           # p_created_by
+                        "batch",              # p_record_type
+                        None,                 # p_datecode
+                        serials,              # p_serials_csv
                     )
                 )
 
-                cursor.execute("SELECT @tid")
-                tid = (cursor.fetchone() or {}).get("@tid")
+                cursor.execute("SELECT @tid AS tid, @msg AS msg")
+                sp_result = cursor.fetchone() or {}
+                tid = sp_result.get("tid")
+                msg = sp_result.get("msg")
 
-                cursor.execute("SELECT @msg")
-                msg = (cursor.fetchone() or {}).get("@msg")
+            if msg != "OK" or not tid:
+                raise ValueError(msg or "SP 未回傳交易 ID")
 
-            messages.append(msg)
-
-            if tid:
-                total_created += 1
+            total_created += 1
+            results.append({
+                "row": row_no,
+                "status": "success",
+                "transaction_id": tid
+            })
 
         except Exception as e:
-            raise HTTPException(500, f"匯入失敗：{str(e)}")
+            results.append({
+                "row": row_no,
+                "status": "failed",
+                "error": str(e)
+            })
 
     return {
-        "count": total_created,
-        "messages": messages
+        "created": total_created,
+        "total": len(df),
+        "results": results
     }

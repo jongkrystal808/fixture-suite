@@ -1,11 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File
 from fastapi.responses import StreamingResponse
-from openpyxl import Workbook
-from io import BytesIO
 from typing import Optional, List
 import traceback
-from fastapi import APIRouter, Depends, Query, UploadFile, File, HTTPException
-from fastapi.responses import StreamingResponse
 from openpyxl import Workbook, load_workbook
 from io import BytesIO
 from backend.app.database import db
@@ -21,6 +17,12 @@ from backend.app.models.fixture import (
     FixtureStatus,
     CycleUnit
 )
+from enum import Enum
+
+class FixtureStatus(str, Enum):
+    normal = "normal"
+    returned = "returned"
+    scrapped = "scrapped"
 
 router = APIRouter(
     prefix="/fixtures",
@@ -84,9 +86,9 @@ async def fixture_statistics(customer_id: str = Query(...)):
                 SUM(maintenance_qty) AS maintenance_qty,
                 SUM(scrapped_qty) AS scrapped_qty,
                 SUM(returned_qty) AS returned_qty,
-                SUM(CASE WHEN status = '正常' THEN 1 ELSE 0 END) AS active_fixtures,
-                SUM(CASE WHEN status = '返還' THEN 1 ELSE 0 END) AS returned_fixtures,
-                SUM(CASE WHEN status = '報廢' THEN 1 ELSE 0 END) AS scrapped_fixtures
+                SUM(CASE WHEN status = 'normal' THEN 1 ELSE 0 END) AS active_fixtures,
+                SUM(CASE WHEN status = 'returned' THEN 1 ELSE 0 END) AS returned_fixtures,
+                SUM(CASE WHEN status = 'scrapped' THEN 1 ELSE 0 END) AS scrapped_fixtures
             FROM fixtures
             WHERE customer_id = %s
         """

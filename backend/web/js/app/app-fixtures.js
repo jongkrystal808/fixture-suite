@@ -270,7 +270,7 @@ async function loadFixtureDetailToForm(id) {
     document.getElementById("fmStorage").value = data.storage_location || "";
     document.getElementById("fmCycle").value = data.replacement_cycle || 0;
     document.getElementById("fmCycleUnit").value = data.cycle_unit || "none";
-    document.getElementById("fmStatus").value = data.status || "正常";
+    document.getElementById("fmStatus").value = data.status || "normal";
     document.getElementById("fmOwnerId").value = data.owner_id || "";
     document.getElementById("fmNote").value = data.note || "";
   } catch (err) {
@@ -288,21 +288,27 @@ window.closeFixtureModal = closeFixtureModal;
 /* ============================================================
  * Modal 送出
  * ============================================================ */
+
 async function submitFixtureForm(e) {
-  e.preventDefault();
+  e?.preventDefault();
 
   const customer_id = getCurrentCustomerId();
-  if (!customer_id) return toast("請先選擇客戶");
+  if (!customer_id) {
+    return toast("請先選擇客戶", "warning");
+  }
 
+   // ✅ 改用 dataset
   const mode = fmForm.dataset.mode;
   const id = fmForm.dataset.id;
-
   const fixture_id = document.getElementById("fmFixtureId").value.trim();
 
-  // 🔒 基本驗證
   if (!fixture_id && mode === "create") {
     return toast("治具編號為必填", "warning");
   }
+
+  // ✅ Get status from form and map to backend enum value
+  const rawStatus = document.getElementById("fmStatus").value;
+  const mappedStatus = mapStatusToBackend(rawStatus);
 
   const payload = {
     fixture_name: document.getElementById("fmFixtureName").value.trim(),
@@ -313,7 +319,7 @@ async function submitFixtureForm(e) {
     storage_location: document.getElementById("fmStorage").value.trim(),
     replacement_cycle: Number(document.getElementById("fmCycle").value),
     cycle_unit: document.getElementById("fmCycleUnit").value,
-    status: document.getElementById("fmStatus").value,
+    status: mappedStatus, // ✅ Use mapped status value
     owner_id: Number(document.getElementById("fmOwnerId").value) || null,
     note: document.getElementById("fmNote").value.trim(),
   };
@@ -612,3 +618,16 @@ function fxImportFixturesXlsx(file) {
 
 window.fxImportFixturesXlsx = fxImportFixturesXlsx;
 
+/* ============================================================
+ * Status mapping（前端 → 後端 enum）
+ * ============================================================ */
+function mapStatusToBackend(status) {
+  const map = {
+    normal: "normal",
+    repair: "repair",
+    scrap: "scrap",
+    inactive: "inactive",
+  };
+
+  return map[status] || "normal";
+}
