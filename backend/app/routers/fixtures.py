@@ -74,18 +74,25 @@ async def search_fixtures(
 # ============================================================
 # 📊 統計摘要（必須在 /{fixture_id} 之前）
 # ============================================================
-@router.get("/statistics/summary", response_model=FixtureStatistics, summary="治具統計摘要")
+@router.get(
+    "/statistics/summary",
+    response_model=FixtureStatistics,
+    summary="治具統計摘要"
+)
 async def fixture_statistics(customer_id: str = Query(...)):
     try:
         sql = """
             SELECT
                 COUNT(*) AS total_fixtures,
-                SUM(self_purchased_qty + customer_supplied_qty) AS total_quantity,
-                SUM(available_qty) AS available_qty,
+
+                -- ⭐ 真正的總可用庫存
+                SUM(available_qty) AS total_available_qty,
+
                 SUM(deployed_qty) AS deployed_qty,
                 SUM(maintenance_qty) AS maintenance_qty,
                 SUM(scrapped_qty) AS scrapped_qty,
                 SUM(returned_qty) AS returned_qty,
+
                 SUM(CASE WHEN status = 'normal' THEN 1 ELSE 0 END) AS active_fixtures,
                 SUM(CASE WHEN status = 'returned' THEN 1 ELSE 0 END) AS returned_fixtures,
                 SUM(CASE WHEN status = 'scrapped' THEN 1 ELSE 0 END) AS scrapped_fixtures
@@ -95,11 +102,30 @@ async def fixture_statistics(customer_id: str = Query(...)):
 
         row = db.execute_query(sql, (customer_id,))[0]
 
-        return FixtureStatistics(**row)
+        return {
+            "total_fixtures": row["total_fixtures"],
+
+            # ⭐ 關鍵：補這個（FastAPI 要的）
+            "available_qty": row["total_available_qty"] or 0,
+
+            "total_available_qty": row["total_available_qty"] or 0,
+            "deployed_qty": row["deployed_qty"] or 0,
+            "maintenance_qty": row["maintenance_qty"] or 0,
+            "scrapped_qty": row["scrapped_qty"] or 0,
+            "returned_qty": row["returned_qty"] or 0,
+            "active_fixtures": row["active_fixtures"] or 0,
+            "returned_fixtures": row["returned_fixtures"] or 0,
+            "scrapped_fixtures": row["scrapped_fixtures"] or 0,
+        }
+
 
     except Exception as e:
         print("❌ [fixture_statistics] ERROR:\n", traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"查詢統計資料失敗: {repr(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"查詢統計資料失敗: {repr(e)}"
+        )
+
 
 
 # ============================================================
@@ -130,14 +156,21 @@ async def fixture_status_view(
 # ============================================================
 # 📋 簡化治具列表（必須在 /{fixture_id} 之前）
 # ============================================================
-@router.get("/simple/list", response_model=List[FixtureSimple], summary="簡化治具列表")
+@router.get(
+    "/simple/list",
+    response_model=List[FixtureSimple],
+    summary="簡化治具列表"
+)
 async def simple_fixture_list(customer_id: str = Query(...)):
     try:
         sql = """
             SELECT
                 id AS fixture_id,
                 fixture_name,
-                (self_purchased_qty + customer_supplied_qty) AS total_qty,
+
+                -- ⭐ 單一真相來源
+                available_qty AS total_qty,
+
                 status
             FROM fixtures
             WHERE customer_id = %s
@@ -148,7 +181,11 @@ async def simple_fixture_list(customer_id: str = Query(...)):
 
     except Exception as e:
         print("❌ [simple_fixture_list] ERROR:\n", traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"查詢簡化治具列表失敗: {repr(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"查詢簡化治具列表失敗: {repr(e)}"
+        )
+
 
 
 # ============================================================

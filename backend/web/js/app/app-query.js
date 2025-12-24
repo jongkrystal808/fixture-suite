@@ -139,7 +139,7 @@ async function renderFixturesTable(rows) {
   if (!rows || rows.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="11" class="text-center text-gray-400 py-3">
+        <td colspan="9" class="text-center text-gray-400 py-3">
           沒有資料
         </td>
       </tr>`;
@@ -149,7 +149,9 @@ async function renderFixturesTable(rows) {
   for (const f of rows) {
     const tr = document.createElement("tr");
 
-    const serialAvailable = f.available_qty ?? 0;
+    const purchased = f.self_purchased_qty ?? 0;
+    const supplied  = f.customer_supplied_qty ?? 0;
+    const available = f.available_qty ?? 0;
 
     tr.innerHTML = `
       <td class="py-2 px-4">
@@ -163,20 +165,10 @@ async function renderFixturesTable(rows) {
       <td class="py-2 px-4">${f.customer_id || "-"}</td>
       <td class="py-2 px-4">${f.fixture_type || "-"}</td>
 
-      <!-- 序號庫存（serial only） -->
+      <!-- ⭐ 統一庫存顯示（fixtures） -->
       <td class="py-2 px-4">
-        ${(f.self_purchased_qty ?? 0)}
-        /
-        ${(f.customer_supplied_qty ?? 0)}
-        /
-        ${serialAvailable}
+        ${purchased} / ${supplied} / ${available}
       </td>
-
-      <!-- 日期碼庫存 -->
-      <td class="py-2 px-4 datecode-qty text-gray-400">-</td>
-
-      <!-- ⭐ 總可用（顯示用） -->
-      <td class="py-2 px-4 total-available text-gray-400">-</td>
 
       <td class="py-2 px-4">${f.status || "-"}</td>
       <td class="py-2 px-4">${f.storage_location || "-"}</td>
@@ -185,29 +177,6 @@ async function renderFixturesTable(rows) {
     `;
 
     tbody.appendChild(tr);
-
-    /* ===== 非同步補 datecode，並計算總可用 ===== */
-    try {
-      const res = await apiGetDatecodeInventorySummary(
-        f.customer_id,
-        f.fixture_id
-      );
-
-      const datecodeQty = res?.available_qty ?? 0;
-      const totalAvailable = serialAvailable + datecodeQty;
-
-      tr.querySelector(".datecode-qty").textContent = datecodeQty;
-      tr.querySelector(".datecode-qty").classList.remove("text-gray-400");
-
-      tr.querySelector(".total-available").textContent = totalAvailable;
-      tr.querySelector(".total-available").classList.remove("text-gray-400");
-
-    } catch (err) {
-      console.warn("[datecode qty] load failed", f.fixture_id, err);
-      tr.querySelector(".datecode-qty").textContent = "-";
-      tr.querySelector(".total-available").textContent = serialAvailable;
-      tr.querySelector(".total-available").classList.remove("text-gray-400");
-    }
   }
 }
 
@@ -656,10 +625,3 @@ function initRequirementFilter(fixtures) {
 
 window.openModelDetail = openModelDetail;
 
-async function apiGetDatecodeInventorySummary(customerId, fixtureId) {
-  const q = new URLSearchParams({
-    customer_id: customerId,
-    fixture_id: fixtureId
-  });
-  return api(`/datecode-inventory/summary?${q.toString()}`);
-}

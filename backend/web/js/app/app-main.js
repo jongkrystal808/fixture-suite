@@ -84,76 +84,92 @@
   }
 
   function showTab(tabKey, options = { updateHash: true }) {
-    if (!TAB_CONFIG[tabKey]) tabKey = "dashboard";
-    if (currentTab === tabKey) return;
+      if (!TAB_CONFIG[tabKey]) tabKey = "dashboard";
+      if (currentTab === tabKey) return;
 
-    currentTab = tabKey;
+      currentTab = tabKey;
 
-    // 1) 切 main section
-    Object.keys(TAB_CONFIG).forEach(key => {
-      const sec = sections[key];
-      if (!sec) return;
-      if (key === tabKey) {
-        sec.classList.remove("hidden");
-      } else {
-        sec.classList.add("hidden");
+      // 1) 切 main section
+      Object.keys(TAB_CONFIG).forEach(key => {
+          const sec = sections[key];
+          if (!sec) return;
+          if (key === tabKey) {
+              sec.classList.remove("hidden");
+          } else {
+              sec.classList.add("hidden");
+          }
+      });
+
+      // 2) 切 tab 樣式
+      tabButtons.forEach(btn => {
+          const key = btn.dataset.tab;
+          if (key === tabKey) {
+              btn.classList.add("tab-active");
+          } else {
+              btn.classList.remove("tab-active");
+          }
+      });
+
+      // 3) 切換標題
+      if (bannerTitle) {
+          bannerTitle.textContent = TAB_CONFIG[tabKey].title;
       }
-    });
 
-    // 2) 切 tab 樣式
-    tabButtons.forEach(btn => {
-      const key = btn.dataset.tab;
-      if (key === tabKey) {
-        btn.classList.add("tab-active");
-      } else {
-        btn.classList.remove("tab-active");
-      }
-    });
+      // 4) 更新 hash
+      if (options.updateHash) setHash(tabKey);
 
-    // 3) 切換標題
-    if (bannerTitle) {
-      bannerTitle.textContent = TAB_CONFIG[tabKey].title;
-    }
-
-    // 4) 更新 hash
-    if (options.updateHash) setHash(tabKey);
-
-    // 5) 第一次進入該頁 → 載資料
-    if (!loadedFlags[tabKey]) {
-      loadedFlags[tabKey] = true;
-
+      // 5) 載資料
       try {
-        switch (tabKey) {
-          case "dashboard":
-            if (typeof window.loadDashboard === "function") window.loadDashboard();
-            break;
+          switch (tabKey) {
 
-          case "receipts":
-            if (typeof window.loadReceipts === "function") window.loadReceipts();
-            break;
+              // ★ Dashboard：每次切換都重新載入
+              case "dashboard":
+                  if (typeof window.loadDashboard === "function") {
+                      window.loadDashboard();
+                  }
+                  break;
 
-          case "query":
-            if (typeof window.loadFixturesQuery === "function") window.loadFixturesQuery();
-            break;
+              // 其他頁面：只載一次
+              case "receipts":
+              case "query":
+              case "logs":
+              case "stats":
+              case "admin":
+                  if (!loadedFlags[tabKey]) {
+                      loadedFlags[tabKey] = true;
 
-          case "logs":
-            if (typeof window.loadUsageLogs === "function") window.loadUsageLogs();
-            if (typeof window.loadReplacementLogs === "function") window.loadReplacementLogs();
-            break;
+                      switch (tabKey) {
+                          case "receipts":
+                              if (typeof window.loadReceipts === "function") window.loadReceipts();
+                              break;
 
-          case "stats":
-            if (typeof window.loadStats === "function") window.loadStats();
-            break;
+                          case "query":
+                              if (typeof window.loadFixturesQuery === "function") window.loadFixturesQuery();
+                              break;
 
-          case "admin":
-            if (typeof window.loadUsers === "function") window.loadUsers();
-            if (typeof window.loadCustomers === "function") window.loadCustomers();
-            break;
-        }
+                          case "logs":
+                              if (typeof window.loadUsageLogs === "function") window.loadUsageLogs();
+                              if (typeof window.loadReplacementLogs === "function") window.loadReplacementLogs();
+                              break;
+
+                          case "stats":
+                              if (typeof window.loadStats === "function") window.loadStats();
+                              break;
+
+                          case "admin":
+                              // ✅ 預設顯示「治具管理」
+                              switchAdminPage("fixtures");
+                              if (typeof window.loadCustomers === "function") {
+                                  window.loadCustomers();
+                              }
+                              break;
+                      }
+                  }
+                  break;
+          }
       } catch (e) {
-        console.warn("init tab error:", tabKey, e);
+          console.warn("init tab error:", tabKey, e);
       }
-    }
   }
 
   // 監聽 tab 按鈕

@@ -309,85 +309,26 @@ async function deleteReceipt(id) {
 /* ============================================================
  * 匯入 Excel / CSV
  * ============================================================ */
-async function handleReceiptImport(fileInput) {
-  const file = fileInput.files[0];
-  if (!file) {
-    alert("請選擇 Excel 檔案");
-    return;
-  }
+async function handleReceiptImport(input) {
+  const file = input.files[0];
+  if (!file) return alert("請選擇 Excel 或 CSV 檔案");
 
-  // ✅ 正確的 token key
-  const token = localStorage.getItem("auth_token");
-  if (!token) {
-    alert("尚未登入或 Token 已失效，請重新登入");
-    if (typeof showLoginModal === "function") showLoginModal();
-    fileInput.value = "";
-    return;
-  }
-
-  const formData = new FormData();
-  formData.append("file", file);
-
-  let resp, data;
+  const customer_id = getCurrentCustomerId();
+  if (!customer_id) return alert("請先選擇客戶");
 
   try {
-    resp = await fetch(
-      `/api/v2/receipts/import?customer_id=${currentCustomerId}`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`   // ✅ 這裡才是真的 token
-        },
-        body: formData
-      }
-    );
+    toast("正在匯入...");
+    const result = await apiImportReceiptsCsv(file, customer_id);
 
-    data = await resp.json();
-  } catch (err) {
-    alert("匯入失敗（網路或伺服器錯誤）");
-    console.error(err);
-    return;
-  }
-
-  // ✅ Token 過期專用處理
-  if (resp.status === 401) {
-    localStorage.removeItem("auth_token");
-    alert(data.detail || "Token 無效或已過期，請重新登入");
-    if (typeof showLoginModal === "function") showLoginModal();
-    fileInput.value = "";
-    return;
-  }
-
-  if (!resp.ok) {
-    alert(data.detail || "匯入失敗");
-    return;
-  }
-
-  // === 成功 / 失敗整理 ===
-  const results = data.results || [];
-  const successCount = data.created || 0;
-  const total = data.total || results.length;
-
-  const failedRows = results.filter(r => r.status === "failed");
-
-  let message = `匯入完成：成功 ${successCount} / 共 ${total} 筆\n`;
-
-  if (failedRows.length > 0) {
-    message += `\n❌ 失敗明細：\n`;
-    failedRows.forEach(r => {
-      message += `第 ${r.row} 行：${r.error}\n`;
-    });
-  }
-
-  alert(message);
-
-  if (typeof loadReceipts === "function") {
+    alert(`匯入成功,共 ${result.count || 0} 筆記錄`);
     loadReceipts();
+  } catch (err) {
+    console.error("匯入失敗:", err);
+    alert(`匯入失敗:${err.message}`);
+  } finally {
+    input.value = "";
   }
-
-  fileInput.value = "";
 }
-
 
 window.handleReceiptImport = handleReceiptImport;
 

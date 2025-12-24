@@ -37,12 +37,19 @@ class Database:
     # --------------------------------------------------------
     # Query Methods
     # --------------------------------------------------------
-    def execute_query(self, sql: str, params: Optional[Tuple] = None) -> List[Dict[str, Any]]:
+    def execute_query(self, sql: str, params: Optional[Tuple] = None):
         conn = self.get_conn()
         try:
             with conn.cursor(pymysql.cursors.DictCursor) as cursor:
                 cursor.execute(sql, params or ())
                 return cursor.fetchall()
+        except Exception as e:
+            # 🔥 關鍵：把真正的 SQL error 打出來
+            print("❌ SQL EXECUTE ERROR")
+            print("SQL:", sql)
+            print("PARAMS:", params)
+            print("ERROR:", e)
+            raise
         finally:
             conn.close()
 

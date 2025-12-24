@@ -1301,6 +1301,7 @@
         <!-- ================= 右側：內容區 ================= -->
         <div class="col-span-10 space-y-4">
 
+
           <!-- ========== 站點管理 ========== -->
           <div id="admin-stations" class="admin-page card p-5 space-y-4 hidden">
               <div class="flex items-center justify-between">
@@ -1576,7 +1577,7 @@
         </div>
 
           <!-- ========== 系統設定（SMTP） ========== -->
-          <div id="admin-system" class="admin-page card p-5 space-y-4 hidden">
+          <div id="admin-systems" class="admin-page card p-5 space-y-4 hidden">
             <h3 class="font-semibold">SMTP / 系統設定</h3>
                 <div class="grid md:grid-cols-3 gap-3">
                   <div class="field"><label class="label-xs">Email</label><input id="smtpEmail" class="input" placeholder="通知寄送 Email"/></div>
@@ -1654,22 +1655,6 @@
                   <div class="field">
                     <label class="label-xs">儲存位置</label>
                     <input id="fmStorage" class="input" placeholder="倉庫 A-01" />
-                  </div>
-                </div>
-              </section>
-
-              <!-- === 數量設定 === -->
-              <section class="space-y-2">
-                <h4 class="text-sm font-semibold text-gray-700">數量設定</h4>
-
-                <div class="grid md:grid-cols-2 gap-3">
-                  <div class="field">
-                    <label class="label-xs">自購數量</label>
-                    <input id="fmSelfQty" type="number" min="0" class="input" />
-                  </div>
-                  <div class="field">
-                    <label class="label-xs">客供數量</label>
-                    <input id="fmCustomerQty" type="number" min="0" class="input" />
                   </div>
                 </div>
               </section>
@@ -1927,6 +1912,7 @@
 
             <!-- API 基本設定，如 api()、API_PREFIX、Token 注入、401 處理 -->
             <script src="/js/api/api-config.js"></script>
+            <script src="/js/app/app-dashboard.js"></script>
 
             <!-- 共用工具（如果你有在用就保留） -->
             <script src="/js/utils/storage.js"></script>

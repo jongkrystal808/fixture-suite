@@ -146,33 +146,34 @@ async function loadFixtureList() {
 /* ============================================================
  * 渲染表格
  * ============================================================ */
-
 function renderFixtureTable(rows) {
   fxTable.innerHTML = "";
 
   if (!rows || rows.length === 0) {
     fxTable.innerHTML = `
-      <tr><td colspan="10" class="text-center py-3 text-gray-400">沒有資料</td></tr>
+      <tr>
+        <td colspan="10" class="text-center py-3 text-gray-400">
+          沒有資料
+        </td>
+      </tr>
     `;
     return;
   }
 
   rows.forEach((f) => {
-    // ✔ 正確欄位
     const id = f.fixture_id || "-";
     const name = f.fixture_name || "-";
     const type = f.fixture_type || "-";
 
-    // 🔥 修正庫存顯示邏輯 — 正確三段式（自購 / 客供 / 總）
+    // ⭐ fixtures 現在就是唯一真相來源
     const qtyPurchased = f.self_purchased_qty ?? 0;
-    const qtySupplied = f.customer_supplied_qty ?? 0;
-    const qtyTotal = qtyPurchased + qtySupplied; // ← ★ 正確總數量
+    const qtySupplied  = f.customer_supplied_qty ?? 0;
+    const qtyAvailable = f.available_qty ?? 0;
 
     const storage = f.storage_location || "-";
-    const status = f.status || "-";
-    const replace = f.replacement_cycle || "-";
-    const owner = f.owner_name || "-";
-    const note = f.note || "-";
+    const status  = f.status || "-";
+    const owner   = f.owner_name || "-";
+    const note    = f.note || "-";
 
     const tr = document.createElement("tr");
 
@@ -187,8 +188,10 @@ function renderFixtureTable(rows) {
       <td class="py-2 pr-4">${name}</td>
       <td class="py-2 pr-4">${type}</td>
 
-      <!-- 🔥 修正庫存三段式 -->
-      <td class="py-2 pr-4">${qtyPurchased} / ${qtySupplied} / ${qtyTotal}</td>
+      <!-- ✅ 最終庫存顯示（fixtures） -->
+      <td class="py-2 pr-4">
+        ${qtyPurchased} / ${qtySupplied} / ${qtyAvailable}
+      </td>
 
       <td class="py-2 pr-4">${status}</td>
       <td class="py-2 pr-4">${storage}</td>
@@ -196,14 +199,21 @@ function renderFixtureTable(rows) {
       <td class="py-2 pr-4">${note}</td>
 
       <td class="py-2 pr-4">
-        <button class="btn btn-xs btn-outline" onclick="openFixtureModal('edit','${id}')">編輯</button>
-        <button class="btn btn-xs btn-error" onclick="deleteFixture('${id}')">刪除</button>
+        <button class="btn btn-xs btn-outline"
+                onclick="openFixtureModal('edit','${id}')">
+          編輯
+        </button>
+        <button class="btn btn-xs btn-error"
+                onclick="deleteFixture('${id}')">
+          刪除
+        </button>
       </td>
     `;
 
     fxTable.appendChild(tr);
   });
 }
+
 
 /* ============================================================
  * 分頁
@@ -265,8 +275,6 @@ async function loadFixtureDetailToForm(id) {
     document.getElementById("fmFixtureName").value = data.fixture_name;
     document.getElementById("fmFixtureType").value = data.fixture_type;
     document.getElementById("fmSerialNumber").value = data.serial_number || "";
-    document.getElementById("fmSelfQty").value = data.self_purchased_qty;
-    document.getElementById("fmCustomerQty").value = data.customer_supplied_qty;
     document.getElementById("fmStorage").value = data.storage_location || "";
     document.getElementById("fmCycle").value = data.replacement_cycle || 0;
     document.getElementById("fmCycleUnit").value = data.cycle_unit || "none";
@@ -311,18 +319,17 @@ async function submitFixtureForm(e) {
   const mappedStatus = mapStatusToBackend(rawStatus);
 
   const payload = {
-    fixture_name: document.getElementById("fmFixtureName").value.trim(),
-    fixture_type: document.getElementById("fmFixtureType").value.trim(),
-    serial_number: document.getElementById("fmSerialNumber").value.trim(),
-    self_purchased_qty: Number(document.getElementById("fmSelfQty").value),
-    customer_supplied_qty: Number(document.getElementById("fmCustomerQty").value),
-    storage_location: document.getElementById("fmStorage").value.trim(),
-    replacement_cycle: Number(document.getElementById("fmCycle").value),
-    cycle_unit: document.getElementById("fmCycleUnit").value,
-    status: mappedStatus, // ✅ Use mapped status value
-    owner_id: Number(document.getElementById("fmOwnerId").value) || null,
-    note: document.getElementById("fmNote").value.trim(),
-  };
+      fixture_name: document.getElementById("fmFixtureName").value.trim(),
+      fixture_type: document.getElementById("fmFixtureType").value.trim(),
+      serial_number: document.getElementById("fmSerialNumber").value.trim(),
+      storage_location: document.getElementById("fmStorage").value.trim(),
+      replacement_cycle: Number(document.getElementById("fmCycle").value),
+      cycle_unit: document.getElementById("fmCycleUnit").value,
+      status: mappedStatus,
+      owner_id: Number(document.getElementById("fmOwnerId").value) || null,
+      note: document.getElementById("fmNote").value.trim(),
+    };
+
 
   // ✅ fixture_id 只在 create 時送
   if (mode === "create") {

@@ -9,7 +9,7 @@ CREATE PROCEDURE sp_material_receipt(
     IN p_operator VARCHAR(100),
     IN p_note TEXT,
     IN p_created_by INT,
-    IN p_record_type VARCHAR(30),   -- batch / individual / datecode
+    IN p_record_type VARCHAR(30),     -- batch / individual / datecode
     IN p_datecode VARCHAR(50),
     IN p_serials_csv TEXT,
     OUT p_transaction_id INT,
@@ -52,20 +52,24 @@ BEGIN
 
     SET p_transaction_id = LAST_INSERT_ID();
 
-    -- 分流處理
+    -- ========= 分流處理 =========
     IF p_record_type = 'datecode' THEN
 
         INSERT INTO fixture_datecode_inventory
-            (customer_id, fixture_id, datecode, available_qty)
+            (customer_id, fixture_id, datecode, source_type, available_qty)
         VALUES
-            (p_customer_id, p_fixture_id, p_datecode, v_qty)
+            (p_customer_id, p_fixture_id, p_datecode, p_source_type, v_qty)
         ON DUPLICATE KEY UPDATE
             available_qty = available_qty + v_qty;
 
         INSERT INTO fixture_datecode_transactions
-            (transaction_id, customer_id, fixture_id, datecode, transaction_type, quantity)
+            (transaction_id, customer_id, fixture_id, datecode,
+             transaction_type, quantity)
         VALUES
-            (p_transaction_id, p_customer_id, p_fixture_id, p_datecode, 'receipt', v_qty);
+            (p_transaction_id, p_customer_id, p_fixture_id, p_datecode,
+             'receipt', v_qty);
+
+        -- ❌ 不再 UPDATE fixtures（交給 trigger）
 
     ELSE
         CALL sp_insert_fixture_serials(
@@ -132,6 +136,7 @@ BEGIN
 
     SET p_transaction_id = LAST_INSERT_ID();
 
+    -- ========= 分流處理 =========
     IF p_record_type = 'datecode' THEN
 
         SELECT available_qty
@@ -147,16 +152,21 @@ BEGIN
         END IF;
 
         UPDATE fixture_datecode_inventory
-        SET available_qty = available_qty - v_qty,
+        SET
+            available_qty = available_qty - v_qty,
             returned_qty  = returned_qty  + v_qty
         WHERE customer_id = p_customer_id
           AND fixture_id = p_fixture_id
           AND datecode = p_datecode;
 
         INSERT INTO fixture_datecode_transactions
-            (transaction_id, customer_id, fixture_id, datecode, transaction_type, quantity)
+            (transaction_id, customer_id, fixture_id, datecode,
+             transaction_type, quantity)
         VALUES
-            (p_transaction_id, p_customer_id, p_fixture_id, p_datecode, 'return', v_qty);
+            (p_transaction_id, p_customer_id, p_fixture_id, p_datecode,
+             'return', v_qty);
+
+        -- ❌ 不再 UPDATE fixtures（交給 trigger）
 
     ELSE
         CALL sp_return_fixture_serials(
@@ -169,77 +179,4 @@ BEGIN
 
     COMMIT;
     SET p_message = 'OK';
-END;
-
-
-
--- Stored Procedure: sp_insert_fixture_serials
-DROP PROCEDURE IF EXISTS sp_insert_fixture_serials;
-CREATE PROCEDURE sp_insert_fixture_serials(
-    IN p_customer_id VARCHAR(50),
-    IN p_fixture_id VARCHAR(50),
-    IN p_serials_csv TEXT,
-    IN p_source_type VARCHAR(30),
-    IN p_transaction_id INT
-)
-BEGIN
-    DECLARE v_serial VARCHAR(100);
-    DECLARE v_pos INT;
-
-    WHILE LENGTH(p_serials_csv) > 0 DO
-        SET v_pos = LOCATE(',', p_serials_csv);
-
-        IF v_pos = 0 THEN
-            SET v_serial = p_serials_csv;
-            SET p_serials_csv = '';
-        ELSE
-            SET v_serial = SUBSTRING(p_serials_csv, 1, v_pos - 1);
-            SET p_serials_csv = SUBSTRING(p_serials_csv, v_pos + 1);
-        END IF;
-
-        INSERT INTO fixture_serials (
-            customer_id, fixture_id, serial_number,
-            source_type, status,
-            receipt_date, receipt_transaction_id
-        ) VALUES (
-            p_customer_id, p_fixture_id, v_serial,
-            p_source_type, 'available',
-            CURRENT_DATE, p_transaction_id
-        );
-    END WHILE;
-END;
-
-
--- Stored Procedure: sp_return_fixture_serials
-DROP PROCEDURE IF EXISTS sp_return_fixture_serials;
-
-CREATE PROCEDURE sp_return_fixture_serials(
-    IN p_customer_id VARCHAR(50),
-    IN p_fixture_id VARCHAR(50),
-    IN p_serials_csv TEXT,
-    IN p_transaction_id INT
-)
-BEGIN
-    DECLARE v_serial VARCHAR(100);
-    DECLARE v_pos INT;
-
-    WHILE LENGTH(p_serials_csv) > 0 DO
-        SET v_pos = LOCATE(',', p_serials_csv);
-
-        IF v_pos = 0 THEN
-            SET v_serial = p_serials_csv;
-            SET p_serials_csv = '';
-        ELSE
-            SET v_serial = SUBSTRING(p_serials_csv, 1, v_pos - 1);
-            SET p_serials_csv = SUBSTRING(p_serials_csv, v_pos + 1);
-        END IF;
-
-        UPDATE fixture_serials
-        SET status = 'returned',
-            return_date = CURRENT_DATE,
-            return_transaction_id = p_transaction_id
-        WHERE customer_id = p_customer_id
-          AND fixture_id = p_fixture_id
-          AND serial_number = v_serial;
-    END WHILE;
 END;

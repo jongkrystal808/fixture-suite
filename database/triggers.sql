@@ -119,3 +119,51 @@ BEGIN
         WHERE serial_number = NEW.serial_number;
     END IF;
 END;
+
+
+DROP TRIGGER IF EXISTS trg_datecode_inventory_insert;
+CREATE TRIGGER trg_datecode_inventory_insert
+    AFTER INSERT ON fixture_datecode_inventory
+    FOR EACH ROW
+BEGIN
+    -- available 一定是正數（收料）
+    UPDATE fixtures
+    SET
+        available_qty = available_qty + NEW.available_qty,
+
+        self_purchased_qty = self_purchased_qty
+            + (NEW.source_type = 'self_purchased') * NEW.available_qty,
+
+        customer_supplied_qty = customer_supplied_qty
+            + (NEW.source_type = 'customer_supplied') * NEW.available_qty
+    WHERE id = NEW.fixture_id;
+END;
+
+
+DROP TRIGGER IF EXISTS trg_datecode_inventory_update;
+CREATE TRIGGER trg_datecode_inventory_update
+    AFTER UPDATE ON fixture_datecode_inventory
+    FOR EACH ROW
+BEGIN
+    DECLARE delta_available INT;
+    DECLARE delta_returned INT;
+
+    SET delta_available = NEW.available_qty - OLD.available_qty;
+    SET delta_returned  = NEW.returned_qty  - OLD.returned_qty;
+
+    UPDATE fixtures
+    SET
+        -- 可用數量（收 / 退 都會反映）
+        available_qty = available_qty + delta_available,
+
+        -- 退料數量
+        returned_qty  = returned_qty  + delta_returned,
+
+        -- 來源數量：只在「收料（delta_available > 0）」時增加
+        self_purchased_qty = self_purchased_qty
+            + (NEW.source_type = 'self_purchased' AND delta_available > 0) * delta_available,
+
+        customer_supplied_qty = customer_supplied_qty
+            + (NEW.source_type = 'customer_supplied' AND delta_available > 0) * delta_available
+    WHERE id = NEW.fixture_id;
+END;

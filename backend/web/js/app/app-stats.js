@@ -31,11 +31,11 @@ function getCurrentCustomerId() {
 /* ============================================================
  * 初始化：載入統計卡片 & 不耐用清單
  * ============================================================ */
-document.addEventListener("DOMContentLoaded", () => {
+// document.addEventListener("DOMContentLoaded", () => {
+//   loadFixtureStatsSummary();
+window.loadStats = function () {
   loadFixtureStatsSummary();
-  loadUndurableFixtures();     // 目前用簡單算法，你之後可以改成後端 API
-});
-
+};
 /* ============================================================
  * 1. 統計卡片（上面四張卡）
  * ============================================================ */

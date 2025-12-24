@@ -48,15 +48,23 @@ async function apiListFixturesStatus(options = {}) {
     replacementStatus = ""
   } = options;
 
+  const customer_id = _getCurrentCustomerId();
+  if (!customer_id) {
+    throw new Error("apiListFixturesStatus: customer_id missing");
+  }
+
   const params = new URLSearchParams();
+  params.set("customer_id", customer_id);
   params.set("skip", String((page - 1) * pageSize));
   params.set("limit", String(pageSize));
 
-  if (replacementStatus)
+  if (replacementStatus) {
     params.set("replacement_status", replacementStatus);
+  }
 
   return api("/fixtures/status/view?" + params.toString());
 }
+
 
 /**
  * 查詢單一治具
@@ -154,11 +162,21 @@ async function apiDeleteFixture(fixture_id, customer_id) {
  */
 async function apiGetFixturesSimple(statusFilter = "") {
   const params = new URLSearchParams();
-  if (statusFilter) params.set("status_filter", statusFilter);
 
-  const query = params.toString() ? "?" + params.toString() : "";
-  return api("/fixtures/simple/list" + query);
+  const customer_id = _getCurrentCustomerId();
+  if (!customer_id) {
+    throw new Error("apiGetFixturesSimple: customer_id missing");
+  }
+
+  params.set("customer_id", customer_id);
+
+  if (statusFilter) {
+    params.set("status_filter", statusFilter);
+  }
+
+  return api("/fixtures/simple/list?" + params.toString());
 }
+
 
 async function apiGetFixtureDetail(id) {
   const customer_id = _getCurrentCustomerId();

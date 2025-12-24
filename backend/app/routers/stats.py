@@ -34,7 +34,7 @@ async def get_summary(
     # ✔ 使用中（被部署）
     using_count = db.execute_query(
         """
-        SELECT COUNT(*) AS cnt
+        SELECT COUNT(DISTINCT fixture_id) AS cnt
         FROM fixture_deployments
         WHERE customer_id=%s
         """,
@@ -79,6 +79,7 @@ async def get_summary(
 
     return {
         "total_fixtures": total_fixtures,
+        "available_qty": total_fixtures - using_count - scrap_count,
         "using_count": using_count,
         "scrap_count": scrap_count,
         "recent_receipts": recent_receipts,
@@ -107,22 +108,25 @@ async def get_fixture_status(
 # ============================================================
 # 3. 最大開站數（資料庫 view）
 # ============================================================
-
 @router.get("/max-stations", summary="最大開站數")
 async def get_max_stations(
     model_id: str = Query(...),
-    customer_id: str = Query(...),
     user=Depends(get_current_user)
 ):
     rows = db.execute_query(
         """
-        SELECT station_id, max_open
+        SELECT
+            station_id,
+            station_name,
+            max_available_stations,
+            limiting_fixtures
         FROM view_model_max_stations
-        WHERE customer_id=%s AND model_id=%s
+        WHERE model_id=%s
         """,
-        (customer_id, model_id)
+        (model_id,)
     )
     return rows
+
 
 # ============================================================
 # 4. 序號統計（資料庫 view）

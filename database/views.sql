@@ -140,7 +140,7 @@ LEFT JOIN (
 ) av
   ON av.fixture_id = fr.fixture_id
 
-WHERE f.status = '正常'
+WHERE f.status = 'normal'
   AND fr.required_qty > 0
 
 GROUP BY
@@ -284,3 +284,49 @@ BEGIN
 
     END IF;
 END;
+
+-- ============================================================
+-- View: view_upcoming_fixture_replacements
+-- 用途: 即將更換治具清單（Dashboard / 通知共用）
+-- 規則: 使用率或時間達 80%
+-- ============================================================
+
+DROP VIEW IF EXISTS view_upcoming_fixture_replacements;
+
+CREATE VIEW view_upcoming_fixture_replacements AS
+SELECT
+    f.customer_id,
+    f.id AS fixture_id,
+    f.fixture_name,
+    f.cycle_unit,
+    f.replacement_cycle,
+
+    -- 使用次數模式
+    fus.total_uses,
+
+    -- 天數模式
+    f.last_replacement_date,
+    DATEDIFF(CURDATE(), f.last_replacement_date) AS used_days,
+
+    -- 計算使用率（統一成 ratio）
+    CASE
+        WHEN f.cycle_unit = 'uses'
+             AND f.replacement_cycle > 0
+        THEN fus.total_uses / f.replacement_cycle
+
+        WHEN f.cycle_unit = 'days'
+             AND f.replacement_cycle > 0
+             AND f.last_replacement_date IS NOT NULL
+        THEN DATEDIFF(CURDATE(), f.last_replacement_date) / f.replacement_cycle
+
+        ELSE NULL
+    END AS usage_ratio
+
+FROM fixtures f
+LEFT JOIN fixture_usage_summary fus
+  ON fus.fixture_id = f.id
+ AND fus.customer_id = f.customer_id
+
+WHERE
+    f.replacement_cycle IS NOT NULL
+    AND f.cycle_unit IN ('uses', 'days');
