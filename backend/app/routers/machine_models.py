@@ -112,67 +112,6 @@ async def export_models_xlsx(customer_id: str = Query(...), user=Depends(get_cur
     )
 
 
-# ✅ 匯入（XLSX）
-@router.post("/import", summary="匯入機種（XLSX）")
-async def import_models_xlsx(
-    customer_id: str = Query(...),
-    file: UploadFile = File(...),
-    user=Depends(get_current_user)
-):
-    if not file.filename.lower().endswith(".xlsx"):
-        raise HTTPException(status_code=400, detail="只接受 .xlsx 檔案")
-
-    content = await file.read()
-    wb = load_workbook(BytesIO(content))
-    if "models" not in wb.sheetnames:
-        raise HTTPException(status_code=400, detail='XLSX 需包含 "models" 工作表')
-
-    ws = wb["models"]
-
-    # 讀 header
-    header = [c.value for c in next(ws.iter_rows(min_row=1, max_row=1))]
-    required = ["id", "model_name", "note"]
-    if header[:3] != required:
-        raise HTTPException(status_code=400, detail=f"欄位錯誤，前 3 欄必須是：{required}")
-
-    imported = 0
-    updated = 0
-    skipped = 0
-
-    for row in ws.iter_rows(min_row=2, values_only=True):
-        if not row or not row[0] or not row[1]:
-            skipped += 1
-            continue
-
-        model_id = str(row[0]).strip()
-        model_name = str(row[1]).strip()
-        note = (str(row[2]).strip() if row[2] is not None else "")
-
-        # upsert：存在就更新，不存在就新增（你也可改成「存在就跳過」）
-        exist = db.execute_query(
-            "SELECT id FROM machine_models WHERE customer_id=%s AND id=%s",
-            (customer_id, model_id)
-        )
-
-        if exist:
-            db.execute_update(
-                "UPDATE machine_models SET model_name=%s, note=%s WHERE customer_id=%s AND id=%s",
-                (model_name, note, customer_id, model_id)
-            )
-            updated += 1
-        else:
-            db.execute_update(
-                "INSERT INTO machine_models (customer_id, id, model_name, note) VALUES (%s,%s,%s,%s)",
-                (customer_id, model_id, model_name, note)
-            )
-            imported += 1
-
-    return {
-        "message": "匯入完成",
-        "imported": imported,
-        "updated": updated,
-        "skipped": skipped
-    }
 
 # ============================================================
 # List Models (GET)

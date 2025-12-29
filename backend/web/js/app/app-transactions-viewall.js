@@ -46,32 +46,64 @@ async function apiViewAllTransactions(params = {}) {
 }
 
 
-// 渲染表格
+// 渲染表格（總檢視）
 function renderViewAllTable(rows) {
   const tbody = document.getElementById("viewAllTableBody");
   tbody.innerHTML = "";
 
   if (!rows || rows.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4 text-gray-500">無資料</td></tr>`;
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="9" class="text-center py-4 text-gray-500">無資料</td>
+      </tr>
+    `;
     return;
   }
 
   rows.forEach(r => {
+    // -----------------------------
+    // 類型文字
+    // -----------------------------
+    const typeText = r.transaction_type === "receipt" ? "收料" : "退料";
+
+    // -----------------------------
+    // 來源文字
+    // -----------------------------
+    const sourceText =
+      r.source_type === "self_purchased"
+        ? "自購"
+        : (r.source_type === "customer_supplied" ? "客供" : "-");
+
+    // -----------------------------
+    // 數量顯示（★重點修正）
+    // -----------------------------
+    let qtyText = "-";
+
+    if (r.record_type === "datecode") {
+      // datecode：顯示 datecode + 件數
+      qtyText = `${r.datecode || "-"}（${r.quantity || 0} 件）`;
+    } else {
+      // batch / individual：只顯示「有幾個序號」
+      qtyText = `${r.quantity || 0} 個`;
+    }
+
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${r.transaction_date}</td>
-      <td>${r.transaction_type === "receipt" ? "收料" : "退料"}</td>
-      <td>${r.fixture_id}</td>
-      <td>${r.customer_id}</td>
-      <td>${r.source_type === "self_purchased" ? "自購" : "客供"}</td>
-      <td>${r.datecode || "-"}</td>
-      <td>${r.quantity || "-"}</td>
+      <td>${r.transaction_date || "-"}</td>
+      <td>${typeText}</td>
+      <td>${r.fixture_id || "-"}</td>
+      <td>${r.customer_id || "-"}</td>
+      <td>${sourceText}</td>
+      <td>${r.record_type || "-"}</td>
+      <td>${qtyText}</td>
       <td>${r.operator || "-"}</td>
       <td>${r.note || "-"}</td>
     `;
     tbody.appendChild(tr);
   });
 }
+
+
 // ============================================================
 // 收料 / 退料 / 總檢視 TAB 切換控制
 // ============================================================
@@ -220,4 +252,64 @@ function renderViewAllPagination(total, skip, limit) {
 
   html += `</div>`;
   container.innerHTML = html;
+}
+
+
+function loadTransactionViewAll(page = 1) {
+  const customer_id = getCurrentCustomerId();
+  if (!customer_id) return;
+
+  const params = {
+    customer_id,
+    skip: (page - 1) * 20,
+    limit: 20,
+  };
+
+  // -------------------------
+  // 條件欄位（只在有值時才送）
+  // -------------------------
+  const fixture = document.getElementById("vaFixture")?.value?.trim();
+  if (fixture) params.fixture_id = fixture;
+
+  const datecode = document.getElementById("vaDatecode")?.value?.trim();
+  if (datecode) params.datecode = datecode;
+
+  const operator = document.getElementById("vaOperator")?.value?.trim();
+  if (operator) params.operator = operator;
+
+  const type = document.getElementById("vaType")?.value;
+  if (type) params.type = type;
+
+  const sortBy = document.getElementById("vaSortBy")?.value;
+  if (sortBy) params.sort_by = sortBy;
+
+  // -------------------------
+  // 日期區間（★ 關鍵修正）
+  // -------------------------
+  const dateFrom = document.getElementById("vaDateFrom")?.value;
+  const dateTo   = document.getElementById("vaDateTo")?.value;
+
+  if (dateFrom && dateFrom.trim() !== "") {
+    params.date_from = dateFrom;
+  }
+
+  if (dateTo && dateTo.trim() !== "") {
+    params.date_to = dateTo;
+  }
+
+  // -------------------------
+  // API 呼叫
+  // -------------------------
+  api("/transactions/view-all", {
+      params
+    })
+    .then(res => {
+      renderViewAllTable(res.rows || []);
+      renderViewAllPagination(res.total || 0, page);
+    })
+    .catch(err => {
+      console.error(err);
+      alert("查詢失敗");
+    });
+
 }

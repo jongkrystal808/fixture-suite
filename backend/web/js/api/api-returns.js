@@ -38,8 +38,14 @@ async function apiListReturns(params = {}) {
   if (params.date_to) q.set("date_to", params.date_to);
   if (params.serial) q.set("serial", params.serial);
 
-  if (params.skip !== undefined) q.set("skip", params.skip);
-  if (params.limit !== undefined) q.set("limit", params.limit);
+    if (Number.isInteger(params.skip) && params.skip >= 0) {
+      q.set("skip", params.skip);
+    }
+
+    if (Number.isInteger(params.limit) && params.limit > 0) {
+      q.set("limit", params.limit);
+    }
+
 
   return api(`/returns?${q.toString()}`);
 }

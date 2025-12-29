@@ -103,21 +103,14 @@ function renderReturnTable(rows) {
     // --------------------------------
     let serialText = "-";
 
-    if (r.record_type === 'datecode') {
-      serialText = "-"; // datecode 不顯示序號
+    if (r.record_type === "datecode") {
+      serialText = `${r.datecode || "-"} (${r.quantity || 0} 件)`;
+    } else if (r.record_type === "batch") {
+      serialText = `批量（共 ${r.quantity || 0} 個）`;
+    } else if (r.record_type === "individual") {
+      serialText = `個別（共 ${r.quantity || 0} 個）`;
     }
-    else if (r.serial_list) {
-      serialText = r.serial_list;
-    }
-    else if (r.serial_text) {
-      serialText = r.serial_text;
-    }
-    else if (r.serials) {
-      serialText = r.serials;
-    }
-    else if (r.serial_start && r.serial_end) {
-      serialText = `${r.serial_start}~${r.serial_end}`;
-    }
+
 
     // --------------------------------
     // ★ 來源類型顯示（Datecode / 其他）
@@ -212,12 +205,12 @@ async function submitReturn() {
     payload.serial_end = serialEnd;
 
   } else if (type === "datecode") {
-    // ★ datecode 模式
     const datecode = document.getElementById("returnAddDatecode")?.value.trim();
-    const quantity = parseInt(document.getElementById("returnAddQuantity")?.value.trim() || "0");
+    const quantity = parseInt(
+      document.getElementById("returnAddQuantity")?.value.trim() || "0"
+    );
 
-    if (!datecode)
-      return toast("請輸入日期碼");
+    if (!datecode) return toast("請輸入日期碼");
     if (!quantity || quantity <= 0)
       return toast("請輸入有效數量");
 
@@ -225,7 +218,6 @@ async function submitReturn() {
     payload.quantity = quantity;
 
   } else {
-    // individual 模式
     const serials = document.getElementById("returnAddSerials")?.value.trim();
     if (!serials)
       return toast("請輸入序號列表(以逗號分隔)");
@@ -233,15 +225,33 @@ async function submitReturn() {
   }
 
   try {
+    // ✅ 1. 建立退料（只要這行沒 throw 就是成功）
     await apiCreateReturn(payload);
+
     toast("退料新增成功");
-    document.getElementById("returnAddForm").classList.add("hidden");
-    loadReturns();
+
+    // ✅ 2. 關閉表單
+    document.getElementById("returnAddForm")?.classList.add("hidden");
+
+    // ✅ 3. 重置頁碼 + 延後刷新（避免第一次 500）
+    returnsPage = 1;
+    setTimeout(() => {
+      loadReturns().catch(err => {
+        console.warn("loadReturns failed after create:", err);
+        toast("資料已新增，但列表重新載入失敗，請點擊查詢", "warning");
+      });
+    }, 0);
+
   } catch (err) {
+    // ❌ 只有建立 API 失敗才會進來
     console.error(err);
-    toast("退料新增失敗", "error");
+    toast(
+      "退料新增失敗：" + (err?.data?.detail || err.message || ""),
+      "error"
+    );
   }
 }
+
 
 /* ============================================================
  * 刪除退料
@@ -344,32 +354,35 @@ window.handleReturnTypeChange = handleReturnTypeChange;
 function downloadReturnTemplate() {
   const template = [
     {
-      fixture_id: "C-00010",
-      customer_id: "moxa",
-      order_no: "PO123456",
-      type: "batch",
-      serial_start: 1,
-      serial_end: 10,
-      note: "批量退料示例"
-    },
-    {
-      fixture_id: "L-00018",
-      customer_id: "moxa",
-      order_no: "RET-001",
-      type: "individual",
-      serials: "SN001,SN002,SN003",
-      note: "個別退料示例"
-    },
-    {
-      fixture_id: "L-00020",
-      customer_id: "moxa",
-      order_no: "RET-002",
-      type: "datecode",
-      datecode: "2024W12",
-      quantity: 30,
-      note: "日期碼退料示例 (系統會自動找對應序號)"
-    }
-  ];
+          fixture_id: "C-00010",
+          customer_id: "moxa",
+          order_no: "PO123456",
+          source_type: "customer_supplied",
+          record_type: "batch",
+          serial_start: 1,
+          serial_end: 10,
+          note: "批量退料示例"
+        },
+        {
+          fixture_id: "L-00018",
+          customer_id: "moxa",
+          order_no: "PO123457",
+          source_type: "self_purchased",
+          record_type: "individual",
+          serials: "SN001,SN002,SN003",
+          note: "個別退料示例"
+        },
+        {
+          fixture_id: "L-00020",
+          customer_id: "moxa",
+          order_no: "PO123458",
+          source_type: "customer_supplied",
+          record_type: "datecode",
+          datecode: "2024W12",
+          quantity: 50,
+          note: "日期碼退料示例"
+        }
+      ];
 
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.json_to_sheet(template);

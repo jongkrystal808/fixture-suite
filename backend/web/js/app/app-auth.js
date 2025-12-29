@@ -199,3 +199,10 @@ window.doLogout = doLogout;
 window.loadCurrentUser = loadCurrentUser;
 window.loadCustomerSelector = loadCustomerSelector;
 window.confirmCustomerSelection = confirmCustomerSelection;
+
+// =====================================================
+// 🚀 App Init（關鍵）
+// =====================================================
+document.addEventListener("DOMContentLoaded", async () => {
+  await loadCurrentUser();           // 登入 / 取 user
+});

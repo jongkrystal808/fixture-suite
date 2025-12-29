@@ -193,6 +193,11 @@ window.debounceLoadFixtures = debounceLoadFixtures;
 function closeFixtureDetail() {
   const drawer = document.getElementById("fixtureDetailDrawer");
   if (drawer) drawer.classList.add("translate-x-full");
+
+  // ⭐ 清除 ESC 登記
+  if (window.__activeOverlayCloser === closeFixtureDetail) {
+    window.__activeOverlayCloser = null;
+  }
 }
 window.closeFixtureDetail = closeFixtureDetail;
 
@@ -206,6 +211,12 @@ async function openFixtureDetail(fixtureId) {
   }
 
   drawer.classList.remove("translate-x-full");
+
+    // ⭐ 登記 ESC 關閉
+    window.__activeOverlayCloser = () => {
+      closeFixtureDetail();
+    };
+
   box.innerHTML = `<div class="p-4 text-gray-500">載入中...</div>`;
 
   try {
@@ -429,6 +440,10 @@ window.formatTrans = formatTrans;
 function closeModelDetail() {
   const drawer = document.getElementById("modelDetailDrawer");
   if (drawer) drawer.classList.add("translate-x-full");
+    // ⭐ 清除 ESC 登記
+  if (window.__activeOverlayCloser === closeModelDetail) {
+    window.__activeOverlayCloser = null;
+  }
 }
 window.closeModelDetail = closeModelDetail;
 
@@ -441,6 +456,10 @@ async function openModelDetail(modelId) {
   }
 
   drawer.classList.remove("translate-x-full");
+      // ⭐ 登記 ESC 關閉
+    window.__activeOverlayCloser = () => {
+      closeModelDetail();
+    };
   box.innerHTML = `<div class="p-4 text-gray-500">載入中...</div>`;
 
   try {

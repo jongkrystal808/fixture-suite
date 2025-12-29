@@ -48,8 +48,9 @@ function api(path, options = {}) {
   const params = options.params || options.query;
   if (params && typeof params === "object") {
     Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null)
+      if (value !== undefined && value !== null) {
         url.searchParams.set(key, String(value));
+      }
     });
   }
 
@@ -65,6 +66,7 @@ function api(path, options = {}) {
     options.skipCustomerId ||
     ignoreCidAlways.some((prefix) => path.startsWith(prefix));
 
+  // ✅ JSON / Query API 仍維持原本行為
   if (!shouldSkipCid && customerId && !url.searchParams.has("customer_id")) {
     url.searchParams.set("customer_id", customerId);
   }
@@ -76,7 +78,7 @@ function api(path, options = {}) {
     ...(options.headers || {}),
   };
 
-  // 自動 Content-Type
+  // 自動 Content-Type（FormData 不設定）
   if (!(options.body instanceof FormData) && !options.rawBody) {
     headers["Content-Type"] = "application/json";
   }
@@ -84,6 +86,18 @@ function api(path, options = {}) {
   // 自動加入 Token
   if (!options.skipAuth && token && !headers["Authorization"]) {
     headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  // ----------------------------------------
+  // ⭐ FIX：FormData 自動補 customer_id（匯入專用）
+  // ----------------------------------------
+  if (
+    options.body instanceof FormData &&
+    !shouldSkipCid &&
+    customerId &&
+    !options.body.has("customer_id")
+  ) {
+    options.body.append("customer_id", customerId);
   }
 
   // ----------------------------------------
@@ -126,8 +140,7 @@ function api(path, options = {}) {
 
     if (!res.ok) {
       console.error(`❌ API ERROR: ${path}`, res.status, data);
-
-  console.error("❌ API ERROR DATA:", JSON.stringify(data, null, 2));
+      console.error("❌ API ERROR DATA:", JSON.stringify(data, null, 2));
 
       const err = new Error(
         `API ${path} failed: ${res.status} ${data?.detail || res.statusText || ""}`

@@ -1,4 +1,7 @@
 // 簡易 hash router + 頁籤切換
+// 全域目前開啟的浮層關閉函式
+window.__activeOverlayCloser = null;
+
 
 (function () {
   const TAB_CONFIG = {
@@ -187,6 +190,25 @@
     const tabKey = normalizeHash(location.hash);
     showTab(tabKey, { updateHash: false });
   });
+
+  // =====================================================
+    // ⎋ Global ESC handler (REAL version for current project)
+    // =====================================================
+    document.addEventListener("keydown", function (e) {
+      if (e.key !== "Escape") return;
+
+      // 有登記的浮層，直接關
+      if (typeof window.__activeOverlayCloser === "function") {
+        window.__activeOverlayCloser();
+        window.__activeOverlayCloser = null;
+        return;
+      }
+
+      // fallback：dialog
+      document.querySelectorAll("dialog[open]").forEach(d => d.close());
+    });
+
+
 
   // DOM Ready
   window.addEventListener("DOMContentLoaded", async () => {

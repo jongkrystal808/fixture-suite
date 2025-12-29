@@ -65,15 +65,16 @@
           </div>
           <div class="flex items-center gap-2">
             <span class="pill border-gray-300" id="clock">--:--</span>
-              <!-- 目前客戶（可點擊切換） -->
-            <span
-              id="currentCustomerDisplay"
-              class="pill border-gray-300 cursor-pointer hidden"
-              title="點擊切換客戶"
-              onclick="openCustomerSwitch()"
+            <!-- 目前客戶（可直接下拉切換） -->
+            <select
+              id="currentCustomerSelect"
+              class="pill border-gray-300 bg-white text-sm cursor-pointer hidden"
+              title="切換客戶"
+              onchange="switchCustomerFromHeader(this.value)"
             >
-              客戶：--
-            </span>
+              <option value="">客戶：--</option>
+            </select>
+
 
             <span id="currentUserDisplay" class="text-xs text-gray-600">未登入</span>
 
@@ -549,8 +550,16 @@
           <!-- 查詢區 -->
           <div class="card p-5 space-y-4">
             <h3 class="font-semibold text-lg">收 / 退料總檢視</h3>
-
             <div class="grid md:grid-cols-6 gap-3">
+                <div class="field">
+              <label class="text-base font-semibold">日期（起）</label>
+              <input type="date" id="vaDateFrom" class="input">
+            </div>
+
+            <div class="field">
+              <label class="text-base font-semibold">日期（迄）</label>
+              <input type="date" id="vaDateTo" class="input">
+            </div>
               <div class="field">
                 <label class="text-base font-semibold">治具編號</label>
                 <input id="vaFixture" class="input" placeholder="治具編號">
@@ -560,6 +569,12 @@
                 <label class="text-base font-semibold">Datecode</label>
                 <input id="vaDatecode" class="input" placeholder="Datecode">
               </div>
+
+                <div class="field">
+                  <label class="text-base font-semibold">序號</label>
+                  <input id="vaSerial" class="input" placeholder="序號">
+                </div>
+
 
               <div class="field">
                 <label class="text-base font-semibold">操作人員</label>
@@ -606,6 +621,7 @@
                     <th class="py-2 pr-4">客戶</th>
                     <th class="py-2 pr-4">來源</th>
                     <th class="py-2 pr-4">Datecode</th>
+                    <th class="py-2 pr-4">工單</th>
                     <th class="py-2 pr-4">數量</th>
                     <th class="py-2 pr-4">操作人員</th>
                     <th class="py-2 pr-4">備註</th>

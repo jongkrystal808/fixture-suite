@@ -82,11 +82,15 @@ async def view_all_transactions(
     datecode: Optional[str] = Query(None),
     operator: Optional[str] = Query(None),
     type: Optional[str] = Query(None),
+    serial: Optional[str] = Query(None),  # ⭐ 新增
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    sort_by: str = Query("time"),  # time | datecode
+
     skip: int = Query(0),
     limit: int = Query(200),
     user=Depends(get_current_user)
 ):
-
     where = ["t.customer_id = %s"]
     params = [customer_id]
 
@@ -106,7 +110,32 @@ async def view_all_transactions(
         where.append("t.transaction_type = %s")
         params.append(type)
 
+    if serial:
+        where.append("""
+            t.id IN (
+                SELECT transaction_id
+                FROM material_transaction_details
+                WHERE serial_number LIKE %s
+            )
+        """)
+        params.append(f"%{serial}%")
+
+    # ✅ 時間檢索
+    if date_from:
+        where.append("t.transaction_date >= %s")
+        params.append(date_from)
+
+    if date_to:
+        where.append("t.transaction_date <= %s")
+        params.append(date_to)
+
     where_sql = " AND ".join(where)
+
+    # ✅ 排序切換
+    if sort_by == "datecode":
+        order_sql = "t.datecode DESC, t.created_at DESC, t.id DESC"
+    else:
+        order_sql = "t.created_at DESC, t.id DESC"
 
     sql = f"""
         SELECT 
@@ -115,6 +144,7 @@ async def view_all_transactions(
             t.transaction_type,
             t.fixture_id,
             t.customer_id,
+            t.order_no,
             t.source_type,
             t.datecode,
             t.quantity,
@@ -122,13 +152,17 @@ async def view_all_transactions(
             t.note
         FROM material_transactions t
         WHERE {where_sql}
-        ORDER BY t.transaction_date DESC, t.id DESC
+        ORDER BY {order_sql}
         LIMIT %s OFFSET %s
     """
 
     rows = db.execute_query(sql, tuple(params + [limit, skip]))
 
-    count_sql = f"SELECT COUNT(*) AS total FROM material_transactions t WHERE {where_sql}"
+    count_sql = f"""
+        SELECT COUNT(*) AS total
+        FROM material_transactions t
+        WHERE {where_sql}
+    """
     total = db.execute_query(count_sql, tuple(params))[0]["total"]
 
     return {"total": total, "rows": rows}
@@ -141,6 +175,8 @@ async def export_summary(
     fixture_id: Optional[str] = Query(None),
     datecode: Optional[str] = Query(None),
     operator: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
     # ★ 先拿掉 tran_type，之後如果要用再另外加 alias
     # tran_type: Optional[str] = Query(None),   # receipt / return
 
@@ -165,6 +201,16 @@ async def export_summary(
     if operator:
         where.append("mt.operator LIKE %s")
         params.append(f"%{operator}%")
+
+    # ✅ 時間檢索（與 view-all 一致）
+    if date_from:
+        where.append("mt.transaction_date >= %s")
+        params.append(date_from)
+
+    if date_to:
+        where.append("mt.transaction_date <= %s")
+        params.append(date_to)
+
 
     # if tran_type:
     #     where.append("mt.transaction_type = %s")
