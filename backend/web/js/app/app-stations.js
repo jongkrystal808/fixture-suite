@@ -91,14 +91,21 @@ async function stLoadStationMasterList() {
     rows.forEach(s => {
       const tr = document.createElement("tr");
         tr.innerHTML = `
-          <td class="py-1 px-2">${s.id}</td>
-          <td class="py-1 px-2">${s.id}</td>
-          <td class="py-1 px-2">${s.station_name || "-"}</td>
-          <td class="py-1 px-2">${s.note || "-"}</td>
-          <td class="py-1 px-2 text-right">
-            <button class="btn btn-xs btn-outline" onclick="stEdit('${s.id}')">編輯</button>
-            <button class="btn btn-xs btn-error" onclick="stDelete('${s.id}')">刪除</button>
+        <tr class="hover:bg-gray-50 transition">
+          <td class="py-1 pr-3 text-center align-middle">
+          <span class="text-600 font-bold">
+            ${s.id}
+            </span>
           </td>
+          <td class="py-1 px-3 w-20 text-center align-middle">${s.station_name || "-"}</td>
+          <td class="py-1 px-3 w-20 text-center align-middle">${s.note || "-"}</td>
+          <td class="py-1 px-3 whitespace-nowrap w-32 align-middle">
+            <div class="flex justify-center gap-2">
+                <button class="btn btn-xs btn-outline" onclick="stEdit('${s.id}')">編輯</button>
+                <button class="btn btn-xs btn-error" onclick="stDelete('${s.id}')">刪除</button>
+            </div>
+            </td>
+        </tr>
         `;
       tbody.appendChild(tr);
     });

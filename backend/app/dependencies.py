@@ -137,3 +137,21 @@ async def require_role(
             detail=f"需要角色之一：{', '.join(allowed_roles)}"
         )
     return current_user
+
+# ============================================================
+# 目前使用中的客戶（Customer Context）
+# ============================================================
+
+from typing import Optional
+from fastapi import Header
+
+async def get_current_customer_id(
+    x_customer_id: Optional[str] = Header(default=None, alias="X-Customer-Id"),
+    user: Dict = Depends(get_current_user)
+) -> str:
+    if not x_customer_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="尚未選擇客戶"
+        )
+    return x_customer_id

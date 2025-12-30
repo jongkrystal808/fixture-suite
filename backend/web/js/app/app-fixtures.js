@@ -143,13 +143,20 @@ async function loadFixtureList() {
   renderFixturePagination(data.total);
 }
 
+
+
 /* ============================================================
- * 渲染表格
+ * 渲染治具維護表格（fixtures）
+ * - 完整對齊 fixtures table schema
+ * - 欄位順序與 UI 表頭一致
  * ============================================================ */
 function renderFixtureTable(rows) {
   fxTable.innerHTML = "";
 
-  if (!rows || rows.length === 0) {
+  // ----------------------------------------------------------
+  // 無資料
+  // ----------------------------------------------------------
+  if (!Array.isArray(rows) || rows.length === 0) {
     fxTable.innerHTML = `
       <tr>
         <td colspan="10" class="text-center py-3 text-gray-400">
@@ -161,58 +168,125 @@ function renderFixtureTable(rows) {
   }
 
   rows.forEach((f) => {
-    const id = f.fixture_id || "-";
-    const name = f.fixture_name || "-";
-    const type = f.fixture_type || "-";
+    // --------------------------------------------------------
+    // 基本欄位
+    // --------------------------------------------------------
+    const id   = f.fixture_id ?? f.id ?? "-";
+    const name = f.fixture_name ?? "-";
+    const type = f.fixture_type ?? "-";
 
-    // ⭐ fixtures 現在就是唯一真相來源
+    // --------------------------------------------------------
+    // 庫存（fixtures 為唯一真相）
+    // --------------------------------------------------------
     const qtyPurchased = f.self_purchased_qty ?? 0;
     const qtySupplied  = f.customer_supplied_qty ?? 0;
-    const qtyAvailable = f.available_qty ?? 0;
+    const totalQty     = qtyPurchased + qtySupplied;
 
-    const storage = f.storage_location || "-";
-    const status  = f.status || "-";
-    const owner   = f.owner_name || "-";
-    const note    = f.note || "-";
+    // --------------------------------------------------------
+    // 其他資訊
+    // --------------------------------------------------------
+    const storage = f.storage_location ?? "-";
+    const status  = f.status ?? "-";
+    const owner   = f.owner_name ?? "-";
+    const note    = f.note ?? "-";
+
+    // --------------------------------------------------------
+    // 更換週期（replacement_cycle + cycle_unit）
+    // --------------------------------------------------------
+    let cycleText = "-";
+    if (f.replacement_cycle !== null && f.replacement_cycle !== undefined) {
+      switch (f.cycle_unit) {
+        case "days":
+          cycleText = `${f.replacement_cycle} 天`;
+          break;
+        case "uses":
+          cycleText = `${f.replacement_cycle} 次`;
+          break;
+        case "none":
+        default:
+          cycleText = "-";
+      }
+    }
 
     const tr = document.createElement("tr");
 
     tr.innerHTML = `
-      <td class="py-2 pr-4">
-        <span class="text-indigo-600 underline cursor-pointer"
+    <tr class="hover:bg-gray-50 transition">
+      <!-- 治具編號 -->
+      <td class="py-2 pr-4 text-center">
+      <span class="text-indigo-600 font-bold hover:underline cursor-pointer"
               onclick="openFixtureDetail('${id}')">
           ${id}
         </span>
       </td>
 
-      <td class="py-2 pr-4">${name}</td>
-      <td class="py-2 pr-4">${type}</td>
-
-      <!-- ✅ 最終庫存顯示（fixtures） -->
-      <td class="py-2 pr-4">
-        ${qtyPurchased} / ${qtySupplied} / ${qtyAvailable}
+      <!-- 治具名稱 -->
+      <td class="py-2 pr-4 max-w-[200px] truncate text-center" title="${name}">
+        ${name}
       </td>
 
-      <td class="py-2 pr-4">${status}</td>
-      <td class="py-2 pr-4">${storage}</td>
-      <td class="py-2 pr-4">${owner}</td>
-      <td class="py-2 pr-4">${note}</td>
-
-      <td class="py-2 pr-4">
-        <button class="btn btn-xs btn-outline"
-                onclick="openFixtureModal('edit','${id}')">
-          編輯
-        </button>
-        <button class="btn btn-xs btn-error"
-                onclick="deleteFixture('${id}')">
-          刪除
-        </button>
+      <!-- 類型 -->
+      <td class="py-2 pr-4 text-center">
+        ${type}
       </td>
-    `;
+
+      <!-- 自購 / 客供 / 總數 -->
+      <td class="py-2 pr-4 text-center">
+        ${qtyPurchased} / ${qtySupplied} / ${totalQty}
+      </td>
+
+      <!-- 儲位 -->
+      <td class="py-2 pr-4 text-center">
+        ${storage}
+      </td>
+
+      <!-- 狀態 -->
+      <td class="py-2 pr-4 text-center">
+        <span class="pill ${
+          status === "normal"   ? "pill-green" :
+          status === "scrapped" ? "pill-red"   :
+          status === "returned" ? "pill-gray"  :
+          "pill-gray"
+        }">
+          ${status}
+        </span>
+      </td>
+
+      <!-- 更換週期 -->
+      <td class="py-2 pr-4 text-center">
+        ${cycleText}
+      </td>
+
+      <!-- 負責人 -->
+      <td class="py-2 pr-4 text-center">
+        ${owner}
+      </td>
+
+      <!-- 備註 -->
+      <td class="py-2 pr-4 max-w-[200px] truncate text-center" title="${note}">
+        ${note}
+      </td>
+
+      <!-- 操作 -->
+      <td class="py-2 pr-4 whitespace-nowrap text-right w-28">
+        <div class="flex justify-end gap-2">
+          <button class="btn btn-xs btn-outline"
+                  onclick="openFixtureModal('edit','${id}')">
+            編輯
+          </button>
+          <button class="btn btn-xs btn-error"
+                  onclick="deleteFixture('${id}')">
+            刪除
+          </button>
+        </div>
+      </td>
+      </tr>
+       `;
 
     fxTable.appendChild(tr);
   });
 }
+
 
 
 /* ============================================================

@@ -1,15 +1,17 @@
 """
-Owners API (v3.0)
+Owners API (v3.1 FIXED)
 治具負責人管理 API
-
-對應資料表：owners
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import Optional, List
 
 from backend.app.database import db
-from backend.app.dependencies import get_current_user, get_current_admin
+from backend.app.dependencies import (
+    get_current_user,
+    get_current_admin,
+    get_current_customer_id,
+)
 from backend.app.models.owner import (
     OwnerCreate,
     OwnerUpdate,
@@ -24,57 +26,84 @@ router = APIRouter(
 )
 
 # ============================================================
-# 取得負責人列表
+# 取得負責人列表（搜尋 / 分頁 / 客戶隔離）
 # ============================================================
 
 @router.get("", response_model=OwnerListResponse, summary="取得負責人列表")
 async def list_owners(
     search: Optional[str] = Query(None),
-    include_inactive: bool = False,
-    user=Depends(get_current_user)
+    is_active: Optional[int] = Query(1),
+    skip: int = 0,
+    limit: int = 50,
+    user=Depends(get_current_user),
+    customer_id=Depends(get_current_customer_id),
 ):
     where = []
     params = []
 
+    # 客戶隔離（核心）
+    where.append("(customer_id = %s OR customer_id IS NULL)")
+    params.append(customer_id)
+
+    # 啟用狀態
+    if is_active is not None:
+        where.append("is_active = %s")
+        params.append(is_active)
+
+    # 搜尋
     if search:
-        where.append("(primary_owner LIKE %s OR secondary_owner LIKE %s OR customer_name LIKE %s)")
-        params += [f"%{search}%", f"%{search}%", f"%{search}%"]
+        where.append(
+            "(primary_owner LIKE %s OR secondary_owner LIKE %s OR email LIKE %s)"
+        )
+        params += [f"%{search}%"] * 3
 
-    if not include_inactive:
-        where.append("is_active = 1")
-
-    where_sql = " AND ".join(where) if where else "1=1"
+    where_sql = " AND ".join(where)
 
     rows = db.execute_query(
         f"""
-        SELECT id, customer_name, primary_owner, secondary_owner,
+        SELECT id, customer_id, customer_name,
+               primary_owner, secondary_owner,
                email, note, is_active, created_at
         FROM owners
         WHERE {where_sql}
-        ORDER BY id ASC
+        ORDER BY id DESC
+        LIMIT %s OFFSET %s
+        """,
+        tuple(params + [limit, skip])
+    )
+
+    total = db.execute_scalar(
+        f"""
+        SELECT COUNT(*)
+        FROM owners
+        WHERE {where_sql}
         """,
         tuple(params)
     )
 
     return OwnerListResponse(
-        total=len(rows),
+        total=total,
         owners=[OwnerResponse(**row) for row in rows]
     )
 
 # ============================================================
-# 前端下拉選擇：只取啟用的簡易 owner 列表
+# 下拉選單用（啟用 + 客戶隔離）
 # ============================================================
 
-@router.get("/active", response_model=List[OwnerSimple], summary="取得啟用中的負責人簡易列表")
-async def active_owner_list(user=Depends(get_current_user)):
-
+@router.get("/simple", response_model=List[OwnerSimple], summary="負責人簡易清單")
+async def owner_simple_list(
+    user=Depends(get_current_user),
+    customer_id=Depends(get_current_customer_id),
+):
     rows = db.execute_query(
         """
         SELECT id, primary_owner
         FROM owners
         WHERE is_active = 1
+          AND (customer_id = %s OR customer_id IS NULL)
         ORDER BY primary_owner ASC
-        """
+        """,
+        (customer_id,)
     )
 
     return [OwnerSimple(**row) for row in rows]
@@ -86,21 +115,33 @@ async def active_owner_list(user=Depends(get_current_user)):
 @router.post("", response_model=OwnerResponse, summary="新增負責人")
 async def create_owner(
     data: OwnerCreate,
-    admin=Depends(get_current_admin)
+    admin=Depends(get_current_admin),
+    customer_id=Depends(get_current_customer_id),
 ):
-    # 檢查是否已有同名 primary_owner（可加強）
+    # 唯一性檢查：同客戶 + primary_owner
     exists = db.execute_query(
-        "SELECT id FROM owners WHERE primary_owner = %s AND customer_name = %s",
-        (data.primary_owner, data.customer_name)
+        """
+        SELECT id FROM owners
+        WHERE primary_owner = %s
+          AND (
+            customer_id = %s
+            OR (customer_id IS NULL AND %s IS NULL)
+          )
+        """,
+        (data.primary_owner, customer_id, customer_id)
     )
     if exists:
-        raise HTTPException(400, "已存在此負責人（同客戶+同主要負責人）")
+        raise HTTPException(400, "此客戶下已存在相同主負責人")
 
-    new_id = db.insert("owners", data.model_dump())
+    payload = data.model_dump()
+    payload["customer_id"] = customer_id  # ⭐ 強制寫入目前客戶
+
+    new_id = db.insert("owners", payload)
 
     row = db.execute_query(
         """
-        SELECT id, customer_name, primary_owner, secondary_owner,
+        SELECT id, customer_id, customer_name,
+               primary_owner, secondary_owner,
                email, note, is_active, created_at
         FROM owners WHERE id=%s
         """,
@@ -110,21 +151,50 @@ async def create_owner(
     return OwnerResponse(**row)
 
 # ============================================================
-# 取得單一負責人
+# 停用負責人（⚠️ 一定要在 /{owner_id} 前）
+# ============================================================
+
+@router.put("/{owner_id}/disable", summary="停用負責人")
+async def disable_owner(
+    owner_id: int,
+    admin=Depends(get_current_admin),
+    customer_id=Depends(get_current_customer_id),
+):
+    affected = db.execute_update(
+        """
+        UPDATE owners
+        SET is_active = 0
+        WHERE id=%s
+          AND (customer_id = %s OR customer_id IS NULL)
+        """,
+        (owner_id, customer_id)
+    )
+
+    if affected == 0:
+        raise HTTPException(404, "負責人不存在或無權限")
+
+    return {"message": "已停用"}
+
+# ============================================================
+# 取得 / 更新單筆負責人（⚠️ 一定要最後）
 # ============================================================
 
 @router.get("/{owner_id}", response_model=OwnerResponse, summary="取得單一負責人")
 async def get_owner(
     owner_id: int,
-    user=Depends(get_current_user)
+    user=Depends(get_current_user),
+    customer_id=Depends(get_current_customer_id),
 ):
     rows = db.execute_query(
         """
-        SELECT id, customer_name, primary_owner, secondary_owner,
+        SELECT id, customer_id, customer_name,
+               primary_owner, secondary_owner,
                email, note, is_active, created_at
-        FROM owners WHERE id=%s
+        FROM owners
+        WHERE id=%s
+          AND (customer_id = %s OR customer_id IS NULL)
         """,
-        (owner_id,)
+        (owner_id, customer_id)
     )
 
     if not rows:
@@ -132,34 +202,37 @@ async def get_owner(
 
     return OwnerResponse(**rows[0])
 
-# ============================================================
-# 更新負責人
-# ============================================================
 
-@router.put("/{owner_id}", response_model=OwnerResponse, summary="更新負責人資料")
+@router.put("/{owner_id}", response_model=OwnerResponse, summary="更新負責人")
 async def update_owner(
     owner_id: int,
     data: OwnerUpdate,
-    admin=Depends(get_current_admin)
+    admin=Depends(get_current_admin),
+    customer_id=Depends(get_current_customer_id),
 ):
-    # 檢查是否存在
-    exists = db.execute_query(
-        "SELECT id FROM owners WHERE id=%s", (owner_id,)
-    )
-    if not exists:
-        raise HTTPException(404, "負責人不存在")
-
     update_data = data.model_dump(exclude_unset=True)
-
     if not update_data:
-        raise HTTPException(400, "沒有提供任何可更新欄位")
+        raise HTTPException(400, "沒有可更新欄位")
 
-    db.update("owners", update_data, "id = %s", (owner_id,))
+    affected = db.execute_update(
+        """
+        UPDATE owners
+        SET {fields}
+        WHERE id=%s
+          AND (customer_id = %s OR customer_id IS NULL)
+        """.format(
+            fields=", ".join(f"{k}=%s" for k in update_data.keys())
+        ),
+        tuple(update_data.values()) + (owner_id, customer_id)
+    )
 
-    # 回查
+    if affected == 0:
+        raise HTTPException(404, "負責人不存在或無權限")
+
     row = db.execute_query(
         """
-        SELECT id, customer_name, primary_owner, secondary_owner,
+        SELECT id, customer_id, customer_name,
+               primary_owner, secondary_owner,
                email, note, is_active, created_at
         FROM owners WHERE id=%s
         """,
@@ -167,50 +240,3 @@ async def update_owner(
     )[0]
 
     return OwnerResponse(**row)
-
-# ============================================================
-# 停用 / 啟用負責人
-# ============================================================
-
-@router.post("/{owner_id}/activate", summary="啟用負責人")
-async def activate_owner(
-    owner_id: int,
-    admin=Depends(get_current_admin)
-):
-    affected = db.execute_update(
-        "UPDATE owners SET is_active = 1 WHERE id=%s", (owner_id,)
-    )
-    if affected == 0:
-        raise HTTPException(404, "負責人不存在")
-
-    return {"message": "已啟用"}
-
-@router.post("/{owner_id}/deactivate", summary="停用負責人")
-async def deactivate_owner(
-    owner_id: int,
-    admin=Depends(get_current_admin)
-):
-    affected = db.execute_update(
-        "UPDATE owners SET is_active = 0 WHERE id=%s", (owner_id,)
-    )
-    if affected == 0:
-        raise HTTPException(404, "負責人不存在")
-
-    return {"message": "已停用"}
-
-# ============================================================
-# 刪除負責人（如果不想允許刪除可禁用此 API）
-# ============================================================
-
-@router.delete("/{owner_id}", summary="刪除負責人")
-async def delete_owner(
-    owner_id: int,
-    admin=Depends(get_current_admin)
-):
-    affected = db.execute_update(
-        "DELETE FROM owners WHERE id=%s", (owner_id,)
-    )
-    if affected == 0:
-        raise HTTPException(404, "負責人不存在")
-
-    return {"message": "已刪除"}

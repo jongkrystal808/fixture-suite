@@ -1,66 +1,89 @@
 """
 負責人資料模型
 Owner Data Models
-
-提供負責人相關的 Pydantic 模型，用於 API 請求/回應的資料驗證
 """
 
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
-from pydantic import BaseModel, Field, validator, EmailStr
+from pydantic import BaseModel, Field, EmailStr, validator
 
+
+# ============================================================
+# 共用驗證工具
+# ============================================================
+
+def strip_or_none(v: Optional[str]) -> Optional[str]:
+    if v is None:
+        return None
+    v = v.strip()
+    return v if v else None
+
+
+# ============================================================
+# Base
+# ============================================================
 
 class OwnerBase(BaseModel):
     """負責人基礎模型"""
+
+    customer_id: Optional[str] = Field(
+        None,
+        description="客戶 ID（NULL 表示跨客戶）",
+        example="CUST-001"
+    )
+
     customer_name: Optional[str] = Field(
         None,
         max_length=100,
-        description="客戶名稱",
+        description="客戶名稱（顯示用）",
         example="ABC 科技股份有限公司"
     )
+
     primary_owner: str = Field(
         ...,
         max_length=100,
         description="主負責人姓名",
         example="張三"
     )
+
     secondary_owner: Optional[str] = Field(
         None,
         max_length=100,
         description="副負責人姓名",
         example="李四"
     )
+
     email: Optional[EmailStr] = Field(
         None,
         description="Email 地址",
         example="owner@example.com"
     )
+
     note: Optional[str] = Field(
         None,
         description="備註",
         example="負責 A 產線治具管理"
     )
+
     is_active: bool = Field(
         default=True,
         description="是否啟用"
     )
 
-    @validator('primary_owner', 'secondary_owner', 'customer_name')
+    # ---------- validators ----------
+
+    @validator("primary_owner", "secondary_owner", "customer_name", pre=True)
     def validate_names(cls, v):
-        """驗證名稱欄位"""
-        if v is not None and v.strip():
-            return v.strip()
-        elif v is not None and not v.strip():
-            raise ValueError('名稱不能只有空白字元')
-        return v
+        return strip_or_none(v)
 
-    @validator('note')
+    @validator("note", pre=True)
     def validate_note(cls, v):
-        """驗證備註欄位"""
-        if v is not None:
-            return v.strip() if v.strip() else None
-        return v
+        return strip_or_none(v)
 
+
+# ============================================================
+# Create / Update
+# ============================================================
 
 class OwnerCreate(OwnerBase):
     """建立負責人模型"""
@@ -68,151 +91,58 @@ class OwnerCreate(OwnerBase):
 
 
 class OwnerUpdate(BaseModel):
-    """更新負責人模型 (所有欄位都是可選的)"""
-    customer_name: Optional[str] = Field(
-        None,
-        max_length=100,
-        description="客戶名稱"
-    )
-    primary_owner: Optional[str] = Field(
-        None,
-        max_length=100,
-        description="主負責人姓名"
-    )
-    secondary_owner: Optional[str] = Field(
-        None,
-        max_length=100,
-        description="副負責人姓名"
-    )
-    email: Optional[EmailStr] = Field(
-        None,
-        description="Email 地址"
-    )
-    note: Optional[str] = Field(
-        None,
-        description="備註"
-    )
-    is_active: Optional[bool] = Field(
-        None,
-        description="是否啟用"
-    )
+    """更新負責人模型"""
 
-    @validator('primary_owner', 'secondary_owner', 'customer_name')
+    customer_id: Optional[str] = None
+    customer_name: Optional[str] = None
+    primary_owner: Optional[str] = None
+    secondary_owner: Optional[str] = None
+    email: Optional[EmailStr] = None
+    note: Optional[str] = None
+    is_active: Optional[bool] = None
+
+    @validator("primary_owner", "secondary_owner", "customer_name", pre=True)
     def validate_names(cls, v):
-        """驗證名稱欄位"""
-        if v is not None and v.strip():
-            return v.strip()
-        elif v is not None and not v.strip():
-            raise ValueError('名稱不能只有空白字元')
-        return v
+        return strip_or_none(v)
 
-    @validator('note')
+    @validator("note", pre=True)
     def validate_note(cls, v):
-        """驗證備註欄位"""
-        if v is not None:
-            return v.strip() if v.strip() else None
-        return v
+        return strip_or_none(v)
 
+
+# ============================================================
+# Response Models
+# ============================================================
 
 class OwnerResponse(OwnerBase):
-    """負責人回應模型 (API 回傳用)"""
+    """負責人回應模型"""
+
     id: int = Field(..., description="負責人 ID")
     created_at: Optional[datetime] = Field(None, description="建立時間")
 
     class Config:
         from_attributes = True
-        json_schema_extra = {
-            "example": {
-                "id": 1,
-                "customer_name": "ABC 科技股份有限公司",
-                "primary_owner": "張三",
-                "secondary_owner": "李四",
-                "email": "owner@example.com",
-                "note": "負責 A 產線治具管理",
-                "is_active": True,
-                "created_at": "2025-11-07T10:30:00"
-            }
-        }
 
 
 class OwnerListResponse(BaseModel):
     """負責人列表回應模型"""
-    total: int = Field(..., description="總筆數")
-    owners: list[OwnerResponse] = Field(..., description="負責人列表")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "total": 2,
-                "owners": [
-                    {
-                        "id": 1,
-                        "customer_name": "ABC 科技",
-                        "primary_owner": "張三",
-                        "secondary_owner": "李四",
-                        "email": "zhang@example.com",
-                        "note": "負責 A 產線",
-                        "is_active": True,
-                        "created_at": "2025-11-07T10:30:00"
-                    },
-                    {
-                        "id": 2,
-                        "customer_name": "XYZ 企業",
-                        "primary_owner": "王五",
-                        "secondary_owner": None,
-                        "email": "wang@example.com",
-                        "note": "負責 B 產線",
-                        "is_active": True,
-                        "created_at": "2025-11-07T11:00:00"
-                    }
-                ]
-            }
-        }
+    total: int
+    owners: List[OwnerResponse]
 
 
 class OwnerWithFixturesResponse(OwnerResponse):
-    """負責人回應模型 (含治具數量統計)"""
-    fixture_count: int = Field(
-        default=0,
-        description="負責的治具總數"
-    )
-    active_fixture_count: int = Field(
-        default=0,
-        description="狀態為'正常'的治具數量"
-    )
+    """負責人回應模型（含治具統計）"""
 
-    class Config:
-        from_attributes = True
-        json_schema_extra = {
-            "example": {
-                "id": 1,
-                "customer_name": "ABC 科技",
-                "primary_owner": "張三",
-                "secondary_owner": "李四",
-                "email": "owner@example.com",
-                "note": "負責 A 產線治具管理",
-                "is_active": True,
-                "created_at": "2025-11-07T10:30:00",
-                "fixture_count": 25,
-                "active_fixture_count": 22
-            }
-        }
+    fixture_count: int = 0
+    active_fixture_count: int = 0
 
 
 class OwnerSimple(BaseModel):
-    """簡化的負責人模型 (用於下拉選單等)"""
-    id: int = Field(..., description="負責人 ID")
-    primary_owner: str = Field(..., description="主負責人姓名")
-    customer_name: Optional[str] = Field(None, description="客戶名稱")
-    is_active: bool = Field(default=True, description="是否啟用")
+    """簡化負責人模型（下拉選單用）"""
+
+    id: int
+    primary_owner: str
 
     class Config:
         from_attributes = True
-        json_schema_extra = {
-            "example": {
-                "id": 1,
-                "primary_owner": "張三",
-                "customer_name": "ABC 科技",
-                "is_active": True
-            }
-        }

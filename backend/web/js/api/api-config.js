@@ -71,34 +71,28 @@ function api(path, options = {}) {
     url.searchParams.set("customer_id", customerId);
   }
 
-  // ----------------------------------------
-  // 3️⃣ Headers 設定
-  // ----------------------------------------
-  const headers = {
-    ...(options.headers || {}),
-  };
+    // ----------------------------------------
+    // 3️⃣ Headers 設定
+    // ----------------------------------------
+    const headers = {
+      ...(options.headers || {}),
+    };
 
-  // 自動 Content-Type（FormData 不設定）
-  if (!(options.body instanceof FormData) && !options.rawBody) {
-    headers["Content-Type"] = "application/json";
-  }
+    // 自動 Content-Type（FormData 不設定）
+    if (!(options.body instanceof FormData) && !options.rawBody) {
+      headers["Content-Type"] = "application/json";
+    }
 
-  // 自動加入 Token
-  if (!options.skipAuth && token && !headers["Authorization"]) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
+    // 自動加入 Token
+    if (!options.skipAuth && token && !headers["Authorization"]) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
 
-  // ----------------------------------------
-  // ⭐ FIX：FormData 自動補 customer_id（匯入專用）
-  // ----------------------------------------
-  if (
-    options.body instanceof FormData &&
-    !shouldSkipCid &&
-    customerId &&
-    !options.body.has("customer_id")
-  ) {
-    options.body.append("customer_id", customerId);
-  }
+    // ⭐ 核心修正：統一用 Header 傳 customer
+    if (!shouldSkipCid && customerId && !headers["X-Customer-Id"]) {
+      headers["X-Customer-Id"] = customerId;
+    }
+
 
   // ----------------------------------------
   // 4️⃣ Body 處理

@@ -257,3 +257,13 @@ button {
 html {
   font-size: 18px; /* 原本大多是 16px */
 }
+
+table td {
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+/* 表格：多行表頭對齊修正 */
+table th,
+table td {
+  vertical-align: top;
+}

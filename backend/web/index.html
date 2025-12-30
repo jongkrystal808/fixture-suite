@@ -1141,7 +1141,7 @@
             </div>
 
             <div class="flex items-end">
-              <button class="btn btn-primary w-full" onclick="loadUsageLogs()">查詢</button>
+              <button class="btn btn-primary w-full" onclick="loadUsageLogs()">查詢/刷新</button>
             </div>
 
           </div>
@@ -1294,7 +1294,7 @@
             </div>
 
             <div class="flex items-end">
-              <button class="btn btn-primary w-full" onclick="loadNewReplacementLogs()">查詢</button>
+              <button class="btn btn-primary w-full" onclick="loadNewReplacementLogs()">查詢/刷新</button>
             </div>
 
           </div>
@@ -1391,10 +1391,10 @@
     ========================================================= -->
     <section id="tab-admin" class="hidden">
 
-      <div class="grid grid-cols-12 gap-4">
+      <div class="grid grid-cols-[140px_1fr] gap-6">
 
         <!-- ================= 左側：後台選單 ================= -->
-        <aside class="col-span-2 card p-3 space-y-2">
+        <aside class="card p-3 space-y-2">
 
           <button class="admin-menu btn btn-sm btn-outline w-full" data-admin-page="stations">
             站點管理
@@ -1419,9 +1419,6 @@
         </aside>
 
         <!-- ================= 右側：內容區 ================= -->
-        <div class="col-span-10 space-y-4">
-
-
           <!-- ========== 站點管理 ========== -->
           <div id="admin-stations" class="admin-page card p-5 space-y-4 hidden">
               <div class="flex items-center justify-between">
@@ -1431,20 +1428,21 @@
               <div class="border-t pt-3">
                 <div class="flex items-center justify-between mb-1">
                   <div class="text-sm font-semibold">站點列表</div>
-                  <button class="btn btn-ghost btn-xs" onclick="stLoadStationMasterList()">重新整理</button>
+                  <button class="btn btn-ghost btn-xs" onclick="stLoadStationMasterList()">查詢/刷新</button>
                 </div>
-                <div class="overflow-auto max-h-64 border rounded-xl">
-                  <table class="min-w-full text-xs">
-                    <thead class="bg-gray-50 text-gray-500">
-                      <tr>
-                        <th class="py-1 px-2 text-left">ID</th>
-                        <th class="py-1 px-2 text-left">代碼</th>
-                        <th class="py-1 px-2 text-left">名稱</th>
-                        <th class="py-1 px-2 text-left">備註</th>
-                        <th class="py-1 px-2 text-left">操作</th>
-                      </tr>
-                    </thead>
-                    <tbody id="stTable"></tbody>
+
+
+                <div class="overflow-auto border rounded-xl max-h-[70vh]">
+                  <table class="min-w-full text-sm">
+                      <thead class="sticky top-0 bg-gray-50 z-10">
+                          <tr class="hover:bg-gray-50 transition">
+                            <th class="py-1 px-3 w-20 text-center align-middle">ID</th>
+                            <th class="py-1 px-3 w-20 text-center align-middle">名稱</th>
+                            <th class="py-1 px-3 w-20 text-center align-middle">備註</th>
+                            <th class="py-1 px-3 w-20 text-center align-middle">操作</th>
+                          </tr>
+                        </thead>
+                    <tbody id="stTable" class="divide-y divide-gray-100"></tbody>
                   </table>
                 </div>
               </div>
@@ -1498,22 +1496,23 @@
 
               <div class="flex items-center gap-3 text-xs text-gray-500">
                 共 <span id="mmCount">0</span> 筆
-                <button class="btn btn-ghost btn-xs" onclick="mmLoadModelList()">重新整理</button>
+                <button class="btn btn-ghost btn-xs" onclick="mmLoadModelList()">查詢/刷新</button>
               </div>
             </div>
 
             <div class="overflow-auto border rounded-xl max-h-[70vh]">
-              <table class="min-w-full text-sm">
-                <thead class="bg-gray-50 text-gray-500">
-                  <tr>
-                    <th class="px-3 py-2 text-left">機種代碼</th>
-                    <th class="px-3 py-2 text-left">機種名稱</th>
-                    <th class="px-3 py-2 text-left w-32">操作</th>
-                  </tr>
-                </thead>
-                <tbody id="mmTable"></tbody>
-              </table>
-            </div>
+                  <table class="min-w-full text-sm">
+                  <thead class="sticky top-0 bg-gray-50 z-10">
+                      <tr class="hover:bg-gray-50 transition">
+                        <th class="py-1 px-3 w-20 text-center align-middle">機種ID</th>
+                        <th class="py-1 px-3 w-20 text-center align-middle">機種名稱</th>
+                        <th class="py-1 px-3 w-20 text-center align-middle">備註</th>
+                        <th class="py-1 px-3 w-20 text-center align-middle">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody id="mmTable" class="divide-y divide-gray-100"></tbody>
+                  </table>
+                </div>
 
           </section>
         </div>
@@ -1572,7 +1571,7 @@
                         class="input"
                         onchange="fxPage=1;loadFixtureList();">
                   <option value="">全部</option>
-                  <option value="正常">正常</option>
+                  <option value="正常">正常</option >
                   <option value="返還">返還</option>
                   <option value="報廢">報廢</option>
                 </select>
@@ -1597,12 +1596,13 @@
                 </select>
               </div>
 
-              <div class="field flex items-end">
-                <button class="btn btn-ghost w-full"
-                        onclick="fxPage=1;loadFixtureList();">
-                  重新整理
-                </button>
-              </div>
+              <div class="field">
+              <label class="label-xs invisible">操作</label>
+              <button class="btn btn-ghost w-full"
+                      onclick="fxPage=1;loadFixtureList();">
+                查詢/刷新
+              </button>
+            </div>
 
             </div>
           </section>
@@ -1614,8 +1614,9 @@
               <div class="text-sm text-gray-600">
                 共 <span id="fxCount">0</span> 筆，
                 顯示第 <span id="fxPageNow">1</span> /
-                <span id="fxPageMax">1</span> 頁
-              </div>
+                <span id="fxPageMax">1</span> 頁，
+                  庫存說明：自購 / 客供 / 總數
+                </div>
 
               <div class="pagination flex items-center gap-2">
                 <button class="btn btn-ghost text-xs"
@@ -1629,23 +1630,23 @@
               </div>
             </div>
 
-            <div class="overflow-auto">
-              <table class="min-w-full text-xs md:text-sm">
-                <thead class="text-left text-gray-500">
-                  <tr>
-                    <th class="py-2 pr-4">治具編號</th>
-                    <th class="py-2 pr-4">治具名稱</th>
-                    <th class="py-2 pr-4">類型</th>
-                    <th class="py-2 pr-4">自購 / 客供 / 總數</th>
-                    <th class="py-2 pr-4">儲位</th>
-                    <th class="py-2 pr-4">狀態</th>
-                    <th class="py-2 pr-4">更換週期</th>
-                    <th class="py-2 pr-4">負責人</th>
-                    <th class="py-2 pr-4">備註</th>
+              <div class="overflow-auto border rounded-xl max-h-[70vh]">
+                <table class="min-w-full text-sm">
+                  <thead class="sticky top-0 bg-gray-50 z-10">
+                  <tr class="hover:bg-gray-50 transition">
+                    <th class="py-2 pr-4 text-center">治具編號</th>
+                    <th class="py-2 pr-4 text-center">治具名稱</th>
+                    <th class="py-2 pr-4 text-center">類型</th>
+                    <th class="py-2 pr-4 text-center">庫存</th>
+                    <th class="py-2 pr-4 text-center">儲位</th>
+                    <th class="py-2 pr-4 text-center">狀態</th>
+                    <th class="py-2 pr-4 text-center">更換週期</th>
+                    <th class="py-2 pr-4 text-center">負責人</th>
+                    <th class="py-2 pr-4 text-center">備註</th>
                     <th class="py-2 pr-4">操作</th>
                   </tr>
                 </thead>
-                <tbody id="fxTable"></tbody>
+                <tbody id="fxTable" class="divide-y divide-gray-100"></tbody>
               </table>
             </div>
 
@@ -1936,7 +1937,7 @@
                 <div class="flex items-center justify-between mb-2">
                   <h4 class="font-semibold">站點綁定</h4>
                   <button class="btn btn-ghost btn-xs" onclick="meReloadStations()">
-                    重新整理
+                    查詢/刷新
                   </button>
                 </div>
 
@@ -2148,9 +2149,6 @@
             <script src="/js/app/app-auth.js"></script>
             <script src="/js/app/app-admin.js"></script>
 
-            <!-- 使用者管理 -->
-            <script src="/js/api/api-users.js"></script>
-            <script src="/js/app/app-users.js"></script>
 
             <!-- ================================ -->
             <!-- 📇 基礎資料：客戶 / 負責人 / 站點   -->

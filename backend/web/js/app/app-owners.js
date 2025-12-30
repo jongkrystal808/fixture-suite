@@ -1,73 +1,52 @@
 /**
- * 負責人管理 UI 控制 (v3.0)
+ * 負責人管理 UI 控制 (v3.1 - FIXED)
  * app-owners.js
  *
- * ✔ 搜尋 / 分頁
- * ✔ 新增 / 編輯 / 刪除
- * ✔ 與 api-owners.js 完全整合
+ * ✔ 完全對齊 owners 資料表
+ * ✔ primary_owner / secondary_owner
+ * ✔ customer_id（含跨客戶）
+ * ✔ 停用 instead of delete
  */
 
 /* ============================================================
- * 🔐 Admin Only Guard（後台模組語意宣告）
+ * 🔐 Admin Only Guard（入口級）
  * ============================================================ */
-(function () {
+function ensureAdmin() {
   if (!window.currentUser || window.currentUser.role !== "admin") {
-    console.warn("[app-owners] not admin, module disabled");
-    return;
+    toast("無權限", "error");
+    return false;
   }
-})();
-
+  return true;
+}
 
 /* ============================================================
  * 分頁狀態
  * ============================================================ */
-
 let ownerPage = 1;
 let ownerPageSize = 20;
 
 /* ============================================================
- * 🧭 Admin Sidebar Entry
- * 後台管理 → 負責人管理
+ * Admin Sidebar Entry
  * ============================================================ */
 function loadAdminOwners() {
-  // admin 檢查（保險，不重複執行 init）
-  if (!window.currentUser || window.currentUser.role !== "admin") {
-    toast("無權限", "error");
-    return;
-  }
-
+  if (!ensureAdmin()) return;
   ownerPage = 1;
   loadOwners();
 }
-
 window.loadAdminOwners = loadAdminOwners;
-
 
 /* ============================================================
  * 初始化
  * ============================================================ */
 document.addEventListener("DOMContentLoaded", () => {
-
-  // 🔐 admin only
-  if (!window.currentUser || window.currentUser.role !== "admin") {
-    console.warn("Not admin — skip owners module init");
-    return;
-  }
-
-  // 🔥 若頁面中沒有 ownerTable，直接跳過 owners 模組
-  if (!document.getElementById("ownerTable")) {
-    console.warn("Owner table not found — skip owners module init");
-    return;
-  }
-
+  if (!ensureAdmin()) return;
+  if (!document.getElementById("ownerTable")) return;
   loadOwners();
 });
-
 
 /* ============================================================
  * 載入負責人列表
  * ============================================================ */
-
 async function loadOwners() {
   const search = document.getElementById("ownerSearch")?.value.trim() || "";
   const active = document.getElementById("ownerFilterActive")?.value || "";
@@ -101,23 +80,32 @@ function renderOwnerTable(list) {
 
   if (!Array.isArray(list) || list.length === 0) {
     table.innerHTML = `
-      <tr><td colspan="5" class="text-center text-gray-400 py-6">查無資料</td></tr>
+      <tr>
+        <td colspan="6" class="text-center text-gray-400 py-6">
+          查無資料
+        </td>
+      </tr>
     `;
     return;
   }
 
   list.forEach(o => {
+    const customerLabel = o.customer_id
+      ? o.customer_name || o.customer_id
+      : "共用";
+
     table.insertAdjacentHTML("beforeend", `
       <tr>
-        <td>${o.id}</td>
-        <td>${o.owner_name}</td>
+        <td class="text-center">${o.id}</td>
+        <td>${o.primary_owner}</td>
+        <td>${o.secondary_owner || ""}</td>
+        <td>${customerLabel}</td>
         <td>${o.email || ""}</td>
-        <td>${o.note || ""}</td>
         <td class="text-right">
           <button class="btn btn-xs btn-outline"
-                  onclick="openOwnerEdit('${o.id}')">編輯</button>
-          <button class="btn btn-xs btn-error"
-                  onclick="deleteOwner('${o.id}')">刪除</button>
+                  onclick="openOwnerEdit(${o.id})">編輯</button>
+          <button class="btn btn-xs btn-warning"
+                  onclick="disableOwner(${o.id})">停用</button>
         </td>
       </tr>
     `);
@@ -129,7 +117,7 @@ function renderOwnerTable(list) {
  * ============================================================ */
 function renderOwnerPagination(total) {
   const box = document.getElementById("ownerPagination");
-  if (!box) return;  // 防呆
+  if (!box) return;
 
   box.innerHTML = "";
 
@@ -140,40 +128,48 @@ function renderOwnerPagination(total) {
     const btn = document.createElement("button");
     btn.className = `btn btn-sm ${i === ownerPage ? "btn-primary" : "btn-outline"}`;
     btn.innerText = i;
-    btn.onclick = () => changeOwnerPage(i);
+    btn.onclick = () => {
+      ownerPage = i;
+      loadOwners();
+    };
     box.appendChild(btn);
   }
 }
 
-
 /* ============================================================
  * 新增負責人
  * ============================================================ */
-
 function openOwnerAdd() {
+  if (!ensureAdmin()) return;
+
   document.getElementById("ownerForm").reset();
   document.getElementById("ownerFormMode").value = "add";
+  document.getElementById("o_id").value = ""; // hidden
   document.getElementById("ownerModalTitle").innerText = "新增負責人";
   openOwnerModal();
 }
 
-
 async function submitOwnerForm() {
+  if (!ensureAdmin()) return;
+
   const mode = document.getElementById("ownerFormMode").value;
 
-  const id = document.getElementById("o_id").value.trim();
-  const name = document.getElementById("o_name").value.trim();
+  const id = document.getElementById("o_id").value || null;
+  const primary_owner = document.getElementById("o_primary").value.trim();
+  const secondary_owner = document.getElementById("o_secondary").value.trim();
   const email = document.getElementById("o_email").value.trim();
   const note = document.getElementById("o_note").value || null;
+  const isShared = document.getElementById("o_shared")?.checked || false;
 
-  if (!id || !name) {
-    alert("代碼與姓名不可為空");
+  if (!primary_owner) {
+    toast("主負責人不可為空", "error");
     return;
   }
 
   const payload = {
-    id,
-    owner_name: name,
+    customer_id: isShared ? null : getCurrentCustomerId(),
+    primary_owner,
+    secondary_owner: secondary_owner || null,
     email: email || null,
     note,
     is_active: true
@@ -190,7 +186,6 @@ async function submitOwnerForm() {
 
     closeOwnerModal();
     loadOwners();
-
   } catch (err) {
     console.error(err);
     toast(err?.data?.detail || "儲存失敗", "error");
@@ -200,38 +195,49 @@ async function submitOwnerForm() {
 /* ============================================================
  * 編輯負責人
  * ============================================================ */
-
 async function openOwnerEdit(id) {
-  const data = await api(`/owners/${id}`);
-
-  document.getElementById("ownerFormMode").value = "edit";
-  document.getElementById("ownerModalTitle").innerText = "編輯負責人";
-
-  document.getElementById("o_id").value = data.id;
-  document.getElementById("o_name").value = data.owner_name;
-  document.getElementById("o_email").value = data.email || "";
-  document.getElementById("o_note").value = data.note || "";
-
-  openOwnerModal();
-}
-
-
-/* ============================================================
- * 刪除負責人
- * ============================================================ */
-async function deleteOwner(id) {
-  if (!confirm(`確定刪除負責人 ${id}？`)) return;
+  if (!ensureAdmin()) return;
 
   try {
-    await api(`/owners/${id}`, { method: "DELETE" });
-    toast("已刪除");
+    const data = await api(`/owners/${id}`);
+
+    document.getElementById("ownerFormMode").value = "edit";
+    document.getElementById("ownerModalTitle").innerText = "編輯負責人";
+
+    document.getElementById("o_id").value = data.id;
+    document.getElementById("o_primary").value = data.primary_owner;
+    document.getElementById("o_secondary").value = data.secondary_owner || "";
+    document.getElementById("o_email").value = data.email || "";
+    document.getElementById("o_note").value = data.note || "";
+
+    const sharedCheckbox = document.getElementById("o_shared");
+    if (sharedCheckbox) {
+      sharedCheckbox.checked = data.customer_id === null;
+    }
+
+    openOwnerModal();
+  } catch (err) {
+    console.error(err);
+    toast("載入負責人失敗", "error");
+  }
+}
+
+/* ============================================================
+ * 停用負責人（取代 delete）
+ * ============================================================ */
+async function disableOwner(id) {
+  if (!ensureAdmin()) return;
+  if (!confirm("確定要停用此負責人？")) return;
+
+  try {
+    await apiJson(`/owners/${id}`, { is_active: false }, "PUT");
+    toast("已停用");
     loadOwners();
   } catch (err) {
     console.error(err);
     toast(
-      err?.data?.detail || "此負責人已有治具或站點關聯，無法刪除",
+      err?.data?.detail || "此負責人已有治具關聯，無法停用",
       "error"
     );
   }
 }
-

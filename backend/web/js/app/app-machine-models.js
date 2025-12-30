@@ -61,20 +61,21 @@ function renderMachineModelTable(list) {
 
   list.forEach(m => {
     tbody.insertAdjacentHTML("beforeend", `
-      <tr>
-        <td class="px-3 py-2">${m.id}</td>
-        <td class="px-3 py-2">${m.model_name}</td>
-        <td class="px-3 py-2">
-          <button class="btn btn-xs btn-outline"
-                  onclick="openModelEditModal('${m.id}')">
-            修改
-          </button>
-           <button class="btn btn-error btn-xs"
-                onclick="stageDeleteModel('${m.id}')">
-          刪除
-        </button>
-        </td>
-      </tr>
+      <tr class="hover:bg-gray-50 transition">
+        <td class="py-2 pr-4 text-center text-600 font-bold">${m.id}</td>
+        <td class="py-2 pr-4 max-w-[200px] truncate text-center">${m.model_name || "-"}</td>
+        <td class="py-2 pr-4 max-w-[200px] truncate text-center">${m.note || "-"}</td>
+        <td class="py-1 px-3 whitespace-nowrap w-32 align-middle">
+            <div class="flex justify-center gap-2">
+                <button class="btn btn-xs btn-outline" onclick="openModelEditModal('${m.id}')">
+                    編輯
+                </button>
+                <button class="btn btn-error btn-xs" onclick="stageDeleteModel('${m.id}')">
+                    刪除
+                </button>
+                </div>
+            </td>
+        </tr>
     `);
   });
 }
@@ -328,35 +329,37 @@ function renderMeFixturePanel(requirements) {
     </div>
 
     <!-- 已綁治具 -->
-    <div class="border rounded-xl overflow-auto max-h-64">
+    <div class="overflow-auto border rounded-xl max-h-[70vh]">
       <table class="min-w-full text-xs">
-        <thead class="bg-gray-50 text-gray-500">
-          <tr>
-            <th class="py-1 px-2 text-left">治具</th>
-            <th class="py-1 px-2 text-left">需求</th>
-            <th class="py-1 px-2 text-left">操作</th>
+        <thead class="sticky top-0 bg-gray-50 z-10">
+          <tr class="hover:bg-gray-50 transition">
+            <th class="py-1 px-2 text-center align-middle">治具</th>
+            <th class="py-1 px-2 text-center align-middle">需求</th>
+            <th class="py-1 px-2 text-center align-middle">操作</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody class="divide-y divide-gray-100">
           ${
             requirements.length
               ? requirements.map(r => `
                   <tr>
-                    <td class="px-2 py-1">
+                    <td class="py-1 px-3 w-20 text-center align-middle">
                       ${r.fixture_id}
                     </td>
-                    <td class="px-2 py-1">
+                    <td class="py-1 px-3 w-20 text-center align-middle">
                       ${r.required_qty}
                     </td>
-                    <td class="px-2 py-1">
-                      <button class="btn btn-xs btn-outline"
-                        onclick="meEditRequirement(${r.id}, ${r.required_qty})">
-                        修改
-                      </button>
-                      <button class="btn btn-xs btn-error"
-                        onclick="meDeleteRequirement(${r.id})">
-                        刪除
-                      </button>
+                    <td class="py-1 px-3 whitespace-nowrap w-32 align-middle">
+                        <div class="flex justify-center gap-2">
+                          <button class="btn btn-xs btn-outline"
+                            onclick="meEditRequirement(${r.id}, ${r.required_qty})">
+                            編輯
+                          </button>
+                          <button class="btn btn-xs btn-error"
+                            onclick="meDeleteRequirement(${r.id})">
+                            刪除
+                          </button>
+                        </div>  
                     </td>
                   </tr>
                 `).join("")
