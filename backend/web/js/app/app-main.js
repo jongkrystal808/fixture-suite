@@ -221,21 +221,74 @@ window.__activeOverlayCloser = null;
     const initialTab = normalizeHash(location.hash);
     showTab(initialTab, { updateHash: true });
 
-    // (3) 收料 / 退料子分頁
+    // (3) 收料 / 退料 / 總檢視 / 序號檢視 子分頁（最終穩定版）
     const rtabButtons = document.querySelectorAll("[data-rtab]");
+    const rtabSections = [
+      "#rtab-receipts",
+      "#rtab-returns",
+      "#viewAllTab",
+      "#viewSerialTab"
+    ];
+
     rtabButtons.forEach(btn => {
+      if (btn.__rtabBound) return;     // ★ 防重複綁定
+      btn.__rtabBound = true;
+
       btn.addEventListener("click", () => {
+
+        // active 樣式
         rtabButtons.forEach(b => b.classList.remove("subtab-active"));
         btn.classList.add("subtab-active");
 
         const tab = btn.dataset.rtab;
-        document.querySelectorAll("#rtab-receipts, #rtab-returns")
+
+        // 隱藏所有子頁
+        document
+          .querySelectorAll(rtabSections.join(","))
           .forEach(sec => sec.classList.add("hidden"));
 
-        const target = document.getElementById(`rtab-${tab}`);
-        if (target) target.classList.remove("hidden");
+        // ==========================
+        // 顯示對應子頁 + 載資料
+        // ==========================
+        if (tab === "receipts" || tab === "returns") {
+          const target = document.getElementById(`rtab-${tab}`);
+          if (target) target.classList.remove("hidden");
+          return;
+        }
+
+        if (tab === "viewall") {
+          const viewAll = document.getElementById("viewAllTab");
+          if (viewAll) viewAll.classList.remove("hidden");
+
+          if (typeof window.loadTransactionViewAll === "function") {
+            window.loadTransactionViewAll(1);
+          }
+          return;
+        }
+
+        if (tab === "serial") {
+          const serialTab = document.getElementById("viewSerialTab");
+          if (serialTab) serialTab.classList.remove("hidden");
+
+          // 預設查最近 7 天（保險寫法）
+          const today = new Date();
+          const from = new Date(Date.now() - 7 * 86400000);
+
+          const df = document.getElementById("vsDateFrom");
+          const dt = document.getElementById("vsDateTo");
+
+          if (df && dt) {
+            df.value = from.toISOString().slice(0, 10);
+            dt.value = today.toISOString().slice(0, 10);
+          }
+
+          loadTransactionViewSerial(1);
+        }
+
       });
     });
+
+
 
     // (4) Query 子分頁
     const qtabBtns = document.querySelectorAll("[data-qtab]");

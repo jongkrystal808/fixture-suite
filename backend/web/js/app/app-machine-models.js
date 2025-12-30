@@ -159,46 +159,57 @@ function renderMeStations(bound, available) {
   if (!box) return;
 
   box.innerHTML = `
-    <div class="mb-4">
-      <div class="text-xs font-semibold mb-1">已綁定站點</div>
-      ${bound.length
-        ? bound.map(s => `
-            <div class="flex items-center justify-between py-1">
-              <span class="text-sm">
-                ${s.station_id} - ${s.station_name || ""}
-              </span>
-              <div class="flex gap-1">
-                <button class="btn btn-xs btn-outline"
-                        onclick="meSelectStation('${s.station_id}', '${s.station_name || ""}')">
-                  治具
-                </button>
-                <button class="btn btn-xs btn-error"
-                        onclick="meUnbindStation('${s.station_id}')">
-                  解綁
-                </button>
-              </div>
-            </div>
-          `).join("")
-        : `<div class="text-xs text-gray-400">尚未綁定站點</div>`
-      }
-    </div>
+    <div class="grid grid-cols-2 gap-6">
 
-    <div>
-      <div class="text-xs font-semibold mb-1">可綁定站點</div>
-      ${available.length
-        ? available.map(s => `
-            <div class="flex items-center justify-between py-1">
-              <span class="text-sm">
-                ${s.id} - ${s.station_name}
-              </span>
-              <button class="btn btn-xs btn-primary"
-                      onclick="meBindStation('${s.id}', '${s.station_name}')">
-                綁定
-              </button>
-            </div>
-          `).join("")
-        : `<div class="text-xs text-gray-400">無可綁定站點</div>`
-      }
+      <!-- 已綁定站點 -->
+      <div>
+        <div class="text-sm font-semibold mb-2">已綁定站點</div>
+
+        <div class="space-y-1">
+          ${
+            bound.length
+              ? bound.map(s => `
+                  <div class="flex items-center justify-between
+                              px-2 py-1 border rounded-lg text-sm">
+                    <span class="font-mono">${s.station_id}</span>
+
+                    <div class="flex gap-1">
+                      <button class="btn btn-xs btn-outline"
+                              onclick="meSelectStation('${s.station_id}', '')">
+                        治具
+                      </button>
+                      <button class="btn btn-xs btn-error"
+                              onclick="meUnbindStation('${s.station_id}')">
+                        解綁
+                      </button>
+                    </div>
+                  </div>
+                `).join("")
+              : `<div class="text-xs text-gray-400">尚未綁定</div>`
+          }
+        </div>
+      </div>
+
+      <!-- 可綁定站點 -->
+      <div>
+        <div class="text-sm font-semibold mb-2">可綁定站點</div>
+
+        <div class="space-y-1">
+          ${
+            available.length
+              ? available.map(s => `
+                  <div class="flex items-center justify-between
+                              px-2 py-1 border rounded-lg text-sm">
+                    <span class="font-mono">${s.id}</span>
+
+                    <button class="btn btn-xs btn-primary"
+                            onclick="meBindStation('${s.id}')">
+                      綁定
+                    </button>
+                  </div>
+                `).join("")
+              : `<div class="text-xs text-gray-400">無可綁定</div>`
+          }
     </div>
   `;
 }
@@ -209,9 +220,23 @@ async function meBindStation(stationId) {
     model_id: meCurrentModelId,
     station_id: stationId,
   });
+
   toast("站點已綁定");
-  await meReloadStations();
+
+  // ⭐ 立即移動 DOM（UX 即時）
+  const detail = await apiGetModelDetail(meCurrentModelId);
+  const bound = detail.stations || [];
+  const allStations = await apiListStations({ customer_id: getCurrentCustomerId() });
+
+  const boundIds = new Set(bound.map(s => s.station_id));
+  const available = allStations.filter(s => !boundIds.has(s.id));
+
+  renderMeStations(bound, available);
+
+  // ⭐ 直接選中該站點
+  meSelectStation(stationId, "");
 }
+
 
 async function meUnbindStation(stationId) {
   const detail = await apiGetModelDetail(meCurrentModelId);

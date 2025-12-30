@@ -43,21 +43,6 @@ async def create_transactions(typ: str, payload: dict, user=Depends(get_current_
 
 
 # ============================================================
-# 刪除交易（receipt / return）
-# ============================================================
-@router.delete("/{typ}/{id}")
-async def delete_transactions(typ: str, id: int, customer_id: str = Query(...), user=Depends(get_current_user)):
-
-    if typ == "receipt":
-        return receipts.delete_receipt(id, customer_id, user)
-
-    if typ == "return":
-        return returns.delete_return(id, customer_id, user)
-
-    raise Exception("Unknown transaction type")
-
-
-# ============================================================
 # 匯出（receipt / return）
 # ============================================================
 @router.get("/{typ}/{id}/export")
@@ -166,6 +151,216 @@ async def view_all_transactions(
     total = db.execute_query(count_sql, tuple(params))[0]["total"]
 
     return {"total": total, "rows": rows}
+
+
+
+# ============================================================
+# ★ 序號檢視（收料 / 退料）
+# ============================================================
+@router.get("/serials")
+async def view_transaction_serials(
+    customer_id: str = Query(...),
+
+    fixture_id: Optional[str] = Query(None),
+    order_no: Optional[str] = Query(None),
+    serial: Optional[str] = Query(None),
+    operator: Optional[str] = Query(None),
+    type: Optional[str] = Query(None),
+
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+
+    sort_by: str = Query("date"),  # date | order
+
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=200),
+
+    user=Depends(get_current_user)
+):
+    where = [
+        "mt.customer_id = %s",
+        "mt.record_type != 'datecode'",
+        "mtd.serial_number IS NOT NULL"
+    ]
+    params = [customer_id]
+
+    if fixture_id:
+        where.append("mt.fixture_id = %s")
+        params.append(fixture_id)
+
+    if order_no:
+        where.append("mt.order_no LIKE %s")
+        params.append(f"%{order_no}%")
+
+    if serial:
+        where.append("mtd.serial_number LIKE %s")
+        params.append(f"%{serial}%")
+
+    if operator:
+        where.append("mt.operator LIKE %s")
+        params.append(f"%{operator}%")
+
+    if type:
+        where.append("mt.transaction_type = %s")
+        params.append(type)
+
+    if date_from:
+        where.append("mt.transaction_date >= %s")
+        params.append(date_from)
+
+    if date_to:
+        where.append("mt.transaction_date <= %s")
+        params.append(date_to)
+
+    where_sql = " AND ".join(where)
+
+    order_sql = (
+        "mt.order_no DESC, mt.id DESC"
+        if sort_by == "order"
+        else "mt.transaction_date DESC, mt.id DESC"
+    )
+
+    # -------------------------
+    # 主查詢
+    # -------------------------
+    sql = f"""
+        SELECT
+            mt.id               AS transaction_id,
+            mt.transaction_date,
+            mt.transaction_type,
+            mt.customer_id,
+            mt.fixture_id,
+            mt.order_no,
+            mt.source_type,
+            mt.operator,
+            mt.note,
+            mtd.serial_number
+        FROM material_transactions mt
+        JOIN material_transaction_details mtd
+          ON mt.id = mtd.transaction_id
+        WHERE {where_sql}
+        ORDER BY {order_sql}
+        LIMIT %s OFFSET %s
+    """
+
+    rows = db.execute_query(sql, tuple(params + [limit, skip]))
+
+    # -------------------------
+    # 總筆數
+    # -------------------------
+    count_sql = f"""
+        SELECT COUNT(*) AS total
+        FROM material_transactions mt
+        JOIN material_transaction_details mtd
+          ON mt.id = mtd.transaction_id
+        WHERE {where_sql}
+    """
+
+    total_row = db.execute_one(count_sql, tuple(params))
+    total = total_row["total"] if total_row else 0
+
+    return {
+        "rows": rows,
+        "total": total
+    }
+
+
+
+# ============================================================
+# ★ 序號詳細履歷
+# ============================================================
+@router.get("/serials/{serial_number}/history")
+async def get_serial_history(
+    serial_number: str,
+    customer_id: str = Query(...),
+    user=Depends(get_current_user)
+):
+    serial = serial_number.strip()
+
+    # -------------------------
+    # 基本資訊
+    # -------------------------
+    serial_sql = """
+        SELECT
+            fs.serial_number,
+            fs.fixture_id,
+            fs.customer_id,
+            fs.status,
+            fs.source_type,
+            fs.current_station_id,
+            fs.total_uses,
+            fs.created_at
+        FROM fixture_serials fs
+        WHERE fs.serial_number = %s
+          AND fs.customer_id = %s
+        LIMIT 1
+    """
+    serial_info = db.execute_one(serial_sql, (serial, customer_id))
+    if not serial_info:
+        raise HTTPException(status_code=404, detail="Serial not found")
+
+    # -------------------------
+    # 收 / 退料紀錄
+    # -------------------------
+    tx_sql = """
+        SELECT
+            mt.transaction_date,
+            mt.transaction_type,
+            mt.order_no,
+            mt.fixture_id,
+            mt.source_type,
+            mt.operator,
+            mt.note
+        FROM material_transactions mt
+        JOIN material_transaction_details mtd
+          ON mt.id = mtd.transaction_id
+        WHERE mtd.serial_number = %s
+          AND mt.customer_id = %s
+        ORDER BY mt.transaction_date DESC, mt.id DESC
+    """
+    transactions = db.execute_query(tx_sql, (serial, customer_id))
+
+    # -------------------------
+    # 使用紀錄
+    # -------------------------
+    usage_sql = """
+        SELECT
+            used_at,
+            model_id,
+            station_id,
+            use_count,
+            operator,
+            note
+        FROM usage_logs
+        WHERE serial_number = %s
+          AND customer_id = %s
+        ORDER BY used_at DESC
+    """
+    usages = db.execute_query(usage_sql, (serial, customer_id))
+
+    # -------------------------
+    # 更換紀錄
+    # -------------------------
+    replace_sql = """
+        SELECT
+            created_at,
+            usage_before,
+            usage_after,
+            auto_predicted_life,
+            auto_predicted_replace_at
+        FROM replacement_logs
+        WHERE serial_number = %s
+          AND customer_id = %s
+        ORDER BY created_at DESC
+    """
+    replacements = db.execute_query(replace_sql, (serial, customer_id))
+
+    return {
+        "serial": serial_info,
+        "transactions": transactions,
+        "usages": usages,
+        "replacements": replacements
+    }
 
 
 @router.get("/summary/export")

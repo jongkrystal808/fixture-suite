@@ -180,11 +180,19 @@
             退料登記
           </button>
 
-          <button class="subtab"
-                  onclick="showTab('viewAllTab')"
-                  data-rtab="viewall">   <!-- ★ 必須加這個 -->
-            總檢視
-          </button>
+            <button class="subtab"
+                    data-rtab="serial"
+                    onclick="showTab('viewSerialTab'); loadTransactionViewSerial(1);">
+              序號檢視
+            </button>
+
+            <button class="subtab"
+                    data-rtab="viewall"
+                    onclick="showTab('viewAllTab'); loadTransactionViewAll(1);">
+              總檢視
+            </button>
+
+
         </div>
 
       <!-- ============================================================= -->
@@ -542,8 +550,104 @@
           </div>
         </div>
       </div>
+
+    <!-- ===================== -->
+    <!-- ★ 序號檢視 TAB -->
+    <!-- ===================== -->
+    <div id="viewSerialTab" class="hidden space-y-4">
+
+      <!-- ===================== -->
+      <!-- 查詢區 -->
+      <!-- ===================== -->
+      <div class="card p-5 space-y-4">
+        <h3 class="font-semibold text-lg">治具序號檢視</h3>
+
+        <!-- 查詢條件 -->
+        <div class="grid md:grid-cols-6 gap-3">
+
+          <div class="field">
+            <label class="text-base font-semibold">日期（起）</label>
+            <input type="date" id="vsDateFrom" class="input">
+          </div>
+
+          <div class="field">
+            <label class="text-base font-semibold">日期（迄）</label>
+            <input type="date" id="vsDateTo" class="input">
+          </div>
+
+          <div class="field">
+            <label class="text-base font-semibold">治具編號</label>
+            <input id="vsFixture" class="input" placeholder="治具編號">
+          </div>
+
+          <div class="field">
+            <label class="text-base font-semibold">單號</label>
+            <input id="vsOrderNo" class="input" placeholder="單號">
+          </div>
+
+          <div class="field">
+            <label class="text-base font-semibold">序號</label>
+            <input id="vsSerial" class="input" placeholder="序號">
+          </div>
+
+          <div class="field">
+            <label class="text-base font-semibold">操作人員</label>
+            <input id="vsOperator" class="input" placeholder="員工號">
+          </div>
+
+          <div class="field">
+            <label class="text-base font-semibold">類型</label>
+            <select id="vsType" class="input">
+              <option value="">全部</option>
+              <option value="receipt">收料</option>
+              <option value="return">退料</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 操作 -->
+        <div class="flex gap-3">
+          <button
+            class="px-5 py-2 rounded-xl bg-[#0d1321] text-white font-semibold hover:opacity-90"
+            onclick="loadTransactionViewSerial(1)">
+            查詢
+          </button>
+        </div>
+
         <!-- ===================== -->
-        <!-- ★ 總檢視 TAB（風格統一版） -->
+        <!-- 表格 -->
+        <!-- ===================== -->
+        <div class="overflow-auto">
+          <table id="viewSerialTable" class="min-w-full text-sm">
+            <thead class="text-left text-gray-500">
+              <tr>
+                <th class="py-2 pr-4">日期</th>
+                <th class="py-2 pr-4">類型</th>
+                <th class="py-2 pr-4">治具</th>
+                <th class="py-2 pr-4">客戶</th>
+                <th class="py-2 pr-4">來源</th>
+                <th class="py-2 pr-4">單號</th>
+                <th class="py-2 pr-4">序號</th>
+                <th class="py-2 pr-4">操作人員</th>
+                <th class="py-2 pr-4">備註</th>
+              </tr>
+            </thead>
+
+            <tbody id="viewSerialTableBody"></tbody>
+          </table>
+
+          <div
+            id="viewSerialPagination"
+            class="flex gap-2 mt-3 justify-center">
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+
+        <!-- ===================== -->
+        <!-- ★ 總檢視 TAB -->
         <!-- ===================== -->
         <div id="viewAllTab" class="hidden space-y-4">
 
@@ -621,7 +725,7 @@
                     <th class="py-2 pr-4">客戶</th>
                     <th class="py-2 pr-4">來源</th>
                     <th class="py-2 pr-4">Datecode</th>
-                    <th class="py-2 pr-4">工單</th>
+                    <th class="py-2 pr-4">單號</th>
                     <th class="py-2 pr-4">數量</th>
                     <th class="py-2 pr-4">操作人員</th>
                     <th class="py-2 pr-4">備註</th>
@@ -1907,6 +2011,97 @@
           </div>
 
         </div>
+        <!-- ===================== -->
+        <!-- ★ Serial Detail Drawer -->
+        <!-- ===================== -->
+        <div
+          id="serialDetailOverlay"
+          class="fixed inset-0 bg-black/40 hidden z-50"
+          onclick="closeSerialDetailDrawer()">
+        </div>
+
+        <div
+          id="serialDetailDrawer"
+          class="fixed top-0 right-0 h-full w-full md:w-[520px] bg-white shadow-xl z-50
+                 translate-x-full transition-transform duration-300">
+
+          <!-- Header -->
+          <div class="flex items-center justify-between px-5 py-4 border-b">
+            <div>
+              <h3 class="font-semibold text-lg">序號詳細履歷</h3>
+              <p id="serialDetailTitle" class="text-sm text-gray-500"></p>
+            </div>
+            <button
+              class="text-gray-500 hover:text-gray-800"
+              onclick="closeSerialDetailDrawer()">
+              ✕
+            </button>
+          </div>
+
+          <!-- Content -->
+          <div class="p-5 space-y-6 overflow-y-auto h-full">
+
+            <!-- 基本資訊 -->
+            <div>
+              <h4 class="font-semibold mb-2">基本資訊</h4>
+              <div class="grid grid-cols-2 gap-3 text-sm">
+                <div><span class="text-gray-500">治具：</span><span id="sdFixture"></span></div>
+                <div><span class="text-gray-500">狀態：</span><span id="sdStatus"></span></div>
+                <div><span class="text-gray-500">來源：</span><span id="sdSource"></span></div>
+                <div><span class="text-gray-500">累計使用：</span><span id="sdTotalUses"></span></div>
+              </div>
+            </div>
+
+            <!-- 收 / 退料紀錄 -->
+            <div>
+              <h4 class="font-semibold mb-2">收 / 退料紀錄</h4>
+              <table class="min-w-full text-sm">
+                <thead class="text-gray-500">
+                  <tr>
+                    <th class="py-1 pr-2">日期</th>
+                    <th class="py-1 pr-2">類型</th>
+                    <th class="py-1 pr-2">單號</th>
+                    <th class="py-1 pr-2">操作人</th>
+                  </tr>
+                </thead>
+                <tbody id="sdTransactions"></tbody>
+              </table>
+            </div>
+
+            <!-- 使用紀錄 -->
+            <div>
+              <h4 class="font-semibold mb-2">使用紀錄</h4>
+              <table class="min-w-full text-sm">
+                <thead class="text-gray-500">
+                  <tr>
+                    <th class="py-1 pr-2">時間</th>
+                    <th class="py-1 pr-2">機種</th>
+                    <th class="py-1 pr-2">站點</th>
+                    <th class="py-1 pr-2">次數</th>
+                  </tr>
+                </thead>
+                <tbody id="sdUsages"></tbody>
+              </table>
+            </div>
+
+            <!-- 更換紀錄 -->
+            <div>
+              <h4 class="font-semibold mb-2">更換紀錄</h4>
+              <table class="min-w-full text-sm">
+                <thead class="text-gray-500">
+                  <tr>
+                    <th class="py-1 pr-2">時間</th>
+                    <th class="py-1 pr-2">使用前</th>
+                    <th class="py-1 pr-2">使用後</th>
+                  </tr>
+                </thead>
+                <tbody id="sdReplacements"></tbody>
+              </table>
+            </div>
+
+          </div>
+        </div>
+
 
 
       <!-- Toast -->
@@ -1988,6 +2183,7 @@
             <!-- 查詢 -->
             <script src="/js/app/app-query.js"></script>
             <script src="/js/app/app-transactions-viewall.js"></script>
+            <script src="/js/app/app-transactions-serial.js"></script>
 
             <!-- 治具主檔 -->
             <script src="/js/api/api-fixtures.js"></script>

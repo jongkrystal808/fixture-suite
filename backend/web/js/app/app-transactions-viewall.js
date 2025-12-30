@@ -74,18 +74,18 @@ function renderViewAllTable(rows) {
         ? "自購"
         : (r.source_type === "customer_supplied" ? "客供" : "-");
 
-    // -----------------------------
-    // 數量顯示（★重點修正）
-    // -----------------------------
-    let qtyText = "-";
+        // -----------------------------
+        // 數量顯示（★重點修正）
+        // -----------------------------
+        let qtyText = "-";
 
-    if (r.record_type === "datecode") {
-      // datecode：顯示 datecode + 件數
-      qtyText = `${r.datecode || "-"}（${r.quantity || 0} 件）`;
-    } else {
-      // batch / individual：只顯示「有幾個序號」
-      qtyText = `${r.quantity || 0} 個`;
-    }
+        if (r.record_type === "datecode") {
+          // datecode：顯示 datecode + 件數
+          qtyText = `${r.datecode || "-"}（${r.quantity || 0} 件）`;
+        } else {
+          // batch / individual：只顯示「有幾個序號」
+          qtyText = `${r.quantity || 0} 個`;
+        }
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
@@ -95,6 +95,7 @@ function renderViewAllTable(rows) {
       <td>${r.customer_id || "-"}</td>
       <td>${sourceText}</td>
       <td>${r.record_type || "-"}</td>
+      <td>${r.order_no || "-"}</td>
       <td>${qtyText}</td>
       <td>${r.operator || "-"}</td>
       <td>${r.note || "-"}</td>
@@ -105,23 +106,24 @@ function renderViewAllTable(rows) {
 
 
 // ============================================================
-// 收料 / 退料 / 總檢視 TAB 切換控制
+// 收料 / 退料 / 序號檢視 / 總檢視 TAB 切換控制（修正版）
 // ============================================================
 function showTab(tabId) {
 
-  // 隱藏所有子頁面
-  document.querySelectorAll("#rtab-receipts, #rtab-returns, #viewAllTab")
-    .forEach(el => el.classList.add("hidden"));
+  // 1️⃣ 隱藏所有子頁面
+  document.querySelectorAll(
+    "#rtab-receipts, #rtab-returns, #viewAllTab, #viewSerialTab"
+  ).forEach(el => el.classList.add("hidden"));
 
-  // 顯示目標頁
+  // 2️⃣ 顯示目標頁
   const target = document.getElementById(tabId);
   if (target) target.classList.remove("hidden");
 
-  // 清除所有 active 樣式
+  // 3️⃣ 清除所有 subtab active
   document.querySelectorAll(".subtab")
     .forEach(btn => btn.classList.remove("subtab-active"));
 
-  // 依照 tabId 套用 active
+  // 4️⃣ 依 tabId 設定 active（不做 API）
   if (tabId === "rtab-receipts") {
     document.querySelector("[data-rtab='receipts']")?.classList.add("subtab-active");
   }
@@ -130,14 +132,12 @@ function showTab(tabId) {
   }
   else if (tabId === "viewAllTab") {
     document.querySelector("[data-rtab='viewall']")?.classList.add("subtab-active");
-    loadTransactionViewAll(); // 維持你的原本行為
   }
-  else if (tabId === "viewAllTab") {
-  document.querySelector("[data-rtab='viewall']")?.classList.add("subtab-active");
-  loadTransactionViewAll(1); // ★ 改成載入第 1 頁
+  else if (tabId === "viewSerialTab") {
+    document.querySelector("[data-rtab='viewserial']")?.classList.add("subtab-active");
   }
-
 }
+
 
 
 
