@@ -267,3 +267,31 @@ table th,
 table td {
   vertical-align: top;
 }
+
+#currentCustomerSelect {
+    background-color: #f3f4f6; /* 灰色背景 */
+    border: 1px solid #d1d5db; /* 灰色邊框 */
+    border-radius: 8px; /* 圓角 */
+    padding: 6px 24px 6px 12px; /* 上下左右內距 */
+}
+
+/* 如果要更圓的角 */
+#currentCustomerSelect {
+    border-radius: 12px; /* 或 16px */
+    padding-right: 32px;
+}
+
+/* 如果想完全隱藏預設選項（客戶：--） */
+#currentCustomerSelect option[value=""] {
+    display: none;
+}
+
+/* 統一高度 */
+#clock,
+#currentCustomerSelect,
+#btnLogout {
+    height: 36px; /* 或 38px, 40px，根據需要調整 */
+    display: inline-flex;
+    align-items: center;
+    padding: 0 12px;
+}

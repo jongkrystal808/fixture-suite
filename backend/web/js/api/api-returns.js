@@ -67,15 +67,17 @@ async function apiGetReturn(id) {
 
 async function apiCreateReturn(payload) {
   const customer_id = _getCustomerId();
+  if (!customer_id) {
+    throw new Error("customer_id missing");
+  }
 
   return api("/returns", {
     method: "POST",
-    body: {
-      ...payload,
-      customer_id
-    }
+    params: { customer_id },   // ⭐ 關鍵：query string
+    body: payload              // body 不再塞 customer_id
   });
 }
+
 
 /* ============================================================
  * 刪除退料

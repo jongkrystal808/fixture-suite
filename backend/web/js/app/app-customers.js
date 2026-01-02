@@ -19,7 +19,7 @@ let customerPageSize = 20;
  * 初始化
  * ============================================================ */
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("user:ready", () => {
 
   // 🔐 僅 admin 可使用
   if (!window.currentUser || window.currentUser.role !== "admin") {

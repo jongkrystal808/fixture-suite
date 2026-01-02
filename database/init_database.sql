@@ -54,7 +54,6 @@ CREATE TABLE `users` (
 
 
 
-
 --
 -- Table structure for table `owners`
 --
@@ -62,19 +61,35 @@ CREATE TABLE `users` (
 DROP TABLE IF EXISTS `owners`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
+
 CREATE TABLE `owners` (
   `id` int NOT NULL AUTO_INCREMENT,
+
   `customer_name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '客戶名稱',
   `customer_id` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '對應客戶ID（NULL 表示跨客戶）',
-  `primary_owner` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '主負責人',
-  `secondary_owner` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '副負責人',
+
   `email` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Email',
   `note` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci COMMENT '備註',
+
   `is_active` tinyint(1) DEFAULT '1' COMMENT '是否啟用',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
 
+  `primary_owner_id` int NOT NULL COMMENT '主負責人 user_id',
+  `secondary_owner_id` int DEFAULT NULL COMMENT '副負責人 user_id',
+
   PRIMARY KEY (`id`),
+
   KEY `idx_owner_customer` (`customer_id`),
+  KEY `idx_owner_primary_uid` (`primary_owner_id`),
+  KEY `idx_owner_secondary_uid` (`secondary_owner_id`),
+
+  CONSTRAINT `fk_owner_primary_user`
+    FOREIGN KEY (`primary_owner_id`)
+    REFERENCES `users` (`id`),
+
+  CONSTRAINT `fk_owner_secondary_user`
+    FOREIGN KEY (`secondary_owner_id`)
+    REFERENCES `users` (`id`),
 
   CONSTRAINT `fk_owners_customer`
     FOREIGN KEY (`customer_id`)
@@ -82,11 +97,12 @@ CREATE TABLE `owners` (
     ON DELETE SET NULL
 
 ) ENGINE=InnoDB
-  AUTO_INCREMENT=6
   DEFAULT CHARSET=utf8mb4
   COLLATE=utf8mb4_unicode_ci
   COMMENT='負責人表 (可跨客戶)';
+
 /*!40101 SET character_set_client = @saved_cs_client */;
+
 
 
 

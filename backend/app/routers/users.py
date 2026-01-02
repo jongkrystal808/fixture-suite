@@ -178,3 +178,21 @@ async def reset_password(user_id: int, data: dict, user=Depends(get_current_admi
 
     return {"message": "密碼已更新"}
 
+# ============================================================
+# 使用者簡易清單（給下拉 / autocomplete 用）
+# ============================================================
+
+@router.get("/simple", summary="使用者簡易清單")
+async def list_users_simple(admin=Depends(get_current_admin)):
+    rows = db.execute_query(
+        """
+        SELECT
+            id,
+            username
+        FROM users
+        WHERE is_active = 1
+        ORDER BY username
+        """
+    )
+
+    return rows

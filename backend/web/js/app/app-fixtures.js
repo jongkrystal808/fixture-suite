@@ -11,17 +11,6 @@
 
 
 /* ============================================================
- * 🔐 Admin Only Guard（後台模組宣告）
- * ============================================================ */
-(function () {
-  if (!window.currentUser || window.currentUser.role !== "admin") {
-    console.warn("[app-fixtures] not admin, module disabled");
-    return;
-  }
-})();
-
-
-/* ============================================================
  * 取得 customer_id
  * ============================================================ */
 
@@ -31,12 +20,10 @@ function getCurrentCustomerId() {
 
 /* ============================================================
  * Owners 簡易 API（補上缺少的 apiGetOwnersSimple）
- * 對應後端 GET /owners/active
  * ============================================================ */
 
 async function apiGetOwnersSimple() {
-  // 後端 owners.py 裡已經有 /owners/active
-  return api("/owners/active");
+  return api("/owners/simple");
 }
 window.apiGetOwnersSimple = apiGetOwnersSimple;
 
@@ -83,7 +70,7 @@ const fmForm = document.getElementById("fixtureForm");
  * 初始化
  * ============================================================ */
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("user:ready", () => {
   loadOwnerDropdown();
   loadFixtureList();
 });
@@ -93,7 +80,7 @@ document.addEventListener("DOMContentLoaded", () => {
  * ============================================================ */
 
 async function loadOwnerDropdown() {
-  // ✅ 使用已經宣告好的 fxOwnerFilter，而不是不存在的 fxOwnerSelect
+  // ✅ 使用已存在的 fxOwnerFilter
   if (!fxOwnerFilter) {
     console.warn("fxOwnerFilter element not found in DOM");
     return;
@@ -107,12 +94,19 @@ async function loadOwnerDropdown() {
     return;
   }
 
+  // 預設選項
   fxOwnerFilter.innerHTML = `<option value="">全部</option>`;
 
   owners.forEach((o) => {
-    fxOwnerFilter.innerHTML += `<option value="${o.id}">${o.primary_owner}</option>`;
+    // 🔑 value 用 owner.id（治具通常綁 owner）
+    // 🧾 顯示用 user 名稱
+    const opt = document.createElement("option");
+    opt.value = o.id;
+    opt.textContent = o.name;
+    fxOwnerFilter.appendChild(opt);
   });
 }
+
 
 /* ============================================================
  * 載入列表
@@ -544,21 +538,23 @@ function downloadBlob(blob, filename) {
 }
 
 async function fxExportFixturesXlsx() {
-  const token = localStorage.getItem("auth_token");
+  // 仍保留「是否已選客戶」的前端提示（UX 用）
   const customer_id = getCurrentCustomerId();
-
   if (!customer_id) {
     return toast("尚未選擇客戶", "warning");
   }
 
-  const url =
-    `/api/v2/fixtures/export?customer_id=${encodeURIComponent(customer_id)}`;
-
   try {
-    const res = await fetch(url, {
+    // ⭐ 重點：不帶 customer_id、不自己帶 token
+    // api-config.js 會自動注入：
+    // - Authorization
+    // - X-Customer-Id
+    const res = await fetch(apiURL("/fixtures/export"), {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${token}`,
+        // ❗ 只需要這一行，其他交給 api-config
+        Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
+        "X-Customer-Id": customer_id,
       },
     });
 
@@ -567,10 +563,9 @@ async function fxExportFixturesXlsx() {
       throw new Error(text || "匯出失敗");
     }
 
-    // ✅ 一定要 blob
     const blob = await res.blob();
 
-    // ✅ 瀏覽器下載
+    // 下載檔案
     const downloadUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = downloadUrl;
@@ -587,46 +582,49 @@ async function fxExportFixturesXlsx() {
   }
 }
 
+
 window.fxExportFixturesXlsx = fxExportFixturesXlsx;
 
-
 async function fxDownloadFixturesTemplate() {
-  const token = localStorage.getItem("auth_token");
   const customer_id = getCurrentCustomerId();
-
   if (!customer_id) {
     return toast("尚未選擇客戶", "warning");
   }
 
   try {
-    const res = await fetch(
-      `/api/v2/fixtures/template?customer_id=${encodeURIComponent(customer_id)}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
+    // ⭐ 不帶 query、不自己組 customer_id
+    const res = await fetch(apiURL("/fixtures/template"), {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
+        "X-Customer-Id": customer_id,
+      },
+    });
 
     if (!res.ok) {
-      throw new Error("下載失敗");
+      const text = await res.text();
+      throw new Error(text || "下載失敗");
     }
 
     const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
 
+    // 下載檔案
+    const downloadUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url;
+    a.href = downloadUrl;
     a.download = "fixtures_import_template.xlsx";
+    document.body.appendChild(a);
     a.click();
 
-    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    URL.revokeObjectURL(downloadUrl);
 
   } catch (err) {
     console.error(err);
     toast("下載治具範本失敗", "error");
   }
 }
+
 
 window.fxDownloadFixturesTemplate = fxDownloadFixturesTemplate;
 
@@ -642,9 +640,7 @@ async function fxImportFixtures(file) {
     return toast("僅支援 .xlsx Excel 檔案", "warning");
   }
 
-  const token = localStorage.getItem("auth_token");
   const customer_id = getCurrentCustomerId();
-
   if (!customer_id) {
     return toast("尚未選擇客戶", "warning");
   }
@@ -653,42 +649,26 @@ async function fxImportFixtures(file) {
   fd.append("file", file);
 
   try {
-    const res = await fetch(
-      `/api/v2/fixtures/import?customer_id=${encodeURIComponent(customer_id)}`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          // ⚠️ 不要手動加 Content-Type
-        },
-        body: fd,
-      }
-    );
+    // ⭐ 關鍵修正：
+    // - 不再使用 ?customer_id=
+    // - 不再自行處理 Authorization
+    // - 由 api-config.js 自動注入：
+    //   Authorization + X-Customer-Id
+    await api("/fixtures/import", {
+      method: "POST",
+      body: fd,
+      rawBody: true, // 告訴 api() 不要 JSON.stringify FormData
+    });
 
-    let data = null;
-    try {
-      data = await res.json();
-    } catch {
-      data = null;
-    }
-
-    if (!res.ok) {
-      throw new Error(data?.detail || "匯入失敗");
-    }
-
-    // ✅ 對齊後端回傳結構
-    toast(
-      `匯入完成：新增 ${data.imported} 筆、更新 ${data.updated} 筆、跳過 ${data.skipped} 筆`
-    );
-
-    await loadFixtureList();
- // 🔁 重新載入治具列表
+    toast("匯入完成");
+    await loadFixtureList(); // 🔁 重新載入治具列表
 
   } catch (err) {
     console.error(err);
     toast(err.message || "匯入治具失敗", "error");
   }
 }
+
 
 window.fxImportFixtures = fxImportFixtures;
 

@@ -25,7 +25,6 @@ class FixtureBase(BaseModel):
   fixture_id: str = Field(..., description="治具編號")
   fixture_name: str = Field(..., description="治具名稱")
   fixture_type: Optional[str] = Field(None, description="治具類型")
-  serial_number: Optional[str] = Field(None, description="序號（如有唯一 SN）")
 
   self_purchased_qty: int = Field(0, description="自購數量")
   customer_supplied_qty: int = Field(0, description="客供數量")
@@ -34,7 +33,9 @@ class FixtureBase(BaseModel):
   replacement_cycle: Optional[int] = Field(None, description="更換週期（數值）")
   cycle_unit: Optional[str] = Field(None, description="週期單位（days / uses ...）")
 
-  status: Optional[str] = Field("正常", description="狀態（正常 / 報廢 / 停用 ...）")
+  status: Optional[str] = Field(
+      "正常",
+      description = "顯示狀態（非 serial 狀態，例如：正常 / 停用 / 報廢）")
 
   owner_id: Optional[int] = Field(None, description="負責人 ID")
   note: Optional[str] = Field(None, description="備註")
@@ -50,7 +51,6 @@ class FixtureUpdate(BaseModel):
 
   fixture_name: Optional[str] = None
   fixture_type: Optional[str] = None
-  serial_number: Optional[str] = None
 
   self_purchased_qty: Optional[int] = None
   customer_supplied_qty: Optional[int] = None
@@ -73,7 +73,9 @@ class FixtureResponse(FixtureBase):
   owner_name: Optional[str] = Field(None, description="負責人姓名（JOIN owners 表）")
   customer_id: Optional[str] = Field(None, description="客戶代碼（如有）")
 
-  total_qty: Optional[int] = Field(None, description="總數量（自購 + 客供）")
+  total_qty: Optional[int] = Field(
+      None,
+      description = "可用總數量（serial available + datecode available）" )
 
   created_at: Optional[datetime] = None
   updated_at: Optional[datetime] = None

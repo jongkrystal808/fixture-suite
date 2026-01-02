@@ -8,16 +8,6 @@
  * ✔ HTML 入口只需 stOpenStationMasterModal()
  */
 
-/* ============================================================
- * 🔐 Admin Only Guard（後台模組語意宣告）
- * ============================================================ */
-(function () {
-  if (!window.currentUser || window.currentUser.role !== "admin") {
-    console.warn("[app-stations] not admin, module disabled");
-    return;
-  }
-})();
-
 
 /* ============================================================
  * 狀態變數（全域）
@@ -46,7 +36,7 @@ window.loadAdminStations = loadAdminStations;
  * 初始化
  * ============================================================ */
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("user:ready", () => {
   if (!window.currentUser || window.currentUser.role !== "admin") return;
 
   if (!window.currentCustomerId) {
@@ -191,12 +181,14 @@ async function stSubmitForm() {
 
   try {
     if (stIsEdit) {
-      await apiUpdateStation({
-        customer_id,
-        id: stEditingId,
-        station_name: name,
-        note
-      });
+      await apiUpdateStation(
+          stEditingId,
+          {
+            customer_id,
+            station_name: name,
+            note
+          }
+        );
       toast("更新成功");
     } else {
       await apiCreateStation({

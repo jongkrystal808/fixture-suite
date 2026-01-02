@@ -7,15 +7,16 @@
 /* ============================================================
  * 登入
  * ============================================================ */
-
+// api-auth.js
 async function apiLogin(username, password) {
   return api("/auth/login", {
     method: "POST",
-    body: { username, password },  // 讓 api() 自動 stringify
-    skipCustomerId: true,          // 登入不能帶 customer_id
-    skipAuth: true                 // 登入不需要 Bearer token
+    body: { username, password },
+    skipCustomerId: true,
+    skipAuth: true
   });
 }
+
 
 /* ============================================================
  * 取得目前登入使用者

@@ -72,7 +72,7 @@
               title="切換客戶"
               onchange="switchCustomerFromHeader(this.value)"
             >
-              <option value="">客戶：--</option>
+              <option value="">--</option>  <!-- 改成這樣 -->
             </select>
 
 
@@ -1657,6 +1657,58 @@
           <!-- ========== 負責人管理 ========== -->
           <div id="admin-owners" class="admin-page card p-5 space-y-4 hidden">
              <h3 class="font-semibold">負責人管理</h3>
+              <!-- ========== Inline 新增負責人 ========== -->
+                <div class="border rounded-xl p-4 bg-gray-50 space-y-3">
+                  <div class="font-semibold text-sm text-gray-700">新增負責人</div>
+
+                  <div class="grid md:grid-cols-6 gap-3">
+                    <!-- 🔒 客戶（自動帶入、不可編輯） -->
+                    <div class="field">
+                      <label class="label-xs">客戶</label>
+                      <input
+                        id="addOwnerCustomer"
+                        class="input bg-gray-100 cursor-not-allowed"
+                        disabled
+                      />
+                    </div>
+
+                    <div class="field">
+                      <label class="label-xs">主負責人 *</label>
+                      <select id="addOwnerPrimary" class="input">
+                        <option value="">請選擇使用者</option>
+                      </select>
+                    </div>
+
+                    <div class="field">
+                      <label class="label-xs">副負責人</label>
+                      <select id="addOwnerSecondary" class="input">
+                        <option value="">（無）</option>
+                      </select>
+                    </div>
+
+
+                    <div class="field">
+                      <label class="label-xs">Email *</label>
+                      <input id="addOwnerEmail" class="input" />
+                    </div>
+
+                    <div class="field md:col-span-2">
+                      <label class="label-xs">備註</label>
+                      <input id="addOwnerNote" class="input" />
+                    </div>
+                  </div>
+
+                  <div class="flex justify-end gap-2">
+                    <button class="btn btn-ghost" onclick="clearInlineOwnerForm()">
+                      清空
+                    </button>
+                    <button class="btn btn-primary" onclick="submitInlineOwner()">
+                      新增
+                    </button>
+                  </div>
+                </div>
+
+
                   <!-- 查詢 -->
               <div class="grid md:grid-cols-4 gap-3">
                 <div class="field md:col-span-2">
@@ -1671,10 +1723,6 @@
                     <option value="1">啟用</option>
                     <option value="0">停用</option>
                   </select>
-                </div>
-
-                <div class="field flex items-end">
-                  <button class="btn btn-primary w-full" onclick="openOwnerAdd()">新增負責人</button>
                 </div>
               </div>
 
@@ -1844,6 +1892,51 @@
         </div>
 
 
+        <!-- ========== 編輯負責人 Modal ========== -->
+        <div
+          id="ownerEditModal"
+          class="fixed inset-0 bg-black/40 hidden items-center justify-center z-50"
+        >
+          <div class="bg-white rounded-xl w-full max-w-lg p-6 space-y-4">
+            <h3 class="font-semibold text-lg">編輯負責人</h3>
+
+            <!-- hidden id -->
+            <input type="hidden" id="editOwnerId" />
+
+            <div class="grid grid-cols-2 gap-3">
+              <div class="field col-span-2">
+                <label class="label-xs">主負責人 *</label>
+                <select id="editOwnerPrimary" class="input">
+                  <option value="">請選擇使用者</option>
+                </select>
+              </div>
+
+              <div class="field col-span-2">
+                <label class="label-xs">副負責人</label>
+                <select id="editOwnerSecondary" class="input">
+                  <option value="">（無）</option>
+                </select>
+              </div>
+
+              <div class="field col-span-2">
+                <label class="label-xs">Email *</label>
+                <input id="editOwnerEmail" class="input" />
+              </div>
+
+              <div class="field col-span-2">
+                <label class="label-xs">備註</label>
+                <input id="editOwnerNote" class="input" />
+              </div>
+            </div>
+
+            <div class="flex justify-end gap-2 pt-2">
+              <button class="btn btn-ghost" onclick="closeOwnerEdit()">取消</button>
+              <button class="btn btn-primary" onclick="submitOwnerEdit()">儲存</button>
+            </div>
+          </div>
+        </div>
+
+
       <!-- 機種 Modal -->
       <div id="mmModelModal" class="fixed inset-0 bg-black/30 backdrop-blur-sm items-center justify-center hidden z-40">
         <div class="bg-white rounded-2xl shadow-xl max-w-lg w-full mx-4 p-5 space-y-4">
@@ -1974,6 +2067,7 @@
         </div>
 
     </section>
+
 
         <!-- ================================ -->
         <!-- 🟦 Fixture Detail Drawer        -->
@@ -2157,6 +2251,7 @@
             <!-- 客戶 -->
             <script src="/js/api/api-customers.js"></script>
             <script src="/js/app/app-customers.js"></script>
+            <script src="/js/app/customer-context.js"></script>
 
             <!-- 負責人 -->
             <script src="/js/api/api-owners.js"></script>

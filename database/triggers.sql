@@ -7,15 +7,24 @@ AFTER INSERT ON fixture_serials
 FOR EACH ROW
 BEGIN
     UPDATE fixtures SET
-        self_purchased_qty    = self_purchased_qty    + (NEW.source_type = 'self_purchased'),
-        customer_supplied_qty = customer_supplied_qty + (NEW.source_type = 'customer_supplied'),
-        available_qty         = available_qty         + (NEW.status = 'available'),
-        deployed_qty          = deployed_qty          + (NEW.status = 'deployed'),
-        maintenance_qty       = maintenance_qty       + (NEW.status = 'maintenance'),
-        scrapped_qty          = scrapped_qty           + (NEW.status = 'scrapped'),
-        returned_qty          = returned_qty           + (NEW.status = 'returned')
+        self_purchased_qty    = self_purchased_qty
+                                + (NEW.source_type = 'self_purchased'),
+        customer_supplied_qty = customer_supplied_qty
+                                + (NEW.source_type = 'customer_supplied'),
+
+        available_qty         = available_qty
+                                + (NEW.status = 'in_stock'),
+        deployed_qty          = deployed_qty
+                                + (NEW.status = 'deployed'),
+        maintenance_qty       = maintenance_qty
+                                + (NEW.status = 'maintenance'),
+        scrapped_qty          = scrapped_qty
+                                + (NEW.status = 'scrapped'),
+        returned_qty          = returned_qty
+                                + (NEW.status = 'returned')
     WHERE id = NEW.fixture_id;
 END;
+
 
 -- SERIAL STATUS UPDATE TRIGGER
 DROP TRIGGER IF EXISTS trg_serial_update;
@@ -27,8 +36,8 @@ BEGIN
         UPDATE fixtures
         SET
             available_qty   = available_qty
-                              - (OLD.status = 'available')
-                              + (NEW.status = 'available'),
+                              - (OLD.status = 'in_stock')
+                              + (NEW.status = 'in_stock'),
             deployed_qty    = deployed_qty
                               - (OLD.status = 'deployed')
                               + (NEW.status = 'deployed'),
@@ -40,28 +49,29 @@ BEGIN
                               + (NEW.status = 'scrapped'),
             returned_qty    = returned_qty
                               - (OLD.status = 'returned')
-                              + (NEW.status = 'returned')
+                              + (NEW.status = 'returned'),
+
+            -- 來源數量邏輯：returned 視為「暫時退出」
+            self_purchased_qty = self_purchased_qty
+                              - ((OLD.status <> 'returned'
+                                  AND NEW.status = 'returned')
+                                 AND NEW.source_type = 'self_purchased')
+                              + ((OLD.status = 'returned'
+                                  AND NEW.status <> 'returned')
+                                 AND NEW.source_type = 'self_purchased'),
+
+            customer_supplied_qty = customer_supplied_qty
+                              - ((OLD.status <> 'returned'
+                                  AND NEW.status = 'returned')
+                                 AND NEW.source_type = 'customer_supplied')
+                              + ((OLD.status = 'returned'
+                                  AND NEW.status <> 'returned')
+                                 AND NEW.source_type = 'customer_supplied')
         WHERE id = NEW.fixture_id;
     END IF;
 END;
 
--- SERIAL DELETE TRIGGER
-DROP TRIGGER IF EXISTS trg_serial_delete;
-CREATE TRIGGER trg_serial_delete
-AFTER DELETE ON fixture_serials
-FOR EACH ROW
-BEGIN
-    UPDATE fixtures
-    SET
-        self_purchased_qty    = self_purchased_qty    - (OLD.source_type = 'self_purchased'),
-        customer_supplied_qty = customer_supplied_qty - (OLD.source_type = 'customer_supplied'),
-        available_qty         = available_qty         - (OLD.status = 'available'),
-        deployed_qty          = deployed_qty          - (OLD.status = 'deployed'),
-        maintenance_qty       = maintenance_qty       - (OLD.status = 'maintenance'),
-        scrapped_qty          = scrapped_qty           - (OLD.status = 'scrapped'),
-        returned_qty          = returned_qty           - (OLD.status = 'returned')
-    WHERE id = OLD.fixture_id;
-END;
+
 
 -- replacement triggers（不變）
 DROP TRIGGER IF EXISTS trg_replacement_insert;
@@ -153,17 +163,22 @@ BEGIN
 
     UPDATE fixtures
     SET
-        -- 可用數量（收 / 退 都會反映）
+        -- 可用數量（收/退都反映）
         available_qty = available_qty + delta_available,
 
         -- 退料數量
         returned_qty  = returned_qty  + delta_returned,
 
-        -- 來源數量：只在「收料（delta_available > 0）」時增加
+        -- ✅ 來源數量：
+        -- 收料：delta_available > 0 會加
+        -- 退料：delta_returned  > 0 會扣
         self_purchased_qty = self_purchased_qty
-            + (NEW.source_type = 'self_purchased' AND delta_available > 0) * delta_available,
+            + (NEW.source_type = 'self_purchased') * delta_available
+            - (NEW.source_type = 'self_purchased') * delta_returned,
 
         customer_supplied_qty = customer_supplied_qty
-            + (NEW.source_type = 'customer_supplied' AND delta_available > 0) * delta_available
+            + (NEW.source_type = 'customer_supplied') * delta_available
+            - (NEW.source_type = 'customer_supplied') * delta_returned
     WHERE id = NEW.fixture_id;
 END;
+

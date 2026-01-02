@@ -248,13 +248,26 @@ async def download_fixtures_template(
     )
 
 
+
 # ============================================================
-# 📤 匯出治具（必須在 /{fixture_id} 之前）
+# 📤 匯出治具（XLSX）- Header-based customer context
+# （必須在 /{fixture_id} 之前）
 # ============================================================
+
+from fastapi import Depends
+from fastapi.responses import StreamingResponse
+from io import BytesIO
+from openpyxl import Workbook
+
+from backend.app.dependencies import (
+    get_current_user,
+    get_current_customer_id,
+)
+
 @router.get("/export", summary="匯出治具（XLSX）")
 async def export_fixtures_xlsx(
-    customer_id: str = Query(...),
-    user=Depends(get_current_user)
+    user=Depends(get_current_user),
+    customer_id=Depends(get_current_customer_id),
 ):
     rows = db.execute_query(
         """
@@ -451,7 +464,7 @@ async def get_fixture(
                 f.note,
                 f.created_at,
                 f.updated_at,
-                o.primary_owner AS owner_name,
+                o.primary_owner_id AS owner_name,
                 o.email AS owner_email
             FROM fixtures f
             LEFT JOIN owners o ON f.owner_id = o.id
@@ -503,7 +516,7 @@ async def get_fixture_detail(
                 f.last_replacement_date,
                 f.last_notification_time,
                 f.owner_id,
-                o.primary_owner AS owner_name,
+                o.primary_owner_id AS owner_name,
                 o.email AS owner_email,
                 f.note,
                 f.created_at,
@@ -674,7 +687,7 @@ async def list_fixtures(
                 f.created_at,
                 f.updated_at,
 
-                o.primary_owner AS owner_name,
+                o.primary_owner_id AS owner_name,
                 o.email AS owner_email
 
             FROM fixtures f

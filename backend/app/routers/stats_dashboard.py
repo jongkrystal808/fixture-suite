@@ -77,7 +77,7 @@ def get_dashboard_stats(
             f.storage_location,
             f.status,
             f.replacement_cycle,
-            o.primary_owner,
+            o.primary_owner_id,
             COALESCE(fus.total_uses, 0) AS total_uses
         FROM fixtures f
         LEFT JOIN owners o ON o.id = f.owner_id

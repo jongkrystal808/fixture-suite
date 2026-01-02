@@ -44,7 +44,7 @@ class ReceiptBase(BaseModel):
         max_length=50,
         description="客戶 ID"
     )
-    type: RecordType = Field(
+    record_type: RecordType = Field(
         ...,
         description="收料類型 (batch/individual/datecode)"
     )
@@ -71,7 +71,7 @@ class ReceiptBase(BaseModel):
 # ============================================================
 
 class ReceiptBatchCreate(ReceiptBase):
-    type: RecordType = Field(default=RecordType.BATCH)
+    record_type: RecordType = Field(default=RecordType.BATCH)
     serial_start: str = Field(
         ...,
         max_length=100,
@@ -89,7 +89,7 @@ class ReceiptBatchCreate(ReceiptBase):
 # ============================================================
 
 class ReceiptIndividualCreate(ReceiptBase):
-    type: RecordType = Field(default=RecordType.INDIVIDUAL)
+    record_type: RecordType = Field(default=RecordType.INDIVIDUAL)
     serials: str = Field(
         ...,
         description="逗號分隔序號清單: A001, A002"
@@ -101,7 +101,7 @@ class ReceiptIndividualCreate(ReceiptBase):
 # ============================================================
 
 class ReceiptDatecodeCreate(ReceiptBase):
-    type: RecordType = Field(default=RecordType.DATECODE)
+    record_type: RecordType = Field(default=RecordType.DATECODE)
     datecode: str = Field(
         ...,
         max_length=50,
@@ -126,14 +126,14 @@ class ReceiptCreate(ReceiptBase):
     # batch 欄位
     serial_start: Optional[str] = None
     serial_end: Optional[str] = None
-    
+
     # individual 欄位
     serials: Optional[str] = None
-    
+
     # ★ datecode 欄位
     datecode: Optional[str] = None
     quantity: Optional[int] = None
-    
+
     # source_type (datecode 必填, 其他可選)
     source_type: Optional[str] = Field(
         default="customer_supplied",
@@ -211,7 +211,7 @@ class ReceiptListResponse(BaseModel):
 
 class ReturnBase(BaseModel):
     customer_id: str
-    type: RecordType
+    record_type: RecordType
     order_no: str
     fixture_id: str
     operator: Optional[str] = None
@@ -219,19 +219,19 @@ class ReturnBase(BaseModel):
 
 
 class ReturnBatchCreate(ReturnBase):
-    type: RecordType = Field(default=RecordType.BATCH)
+    record_type: RecordType = Field(default=RecordType.BATCH)
     serial_start: str
     serial_end: str
 
 
 class ReturnIndividualCreate(ReturnBase):
-    type: RecordType = Field(default=RecordType.INDIVIDUAL)
+    record_type: RecordType = Field(default=RecordType.INDIVIDUAL)
     serials: str
 
 
 # ★ 新增:日期碼退料
 class ReturnDatecodeCreate(ReturnBase):
-    type: RecordType = Field(default=RecordType.DATECODE)
+    record_type: RecordType = Field(default=RecordType.DATECODE)
     datecode: str = Field(
         ...,
         max_length=50,

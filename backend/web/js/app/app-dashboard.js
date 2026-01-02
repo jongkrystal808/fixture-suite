@@ -6,83 +6,102 @@
 console.log("[dashboard] app-dashboard.js loaded");
 
 async function loadDashboard() {
-    console.log("[dashboard] loadDashboard called");
-  const customerId = localStorage.getItem("current_customer_id");
-  if (!customerId) {
-    console.warn("[dashboard] no customer_id");
-    return;
-  }
+  console.log("[dashboard] loadDashboard called");
 
-  let data;
   try {
-    data = await api("/stats/dashboard", {
-      method: "GET",
-      query: { customer_id: customerId }
+    const data = await api("/stats/dashboard");
+    console.log("[dashboard] raw response:", data);
+
+    // ===============================
+    // 1️⃣ 今日收料
+    // ===============================
+    const todayIn = data?.today_in;
+
+    const todayInTotal =
+      typeof todayIn === "object" && !Array.isArray(todayIn)
+        ? todayIn.total || 0
+        : Array.isArray(todayIn)
+          ? todayIn.length
+          : 0;
+
+    document.getElementById("todayIn").textContent = todayInTotal;
+
+    const todayInList = document.getElementById("todayInList");
+    todayInList.innerHTML = "";
+
+    const todayInItems =
+      todayIn?.items ??
+      (Array.isArray(todayIn) ? todayIn : []);
+
+    todayInItems.forEach(row => {
+      const div = document.createElement("div");
+      div.className = "text-sm text-gray-700";
+      div.textContent = `${row.fixture_id} +${row.qty}`;
+      todayInList.appendChild(div);
     });
+
+    // ===============================
+    // 2️⃣ 今日退料
+    // ===============================
+    const todayOut = data?.today_out;
+
+    const todayOutTotal =
+      typeof todayOut === "object" && !Array.isArray(todayOut)
+        ? todayOut.total || 0
+        : Array.isArray(todayOut)
+          ? todayOut.length
+          : 0;
+
+    document.getElementById("todayOut").textContent = todayOutTotal;
+
+    const todayOutList = document.getElementById("todayOutList");
+    todayOutList.innerHTML = "";
+
+    const todayOutItems =
+      todayOut?.items ??
+      (Array.isArray(todayOut) ? todayOut : []);
+
+    todayOutItems.forEach(row => {
+      const div = document.createElement("div");
+      div.className = "text-sm text-gray-700";
+      div.textContent = `${row.fixture_id} -${row.qty}`;
+      todayOutList.appendChild(div);
+    });
+
+    // ===============================
+    // 3️⃣ 即將更換治具
+    // ===============================
+    const upcomingList = document.getElementById("upcomingList");
+    upcomingList.innerHTML = "";
+
+    (data?.upcoming_replacements || []).forEach(row => {
+      const percent = Math.round((row.usage_ratio || 0) * 100);
+
+      const color =
+        percent >= 100 ? "text-red-600" :
+        percent >= 90  ? "text-orange-600" :
+                         "text-yellow-600";
+
+      const div = document.createElement("div");
+      div.className = `text-sm flex justify-between ${color}`;
+      div.innerHTML = `
+        <span>${row.fixture_id} ${row.fixture_name}</span>
+        <span>${percent}%</span>
+      `;
+      upcomingList.appendChild(div);
+    });
+
+    // ===============================
+    // 4️⃣ 庫存概覽
+    // ===============================
+    renderDashboardTable(data?.inventory || []);
 
   } catch (err) {
     console.error("[dashboard] load failed", err);
-    return;
+    toast("Dashboard 載入失敗", "error");
   }
-
-  // ===============================
-  // 1️⃣ 今日收料
-  // ===============================
-  document.getElementById("todayIn").textContent = data.today_in.total || 0;
-
-  const todayInList = document.getElementById("todayInList");
-  todayInList.innerHTML = "";
-
-  (data.today_in.items || []).forEach(row => {
-    const div = document.createElement("div");
-    div.className = "text-sm text-gray-700";
-    div.textContent = `${row.fixture_id} +${row.qty}`;
-    todayInList.appendChild(div);
-  });
-
-  // ===============================
-  // 2️⃣ 今日退料
-  // ===============================
-  document.getElementById("todayOut").textContent = data.today_out.total || 0;
-
-  const todayOutList = document.getElementById("todayOutList");
-  todayOutList.innerHTML = "";
-
-  (data.today_out.items || []).forEach(row => {
-    const div = document.createElement("div");
-    div.className = "text-sm text-gray-700";
-    div.textContent = `${row.fixture_id} -${row.qty}`;
-    todayOutList.appendChild(div);
-  });
-
-  // ===============================
-  // 3️⃣ 即將更換治具
-  // ===============================
-  const upcomingList = document.getElementById("upcomingList");
-  upcomingList.innerHTML = "";
-
-  (data.upcoming_replacements || []).forEach(row => {
-    const percent = Math.round((row.usage_ratio || 0) * 100);
-
-    const color =
-      percent >= 100 ? "text-red-600" :
-      percent >= 90  ? "text-orange-600" :
-                       "text-yellow-600";
-
-    const div = document.createElement("div");
-    div.className = `text-sm flex justify-between ${color}`;
-    div.innerHTML = `
-      <span>${row.fixture_id} ${row.fixture_name}</span>
-      <span>${percent}%</span>
-    `;
-    upcomingList.appendChild(div);
-  });
-
-  // ===============================
-  // 4️⃣ 庫存概覽
-  // ===============================
-  renderDashboardTable(data.inventory || []);
 }
+
 
 
 /**

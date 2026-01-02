@@ -8,26 +8,45 @@
 window.currentCustomerId =
   localStorage.getItem("current_customer_id") || null;
 
+(function normalizeStoredCustomerId() {
+  const raw = localStorage.getItem("current_customer_id");
+  if (raw && raw.includes(":")) {
+    const fixed = raw.split(":")[0];
+    console.warn("[customer] normalize stored customer_id:", raw, "→", fixed);
+    localStorage.setItem("current_customer_id", fixed);
+    window.currentCustomerId = fixed;
+  }
+})();
+
+
 /* ============================================================
  * 設定目前客戶（核心）
  * ============================================================ */
 function setCurrentCustomer(customerId) {
   if (!customerId) return;
 
-  window.currentCustomerId = customerId;
-  localStorage.setItem("current_customer_id", customerId);
+  // ⭐ 核心防線：永遠只接受純 customer_id
+  let cleanId = customerId;
+  if (typeof cleanId === "string" && cleanId.includes(":")) {
+    console.warn("[customer] invalid customer_id detected:", cleanId);
+    cleanId = cleanId.split(":")[0];
+  }
+
+  window.currentCustomerId = cleanId;
+  localStorage.setItem("current_customer_id", cleanId);
 
   // 更新 Header Select 顯示
   const select = document.getElementById("currentCustomerSelect");
   if (select) {
-    select.value = customerId;
+    select.value = cleanId;
     select.classList.remove("hidden");
   }
 
-  console.log("[customer] switched to:", customerId);
+  console.log("[customer] switched to:", cleanId);
 
-  // 通知其他模組（有就執行，沒有不爆）
-  refreshModulesAfterCustomerChange();
+  // refreshModulesAfterCustomerChange();
+    console.log("[login] user ready");
+
 }
 
 /* ============================================================
@@ -65,9 +84,12 @@ async function loadCustomerHeaderSelect() {
     select.appendChild(opt);
   });
 
+  // 修改：登入後就顯示選單，不管有沒有選過客戶
+  select.classList.remove("hidden");
+
+  // 如果之前有選過客戶，就設定預設值
   if (window.currentCustomerId) {
     select.value = window.currentCustomerId;
-    select.classList.remove("hidden");
   }
 }
 
@@ -105,18 +127,83 @@ function confirmCustomerSelection() {
  * 客戶切換後刷新模組（不 reload）
  * ============================================================ */
 function refreshModulesAfterCustomerChange() {
-  // 收 / 退料
-  window.loadReceipts?.();
-  window.loadReturns?.();
-  window.loadTransactionViewAll?.();
+  // 找出目前顯示中的主 tab
+  const activeTab = document.querySelector(
+    'section[id^="tab-"]:not(.hidden)'
+  );
 
-  // 查詢
-  window.loadFixturesQuery?.();
-  window.loadModelsQuery?.();
+  if (!activeTab) {
+    console.warn("[customer] no active tab found");
+    return;
+  }
 
-  // Dashboard / 統計
-  window.loadDashboard?.();
-  window.loadStats?.();
+  const tabId = activeTab.id;
+  console.log("[customer] refresh for tab:", tabId);
+
+  switch (tabId) {
+    case "tab-dashboard":
+      window.loadDashboard?.();
+      break;
+
+    case "tab-receipts":
+      // 依目前子頁再細分（收料 / 退料 / 總檢視）
+      const activeSub = document.querySelector(
+        '#tab-receipts [data-rtab].subtab-active'
+      )?.dataset?.rtab;
+
+      if (activeSub === "receipts") {
+        window.loadReceipts?.();
+      } else if (activeSub === "returns") {
+        window.loadReturns?.();
+      } else if (activeSub === "viewall") {
+        window.loadTransactionViewAll?.();
+      }
+      break;
+
+    case "tab-query":
+      // 依查詢類型決定
+      const type = document.getElementById("queryType")?.value;
+      if (type === "model") {
+        window.loadModelsQuery?.();
+      } else {
+        window.loadFixturesQuery?.();
+      }
+      break;
+
+    case "tab-stats":
+      window.loadStats?.();
+      break;
+
+    case "tab-admin":
+      // admin 再看是哪個子頁
+      const activeAdmin = document.querySelector(
+        ".admin-page:not(.hidden)"
+      )?.id;
+
+      if (activeAdmin === "admin-owners") {
+        window.loadOwners?.();
+      } else if (activeAdmin === "admin-users") {
+        window.loadUsers?.();
+      } else if (activeAdmin === "admin-fixtures") {
+        window.loadAdminFixtures?.();
+      }
+      break;
+
+    default:
+      console.warn("[customer] no refresh handler for", tabId);
+  }
+}
+
+
+/* ============================================================
+ * 登出時隱藏客戶選單
+ * ============================================================ */
+function hideCustomerHeaderSelect() {
+  const select = document.getElementById("currentCustomerSelect");
+  if (select) {
+    select.classList.add("hidden");
+    select.value = "";
+  }
 }
 
 /* ============================================================
@@ -127,3 +214,4 @@ window.switchCustomerFromHeader = switchCustomerFromHeader;
 window.loadCustomerHeaderSelect = loadCustomerHeaderSelect;
 window.loadCustomerSelector = loadCustomerSelector;
 window.confirmCustomerSelection = confirmCustomerSelection;
+window.hideCustomerHeaderSelect = hideCustomerHeaderSelect;

@@ -76,11 +76,15 @@ async function apiCreateStation(payload) {
  * ============================================================ */
 
 async function apiUpdateStation(stationId, payload) {
+  if (typeof stationId !== "string" && typeof stationId !== "number") {
+    throw new Error("apiUpdateStation: stationId must be string or number");
+  }
   return api(`/stations/${encodeURIComponent(stationId)}`, {
     method: "PUT",
     body: JSON.stringify(payload)
   });
 }
+
 
 /* ============================================================
  * 刪除站點

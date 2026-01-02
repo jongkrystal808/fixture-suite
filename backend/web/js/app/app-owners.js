@@ -1,15 +1,15 @@
 /**
- * 負責人管理 UI 控制 (v3.1 - FIXED)
+ * 負責人管理 UI 控制 (v4.0 FINAL)
  * app-owners.js
  *
- * ✔ 完全對齊 owners 資料表
- * ✔ primary_owner / secondary_owner
- * ✔ customer_id（含跨客戶）
+ * ✔ 完全正規化（只用 *_owner_id）
+ * ✔ select + users/simple
+ * ✔ 顯示只用 *_owner_name
  * ✔ 停用 instead of delete
  */
 
 /* ============================================================
- * 🔐 Admin Only Guard（入口級）
+ * 🔐 Admin Only Guard
  * ============================================================ */
 function ensureAdmin() {
   if (!window.currentUser || window.currentUser.role !== "admin") {
@@ -32,16 +32,20 @@ function loadAdminOwners() {
   if (!ensureAdmin()) return;
   ownerPage = 1;
   loadOwners();
+  initInlineOwnerForm();
 }
 window.loadAdminOwners = loadAdminOwners;
 
 /* ============================================================
  * 初始化
  * ============================================================ */
-document.addEventListener("DOMContentLoaded", () => {
+onUserReady(() => {
   if (!ensureAdmin()) return;
   if (!document.getElementById("ownerTable")) return;
+
+  loadOwnerUserOptions();
   loadOwners();
+  initInlineOwnerForm();
 });
 
 /* ============================================================
@@ -55,7 +59,6 @@ async function loadOwners() {
     page: ownerPage,
     pageSize: ownerPageSize
   };
-
   if (search) params.search = search;
   if (active !== "") params.is_active = active;
 
@@ -70,7 +73,7 @@ async function loadOwners() {
 }
 
 /* ============================================================
- * 表格渲染
+ * 表格渲染（最終版）
  * ============================================================ */
 function renderOwnerTable(list) {
   const table = document.getElementById("ownerTable");
@@ -97,8 +100,8 @@ function renderOwnerTable(list) {
     table.insertAdjacentHTML("beforeend", `
       <tr>
         <td class="text-center">${o.id}</td>
-        <td>${o.primary_owner}</td>
-        <td>${o.secondary_owner || ""}</td>
+        <td>${o.primary_owner_name || "-"}</td>
+        <td>${o.secondary_owner_name || ""}</td>
         <td>${customerLabel}</td>
         <td>${o.email || ""}</td>
         <td class="text-right">
@@ -120,7 +123,6 @@ function renderOwnerPagination(total) {
   if (!box) return;
 
   box.innerHTML = "";
-
   const totalPages = Math.ceil(total / ownerPageSize);
   if (totalPages <= 1) return;
 
@@ -137,107 +139,207 @@ function renderOwnerPagination(total) {
 }
 
 /* ============================================================
- * 新增負責人
+ * 新增負責人（最終版）
  * ============================================================ */
-function openOwnerAdd() {
+async function submitInlineOwner() {
   if (!ensureAdmin()) return;
 
-  document.getElementById("ownerForm").reset();
-  document.getElementById("ownerFormMode").value = "add";
-  document.getElementById("o_id").value = ""; // hidden
-  document.getElementById("ownerModalTitle").innerText = "新增負責人";
-  openOwnerModal();
-}
+  const primaryId = document.getElementById("addOwnerPrimary")?.value;
+  const secondaryId = document.getElementById("addOwnerSecondary")?.value;
+  const email = document.getElementById("addOwnerEmail")?.value.trim();
+  const note = document.getElementById("addOwnerNote")?.value.trim();
 
-async function submitOwnerForm() {
-  if (!ensureAdmin()) return;
-
-  const mode = document.getElementById("ownerFormMode").value;
-
-  const id = document.getElementById("o_id").value || null;
-  const primary_owner = document.getElementById("o_primary").value.trim();
-  const secondary_owner = document.getElementById("o_secondary").value.trim();
-  const email = document.getElementById("o_email").value.trim();
-  const note = document.getElementById("o_note").value || null;
-  const isShared = document.getElementById("o_shared")?.checked || false;
-
-  if (!primary_owner) {
-    toast("主負責人不可為空", "error");
+  if (!primaryId) {
+    toast("請選擇主負責人", "error");
+    return;
+  }
+  if (!email) {
+    toast("Email 為必填", "error");
     return;
   }
 
   const payload = {
-    customer_id: isShared ? null : getCurrentCustomerId(),
-    primary_owner,
-    secondary_owner: secondary_owner || null,
-    email: email || null,
-    note,
-    is_active: true
+    primary_owner_id: Number(primaryId),
+    secondary_owner_id: secondaryId ? Number(secondaryId) : null,
+    email,
+    note: note || null
   };
 
   try {
-    if (mode === "add") {
-      await apiJson("/owners", payload, "POST");
-      toast("新增成功");
-    } else {
-      await apiJson(`/owners/${id}`, payload, "PUT");
-      toast("更新成功");
-    }
-
-    closeOwnerModal();
+    await apiCreateOwner(payload);
+    toast("新增成功");
+    clearInlineOwnerForm();
+    ownerPage = 1;
     loadOwners();
   } catch (err) {
     console.error(err);
-    toast(err?.data?.detail || "儲存失敗", "error");
+    toast(err?.data?.detail || "新增失敗", "error");
   }
 }
 
 /* ============================================================
- * 編輯負責人
+ * 清空表單
+ * ============================================================ */
+function clearInlineOwnerForm() {
+  ["addOwnerPrimary", "addOwnerSecondary", "addOwnerEmail", "addOwnerNote"]
+    .forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = "";
+    });
+}
+
+/* ============================================================
+ * Inline 客戶顯示
+ * ============================================================ */
+function initInlineOwnerForm() {
+  const el = document.getElementById("addOwnerCustomer");
+  if (!el) return;
+
+  el.value =
+    window.currentCustomerName ||
+    window.currentCustomerId ||
+    "—";
+}
+
+/* ============================================================
+ * 載入使用者清單（select）
+ * ============================================================ */
+async function loadOwnerUserOptions() {
+  try {
+    const users = await api("/users/simple");
+
+    const primarySel = document.getElementById("addOwnerPrimary");
+    const secondarySel = document.getElementById("addOwnerSecondary");
+    if (!primarySel || !secondarySel) return;
+
+    primarySel.innerHTML = `<option value="">請選擇使用者</option>`;
+    secondarySel.innerHTML = `<option value="">（無）</option>`;
+
+    users.forEach(u => {
+      const label = u.username;
+
+      const opt1 = document.createElement("option");
+      opt1.value = u.id;
+      opt1.textContent = label;
+      primarySel.appendChild(opt1);
+
+      const opt2 = document.createElement("option");
+      opt2.value = u.id;
+      opt2.textContent = label;
+      secondarySel.appendChild(opt2);
+    });
+  } catch (err) {
+    console.error(err);
+    toast("載入使用者清單失敗", "error");
+  }
+}
+
+/* ============================================================
+ * 編輯負責人（安全版）
  * ============================================================ */
 async function openOwnerEdit(id) {
   if (!ensureAdmin()) return;
 
+  const modal = document.getElementById("ownerEditModal");
+  const idInput = document.getElementById("editOwnerId");
+  const emailInput = document.getElementById("editOwnerEmail");
+  const noteInput = document.getElementById("editOwnerNote");
+
+  if (!modal || !idInput || !emailInput || !noteInput) {
+    console.error("❌ ownerEditModal DOM not found");
+    toast("編輯視窗尚未初始化", "error");
+    return;
+  }
+
   try {
-    const data = await api(`/owners/${id}`);
+    const data = await apiGetOwner(id);
 
-    document.getElementById("ownerFormMode").value = "edit";
-    document.getElementById("ownerModalTitle").innerText = "編輯負責人";
+    idInput.value = data.id;
+    emailInput.value = data.email || "";
+    noteInput.value = data.note || "";
 
-    document.getElementById("o_id").value = data.id;
-    document.getElementById("o_primary").value = data.primary_owner;
-    document.getElementById("o_secondary").value = data.secondary_owner || "";
-    document.getElementById("o_email").value = data.email || "";
-    document.getElementById("o_note").value = data.note || "";
+    await loadEditOwnerUserOptions(
+      data.primary_owner_id,
+      data.secondary_owner_id
+    );
 
-    const sharedCheckbox = document.getElementById("o_shared");
-    if (sharedCheckbox) {
-      sharedCheckbox.checked = data.customer_id === null;
-    }
-
-    openOwnerModal();
+    modal.classList.remove("hidden");
+    modal.classList.add("flex");
   } catch (err) {
     console.error(err);
-    toast("載入負責人失敗", "error");
+    toast("載入負責人資料失敗", "error");
   }
 }
 
+
+function closeOwnerEdit() {
+  const modal = document.getElementById("ownerEditModal");
+  if (modal) {
+    modal.classList.add("hidden");
+    modal.classList.remove("flex");
+  }
+}
+
+
+
+async function loadEditOwnerUserOptions(primaryId, secondaryId) {
+  const users = await api("/users/simple");
+
+  const primarySel = document.getElementById("editOwnerPrimary");
+  const secondarySel = document.getElementById("editOwnerSecondary");
+
+  primarySel.innerHTML = "";
+  secondarySel.innerHTML = "";
+
+  users.forEach(u => {
+    const opt1 = document.createElement("option");
+    opt1.value = u.id;
+    opt1.textContent = u.username;
+    if (u.id === primaryId) opt1.selected = true;
+    primarySel.appendChild(opt1);
+
+    const opt2 = document.createElement("option");
+    opt2.value = u.id;
+    opt2.textContent = u.username;
+    if (u.id === secondaryId) opt2.selected = true;
+    secondarySel.appendChild(opt2);
+  });
+
+  // 副負責人允許空
+  const empty = document.createElement("option");
+  empty.value = "";
+  empty.textContent = "（無）";
+  secondarySel.insertBefore(empty, secondarySel.firstChild);
+}
+
 /* ============================================================
- * 停用負責人（取代 delete）
+ * 送出編輯
  * ============================================================ */
-async function disableOwner(id) {
-  if (!ensureAdmin()) return;
-  if (!confirm("確定要停用此負責人？")) return;
+async function submitOwnerEdit() {
+  const id = document.getElementById("editOwnerId").value;
+  const primary = document.getElementById("editOwnerPrimary").value;
+  const secondary = document.getElementById("editOwnerSecondary").value;
+  const email = document.getElementById("editOwnerEmail").value.trim();
+  const note = document.getElementById("editOwnerNote").value.trim();
+
+  if (!primary || !email) {
+    toast("主負責人與 Email 為必填", "error");
+    return;
+  }
 
   try {
-    await apiJson(`/owners/${id}`, { is_active: false }, "PUT");
-    toast("已停用");
+    await apiUpdateOwner(id, {
+      primary_owner_id: primary,
+      secondary_owner_id: secondary || null,
+      email,
+      note: note || null
+    });
+
+    toast("更新成功");
+    closeOwnerEdit();
     loadOwners();
   } catch (err) {
     console.error(err);
-    toast(
-      err?.data?.detail || "此負責人已有治具關聯，無法停用",
-      "error"
-    );
+    toast(err?.data?.detail || "更新失敗", "error");
   }
 }
