@@ -20,15 +20,26 @@ def get_dashboard_stats(
     # 1️⃣ 今日收料
     # --------------------------------------------------
     today_in_items = db.execute_query("""
-        SELECT
-            fixture_id,
-            SUM(quantity) AS qty
-        FROM material_transactions
-        WHERE customer_id = %s
-          AND transaction_type = 'receipt'
-          AND transaction_date = %s
-        GROUP BY fixture_id
-    """, (customer_id, today))
+                                      SELECT t.fixture_id,
+                                             SUM(
+                                                     CASE
+                                                         WHEN t.record_type = 'datecode'
+                                                             THEN COALESCE(fd.quantity, 0)
+                                                         ELSE COALESCE(mi.cnt, 0)
+                                                         END
+                                             ) AS qty
+                                      FROM material_transactions t
+                                               LEFT JOIN (SELECT transaction_id, COUNT(*) AS cnt
+                                                          FROM material_transaction_items
+                                                          GROUP BY transaction_id) mi ON mi.transaction_id = t.id
+                                               LEFT JOIN fixture_datecode_transactions fd
+                                                         ON fd.transaction_id = t.id
+                                                             AND fd.transaction_type = 'receipt'
+                                      WHERE t.customer_id = %s
+                                        AND t.transaction_type = 'receipt'
+                                        AND t.transaction_date = %s
+                                      GROUP BY t.fixture_id
+                                      """, (customer_id, today))
 
     today_in_total = sum((r["qty"] or 0) for r in today_in_items)
 
@@ -36,15 +47,26 @@ def get_dashboard_stats(
     # 2️⃣ 今日退料
     # --------------------------------------------------
     today_out_items = db.execute_query("""
-        SELECT
-            fixture_id,
-            SUM(quantity) AS qty
-        FROM material_transactions
-        WHERE customer_id = %s
-          AND transaction_type = 'return'
-          AND transaction_date = %s
-        GROUP BY fixture_id
-    """, (customer_id, today))
+                                       SELECT t.fixture_id,
+                                              SUM(
+                                                      CASE
+                                                          WHEN t.record_type = 'datecode'
+                                                              THEN COALESCE(fd.quantity, 0)
+                                                          ELSE COALESCE(mi.cnt, 0)
+                                                          END
+                                              ) AS qty
+                                       FROM material_transactions t
+                                                LEFT JOIN (SELECT transaction_id, COUNT(*) AS cnt
+                                                           FROM material_transaction_items
+                                                           GROUP BY transaction_id) mi ON mi.transaction_id = t.id
+                                                LEFT JOIN fixture_datecode_transactions fd
+                                                          ON fd.transaction_id = t.id
+                                                              AND fd.transaction_type = 'return'
+                                       WHERE t.customer_id = %s
+                                         AND t.transaction_type = 'return'
+                                         AND t.transaction_date = %s
+                                       GROUP BY t.fixture_id
+                                       """, (customer_id, today))
 
     today_out_total = sum((r["qty"] or 0) for r in today_out_items)
 

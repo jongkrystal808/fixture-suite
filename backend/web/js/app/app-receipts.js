@@ -4,7 +4,7 @@
  * - v3.7 更新:增加 source_type 欄位(自購/客供)
  * - 完全與 Returns 對齊欄位 / DOM / API 結構
  * - 採用 customer_id 作為客戶欄位
- * - 表格為 9 欄:日期/治具/客戶/單號/來源/序號/操作人員/備註/刪除
+ * - 表格為 8 欄:日期/治具/客戶/單號/序號/操作人員/備註/刪除
  */
 function formatSerialsIntoRows(serialsArray, perRow = 5) {
   if (!Array.isArray(serialsArray)) return serialsArray;
@@ -16,12 +16,6 @@ function formatSerialsIntoRows(serialsArray, perRow = 5) {
   return rows.join("<br>");
 }
 
-/* ============================================================
- * 取得 customer_id
- * ============================================================ */
-function getCurrentCustomerId() {
-  return localStorage.getItem("current_customer_id");
-}
 
 /* ============================================================
  * 分頁狀態
@@ -33,17 +27,13 @@ const receiptsPageSize = 20;
  * 主列表載入
  * ============================================================ */
 async function loadReceipts() {
-  const customer_id = getCurrentCustomerId();
-  if (!customer_id) return console.warn("尚未選擇客戶");
-
   const fixture = document.getElementById("receiptSearchFixture")?.value.trim() || "";
   const order = document.getElementById("receiptSearchOrder")?.value.trim() || "";
   const operator = document.getElementById("receiptSearchOperator")?.value.trim() || "";
-  const vendor = document.getElementById("receiptSearchCustomer")?.value.trim() || "";
   const serial = document.getElementById("receiptSearchSerial")?.value.trim() || "";
+  const sourceType = document.getElementById("receiptSearchSourceType")?.value || "";
 
   const params = {
-    customer_id,
     skip: (receiptsPage - 1) * receiptsPageSize,
     limit: receiptsPageSize
   };
@@ -51,8 +41,8 @@ async function loadReceipts() {
   if (fixture) params.fixture_id = fixture;
   if (order) params.order_no = order;
   if (operator) params.operator = operator;
-  if (vendor) params.customer = vendor;
   if (serial) params.serial = serial;
+  if (sourceType) params.source_type = sourceType; // ⭐ 對齊 DB 現況
 
   try {
     const data = await apiListReceipts(params);
@@ -73,6 +63,9 @@ async function loadReceipts() {
     toast("收料資料載入失敗", "error");
   }
 }
+
+
+
 function renderPagination(targetId, total, page, pageSize, onClick) {
   const el = document.getElementById(targetId);
   if (!el) return;
@@ -81,7 +74,8 @@ function renderPagination(targetId, total, page, pageSize, onClick) {
   if (total <= pageSize) return;
 
   const totalPages = Math.ceil(total / pageSize);
-  const maxButtons = 11;
+  page = Math.max(1, Math.min(page, totalPages));
+
 
   function addBtn(label, p, active = false, disabled = false) {
     const btn = document.createElement("button");
@@ -155,7 +149,7 @@ function formatSerialList(serials) {
 }
 
 /* ============================================================
- * 渲染收料表格(9 欄版 - 包含來源欄位)
+ * 渲染收料表格
  * ============================================================ */
 function renderReceiptTable(rows) {
   const tbody = document.getElementById("receiptTable");
@@ -163,100 +157,71 @@ function renderReceiptTable(rows) {
 
   if (!rows.length) {
     tbody.innerHTML = `
-      <tr><td colspan="10" class="text-center py-2 text-gray-400">沒有資料</td></tr>
+      <tr>
+        <td colspan="8" class="text-center py-2 text-gray-400">
+          沒有資料
+        </td>
+      </tr>
     `;
     return;
   }
 
   rows.forEach(r => {
-    // ★ 序號顯示邏輯
+    // 序號 / 數量顯示
     let serialText = "-";
 
     if (r.record_type === "datecode") {
-      serialText = `${r.datecode || "-"} (${r.quantity || 0} 件)`;
+      serialText = `${r.datecode || "-"}（${r.quantity || 0} 件）`;
     } else if (r.record_type === "batch") {
-      serialText = `批量（共 ${r.quantity || 0} 個）`;
+      serialText = `批量（共 ${r.quantity || 0} 件）`;
     } else if (r.record_type === "individual") {
-      serialText = `個別（共 ${r.quantity || 0} 個）`;
+      serialText = `個別（共 ${r.quantity || 0} 件）`;
     }
-
-
-
-    // ★ datecode 顯示邏輯
-    const datecodeText =
-      r.record_type === "datecode"
-        ? `${r.datecode} (${r.quantity || 0} 件)`
-        : (r.datecode || "-");
-
-    const sourceTypeText =
-      r.source_type === 'self_purchased'
-        ? '自購'
-        : (r.source_type === 'customer_supplied' ? '客供' : '-');
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td class="py-2 pr-4">${r.transaction_date || ""}</td>
+      <td class="py-2 pr-4">${new Date(r.created_at).toLocaleString()}</td>
       <td class="py-2 pr-4">${r.fixture_id}</td>
-      <td class="py-2 pr-4">${r.customer_id || "-"}</td>
       <td class="py-2 pr-4">${r.order_no || "-"}</td>
-
-      <td class="py-2 pr-4">
-        <span class="badge ${r.source_type === 'self_purchased' ? 'badge-info' : 'badge-success'} badge-sm">
-          ${sourceTypeText}
-        </span>
-      </td>
-
-      <td class="py-2 pr-4">${datecodeText}</td>   <!-- ★ 正式加入 datecode 欄位 -->
-
+      <td class="py-2 pr-4">${r.record_type}</td>
+      <td class="py-2 pr-4">${r.datecode || "-"}</td>
       <td class="py-2 pr-4">
         <div class="serial-cell">${serialText}</div>
       </td>
-
       <td class="py-2 pr-4">${r.operator || "-"}</td>
       <td class="py-2 pr-4">${r.note || "-"}</td>
-
-      <td class="py-2 pr-4">
-        <button class="btn btn-ghost text-xs" onclick="deleteReceipt(${r.id})">刪除</button>
-      </td>
     `;
     tbody.appendChild(tr);
   });
 }
 
 
-/* ============================================================
- * 新增收料(增加 datecode 類型支援)
- * ============================================================ */
 async function submitReceipt() {
-  const customer_id = getCurrentCustomerId();
-  if (!customer_id) return toast("請先選擇客戶");
 
   const fixture = document.getElementById("receiptAddFixture")?.value.trim();
   const order = document.getElementById("receiptAddOrder")?.value.trim();
   const type = document.getElementById("receiptAddType")?.value;
-  const sourceType = document.getElementById("receiptAddSourceType")?.value;
   const note = document.getElementById("receiptAddNote")?.value.trim();
 
   if (!fixture) return toast("治具編號不得為空");
   if (!type) return toast("請選擇收料類型");
-  if (!sourceType) return toast("請選擇來源類型");
 
   const payload = {
-    customer_id,
     fixture_id: fixture,
     order_no: order || null,
-    source_type: sourceType,
-    type,
+    record_type: type,
     note: note || null
   };
 
   if (type === "batch") {
-    const serialStart = document.getElementById("receiptAddStart")?.value.trim();
-    const serialEnd = document.getElementById("receiptAddEnd")?.value.trim();
-    if (!serialStart || !serialEnd)
-      return toast("批量模式需輸入序號起訖");
-    payload.serial_start = serialStart;
-    payload.serial_end = serialEnd;
+    const start = document.getElementById("receiptAddStart")?.value.trim();
+    const end = document.getElementById("receiptAddEnd")?.value.trim();
+    if (!start || !end) return toast("批量模式需輸入序號起訖");
+
+    payload.serials = [];
+    for (let i = Number(start); i <= Number(end); i++) {
+      payload.serials.push(String(i));
+    }
 
   } else if (type === "datecode") {
     const datecode = document.getElementById("receiptAddDatecode")?.value.trim();
@@ -265,86 +230,59 @@ async function submitReceipt() {
     );
 
     if (!datecode) return toast("請輸入日期碼");
-    if (!quantity || quantity <= 0)
-      return toast("請輸入有效數量");
+    if (!quantity || quantity <= 0) return toast("請輸入有效數量");
 
     payload.datecode = datecode;
-    payload.quantity = quantity;
+    payload.serials = [String(quantity)];
 
   } else {
-    const serials = document.getElementById("receiptAddSerials")?.value.trim();
-    if (!serials)
-      return toast("請輸入序號列表(以逗號分隔)");
-    payload.serials = serials;
+    const raw = document.getElementById("receiptAddSerials")?.value.trim();
+    if (!raw) return toast("請輸入序號列表");
+
+    payload.serials = raw
+      .split(",")
+      .map(s => s.trim())
+      .filter(Boolean);
   }
-
-    try {
-      // ✅ 1. 建立收料（只要這行沒 throw，就一定成功）
-      await apiCreateReceipt(payload);
-
-      toast("收料新增成功");
-
-      // ✅ 2. 關閉表單
-      document.getElementById("receiptAddForm")?.classList.add("hidden");
-
-      // ✅ 3. 刷新列表「獨立處理」，不得影響成功訊息
-      receiptsPage = 1; // ⭐ 很重要：避免第一次 skip 異常
-      setTimeout(() => {
-        loadReceipts().catch(err => {
-          console.warn("loadReceipts failed after create:", err);
-          toast("資料已新增，但列表重新載入失敗，請點擊查詢", "warning");
-        });
-      }, 0);
-
-    } catch (err) {
-      // ❌ 只有「建立 API 失敗」才會進來
-      console.error(err);
-      toast(
-        "收料新增失敗：" + (err?.data?.detail || err.message || ""),
-        "error"
-      );
-    }
-}
-
-
-
-/* ============================================================
- * 刪除收料
- * ============================================================ */
-async function deleteReceipt(id) {
-  if (!confirm("確認刪除此收料記錄?")) return;
-
-  const customer_id = getCurrentCustomerId();
 
   try {
-    await apiDeleteReceipt(id, customer_id);
-    toast("刪除成功");
-    loadReceipts();
+    await apiCreateReceipt(payload);
+    toast("收料新增成功");
+
+    document.getElementById("receiptAddForm")?.classList.add("hidden");
+
+    receiptsPage = 1;
+    setTimeout(() => loadReceipts(), 0);
+
   } catch (err) {
     console.error(err);
-    toast("刪除失敗", "error");
+    toast(
+      "收料新增失敗：" + (err?.data?.detail || err.message || ""),
+      "error"
+    );
   }
 }
+
+
 
 /* ============================================================
  * 匯入 Excel / CSV
  * ============================================================ */
 async function handleReceiptImport(input) {
   const file = input.files[0];
-  if (!file) return alert("請選擇 Excel 或 CSV 檔案");
-
-  const customer_id = getCurrentCustomerId();
-  if (!customer_id) return alert("請先選擇客戶");
+  if (!file) return alert("請選擇 Excel (.xlsx) 檔案");
 
   try {
     toast("正在匯入...");
-    const result = await apiImportReceiptsCsv(file, customer_id);
+    const result = await apiImportReceiptsXlsx(file);
 
-    alert(`匯入成功,共 ${result.count || 0} 筆記錄`);
+    toast(`匯入成功，共 ${result.count || 0} 筆`);
+    receiptsPage = 1;
     loadReceipts();
+
   } catch (err) {
     console.error("匯入失敗:", err);
-    alert(`匯入失敗:${err.message}`);
+    toast(`匯入失敗：${err.message}`, "error");
   } finally {
     input.value = "";
   }
@@ -352,32 +290,32 @@ async function handleReceiptImport(input) {
 
 window.handleReceiptImport = handleReceiptImport;
 
+
 /* ============================================================
  * 新增表單顯示切換
+ * ============================================================ */
+/* ============================================================
+ * 新增表單顯示切換（v4.x）
  * ============================================================ */
 function toggleReceiptAdd(show) {
   const form = document.getElementById("receiptAddForm");
   if (!form) return;
 
   // 👉 永遠保持展開（不再允許收起）
-  // if (!show) return;  // 直接阻止收起
+  if (!show) return;
 
-  if (show) {
-    form.classList.remove("hidden");
+  form.classList.remove("hidden");
 
-    const typeSel = document.getElementById("receiptAddType");
-    if (typeSel) typeSel.value = "batch";
+  // 預設收料類型
+  const typeSel = document.getElementById("receiptAddType");
+  if (typeSel) typeSel.value = "batch";
 
-    const sourceTypeSel = document.getElementById("receiptAddSourceType");
-    if (sourceTypeSel) sourceTypeSel.value = "customer_supplied";
-
-    handleReceiptTypeChange();
-  } else {
-    // 🔥 註解掉這一行：永不收起
-    // form.classList.add("hidden");
-  }
+  // 根據類型顯示對應欄位
+  handleReceiptTypeChange();
 }
+
 window.toggleReceiptAdd = toggleReceiptAdd;
+
 
 
 /* ============================================================
@@ -413,16 +351,15 @@ window.addEventListener("DOMContentLoaded", () => {
 
 window.handleReceiptTypeChange = handleReceiptTypeChange;
 
+
 /* ============================================================
- * 匯入範本(更新為包含 datecode)
+ * 匯入範本（v4.x，無 source_type / customer_id）
  * ============================================================ */
 function downloadReceiptTemplate() {
   const template = [
     {
       fixture_id: "C-00010",
-      customer_id: "moxa",
       order_no: "PO123456",
-      source_type: "customer_supplied",
       record_type: "batch",
       serial_start: 1,
       serial_end: 10,
@@ -430,18 +367,14 @@ function downloadReceiptTemplate() {
     },
     {
       fixture_id: "L-00018",
-      customer_id: "moxa",
       order_no: "PO123457",
-      source_type: "self_purchased",
       record_type: "individual",
       serials: "SN001,SN002,SN003",
       note: "個別收料示例"
     },
     {
       fixture_id: "L-00020",
-      customer_id: "moxa",
       order_no: "PO123458",
-      source_type: "customer_supplied",
       record_type: "datecode",
       datecode: "2024W12",
       quantity: 50,

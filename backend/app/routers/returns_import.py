@@ -19,9 +19,9 @@ router = APIRouter(prefix="/returns", tags=["Returns Import"])
 @router.post("/import", summary="退料 Excel 匯入")
 async def import_returns(
     file: UploadFile = File(...),
-    customer_id: str = Query(...),
     user=Depends(get_current_user)
 ):
+    customer_id = user.customer_id
     # -------------------------------------------------
     # 1️⃣ 基本檢查
     # -------------------------------------------------
@@ -49,7 +49,6 @@ async def import_returns(
     errors = []
 
     operator = user["username"]
-    created_by = user["id"]
 
     conn = db.get_conn()
 
@@ -150,7 +149,6 @@ async def import_returns(
                         order_no,
                         operator,
                         note,
-                        created_by,
                         record_type,
                         datecode,
                         serials_str

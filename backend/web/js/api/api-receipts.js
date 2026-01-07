@@ -1,110 +1,64 @@
 /**
- * api-receipts.js (Final v3.6)
- * - 與 api-returns.js 完全統一規格
- * - customer_id 一律從 Query 帶
- * - 匯入 / 匯出改用 fetch + blob（避免 JSON parse）
+ * api-receipts.js (v4.x FINAL)
+ * - 與 api-returns.js v4.x 完全對齊
+ * - customer_id 一律由 Query 傳入
+ * - Event-based API（不可刪、無 details）
+ * - 匯入 / 匯出使用 fetch + blob
  */
 
-/* ============================================================
- * Helper: 取 customer_id
- * ============================================================ */
-function _getCustomerId() {
-  return (
-    window.currentCustomerId ||
-    localStorage.getItem("current_customer_id")
-  );
-}
+
 
 /* ============================================================
- * LIST：查詢收料
+ * LIST：查詢收料（v4.x）
  * GET /receipts
  * ============================================================ */
 async function apiListReceipts(params = {}) {
   const q = new URLSearchParams();
-  const customer_id = params.customer_id || _getCustomerId();
-
-  if (customer_id) q.set("customer_id", customer_id);
 
   if (params.fixture_id) q.set("fixture_id", params.fixture_id);
   if (params.order_no) q.set("order_no", params.order_no);
   if (params.operator) q.set("operator", params.operator);
+  if (params.record_type) q.set("record_type", params.record_type);
   if (params.date_from) q.set("date_from", params.date_from);
   if (params.date_to) q.set("date_to", params.date_to);
   if (params.serial) q.set("serial", params.serial);
+
   if (Number.isInteger(params.skip) && params.skip >= 0) {
-  q.set("skip", params.skip);
-    }
-
-    if (Number.isInteger(params.limit) && params.limit > 0) {
-      q.set("limit", params.limit);
-    }
-
+    q.set("skip", params.skip);
+  }
+  if (Number.isInteger(params.limit) && params.limit > 0) {
+    q.set("limit", params.limit);
+  }
 
   return api(`/receipts?${q.toString()}`);
 }
 
 /* ============================================================
- * GET：取得單筆
+ * GET：取得單筆收料（v4.x）
  * ============================================================ */
 async function apiGetReceipt(id) {
   const customer_id = _getCustomerId();
-  return api(`/receipts/${encodeURIComponent(id)}?customer_id=${customer_id}`);
+  return api(`/receipts/${encodeURIComponent(id)}`);
+
 }
 
 /* ============================================================
- * POST：新增收料
+ * POST：新增收料（v4.x）
  * ============================================================ */
 async function apiCreateReceipt(payload) {
   const customer_id = _getCustomerId();
 
-  return api(`/receipts?customer_id=${customer_id}`, {
-    method: "POST",
-    body: payload   // ❗不可 stringify，交給 api-config 自動處理
-  });
-}
-
-/* ============================================================
- * POST：新增序號
- * ============================================================ */
-async function apiAddReceiptDetails(receiptId, serials) {
-  const customer_id = _getCustomerId();
-
-  return api(
-    `/receipts/${encodeURIComponent(receiptId)}/details?customer_id=${customer_id}`,
-    {
+      return api(`/receipts`, {
       method: "POST",
-      body: { serials }
-    }
-  );
+      body: payload
+    });
 }
 
 /* ============================================================
- * DELETE：刪除明細
+ * IMPORT：Excel 匯入（XLSX）
+ * POST /receipts/import
  * ============================================================ */
-async function apiDeleteReceiptDetail(detailId) {
-  const customer_id = _getCustomerId();
-
-  return api(
-    `/receipts/details/${encodeURIComponent(detailId)}?customer_id=${customer_id}`,
-    { method: "DELETE" }
-  );
-}
-
-/* ============================================================
- * DELETE：刪除收料單
- * ============================================================ */
-async function apiDeleteReceipt(id, customer_id) {
-  const cid = customer_id || _getCustomerId();
-
-  return api(`/receipts/${id}?customer_id=${cid}`, {
-    method: "DELETE"
-  });
-}
-
-/* ============================================================
- * 匯入 CSV / XLSX
- * ============================================================ */
-async function apiImportReceiptsCsv(file) {
+async function apiImportReceiptsXlsx(file) {
   const form = new FormData();
   form.append("file", file);
 
@@ -113,7 +67,6 @@ async function apiImportReceiptsCsv(file) {
   const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
   const url = new URL(apiURL("/receipts/import"), window.location.origin);
-  url.searchParams.set("customer_id", customer_id);
 
   const res = await fetch(url.toString(), {
     method: "POST",
@@ -130,21 +83,23 @@ async function apiImportReceiptsCsv(file) {
 }
 
 /* ============================================================
- * 匯出 CSV（不可用 api()）
+ * EXPORT：匯出單筆收料（XLSX）
+ * GET /receipts/{id}/export
  * ============================================================ */
-async function apiExportReceiptCsv(receiptId) {
+async function apiExportReceiptXlsx(receiptId) {
   const token = localStorage.getItem("auth_token");
   const customer_id = _getCustomerId();
-
   const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
   const url = new URL(
     apiURL(`/receipts/${encodeURIComponent(receiptId)}/export`),
     window.location.origin
   );
-  url.searchParams.set("customer_id", customer_id);
 
-  const res = await fetch(url.toString(), { method: "GET", headers });
+  const res = await fetch(url.toString(), {
+    method: "GET",
+    headers
+  });
 
   if (!res.ok) {
     const txt = await res.text();
@@ -160,8 +115,5 @@ async function apiExportReceiptCsv(receiptId) {
 window.apiListReceipts = apiListReceipts;
 window.apiGetReceipt = apiGetReceipt;
 window.apiCreateReceipt = apiCreateReceipt;
-window.apiAddReceiptDetails = apiAddReceiptDetails;
-window.apiDeleteReceiptDetail = apiDeleteReceiptDetail;
-window.apiDeleteReceipt = apiDeleteReceipt;
-window.apiImportReceiptsCsv = apiImportReceiptsCsv;
-window.apiExportReceiptCsv = apiExportReceiptCsv;
+window.apiImportReceiptsXlsx = apiImportReceiptsXlsx;
+window.apiExportReceiptXlsx = apiExportReceiptXlsx;
