@@ -2288,6 +2288,27 @@
             <!-- ================================ -->
 
             <script src="/js/app/app-main.js"></script>
+
+        <script>
+        /**
+         * v4.x App Bootstrap Gate
+         * - 等 user ready
+         * - 再等 customer ready
+         * - 才正式啟動 app
+         */
+        document.addEventListener("DOMContentLoaded", () => {
+          if (typeof onCustomerReady === "function") {
+            onCustomerReady(() => {
+              console.log("[BOOT] customer ready, app start");
+              if (typeof appStart === "function") {
+                appStart();
+              }
+            });
+          }
+        });
+        </script>
+
+
       <script>
     /* ============================================================
        🔵 使用記錄 / 更換記錄 TAB 切換控制 (v4.0)

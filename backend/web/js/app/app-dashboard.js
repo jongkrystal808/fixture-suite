@@ -154,13 +154,3 @@ function filterDashboard() {
   renderDashboardTable(filtered);
 }
 
-// ===============================
-// 初始化（v4.x 正確時序）
-// user ready → customer ready → load dashboard
-// ===============================
-onUserReady(() => {
-  onCustomerReady(() => {
-    console.log("[dashboard] user + customer ready, loading dashboard");
-    loadDashboard();
-  });
-});

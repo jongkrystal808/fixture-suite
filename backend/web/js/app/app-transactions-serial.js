@@ -1,38 +1,64 @@
 /* ======================================================
- * ★ 序號檢視 (View Transaction Serials)
+ * ★ 序號檢視 (View Transaction Serials)  v4.x PATCHED
  * API: GET /transactions/serials
+ *
+ * ✅ v4.x：不再手動帶 customer_id（由 api-config 自動注入 X-Customer-Id）
+ * ✅ date_from / date_to 統一轉成 ISO（避免後端解析不一致）
+ * ✅ wrapper 改用 api("/transactions/serials", { params })（避免手刻 query 漏 encode）
+ * ✅ 表格不顯示 customer_id（避免跨客戶/欄位空值）
+ * ✅ serial 可點擊打開履歷 Drawer
+ * ✅ filterByOrderNo：保留只設單號，其它清空，並自動帶入 type=all
+ * ✅ Drawer：加入 ESC 登記、點遮罩可關閉（可選）
  * ====================================================== */
+
+let viewSerialPage = 1;
+const viewSerialPageSize = 20;
+
+/* ------------------------------------------------------
+ * 工具：把 input[type=date|datetime-local] 統一轉 ISO
+ * ------------------------------------------------------ */
+function toISODateTime(value, endOfDay = false) {
+  if (!value) return null;
+
+  // datetime-local：直接 new Date(value)
+  if (value.includes("T")) {
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? null : d.toISOString();
+  }
+
+  // date：補上時間（起日 00:00:00 / 迄日 23:59:59）
+  const d = new Date(value + (endOfDay ? "T23:59:59" : "T00:00:00"));
+  return isNaN(d.getTime()) ? null : d.toISOString();
+}
 
 /* ------------------------------------------------------
  * 主查詢函式
  * ------------------------------------------------------ */
-// ======================================================
-// ★ 序號檢視 (View Transaction Serials)
-// ======================================================
 async function loadTransactionViewSerial(page = 1) {
   try {
-    const customerId = getCurrentCustomerId();
-    if (!customerId) return;
+    if (!window.currentCustomerId && !getCurrentCustomerId?.()) return;
 
-    const pageSize = 20;
-    const skip = (page - 1) * pageSize;
+    viewSerialPage = page;
 
-    /* -------------------------
-     * 組查詢參數（只送有值的）
-     * ------------------------- */
+    const skip = (page - 1) * viewSerialPageSize;
+
+    // 組查詢參數（只送有值的）
     const params = {
-      customer_id: customerId,
       skip,
-      limit: pageSize,
+      limit: viewSerialPageSize,
     };
 
-    const dateFrom = document.getElementById("vsDateFrom")?.value;
-    const dateTo   = document.getElementById("vsDateTo")?.value;
+    const dateFromRaw = document.getElementById("vsDateFrom")?.value;
+    const dateToRaw   = document.getElementById("vsDateTo")?.value;
+
     const fixture  = document.getElementById("vsFixture")?.value?.trim();
     const serial   = document.getElementById("vsSerial")?.value?.trim();
     const orderNo  = document.getElementById("vsOrderNo")?.value?.trim();
     const operator = document.getElementById("vsOperator")?.value?.trim();
     const type     = document.getElementById("vsType")?.value;
+
+    const dateFrom = toISODateTime(dateFromRaw, false);
+    const dateTo   = toISODateTime(dateToRaw, true);
 
     if (dateFrom) params.date_from = dateFrom;
     if (dateTo)   params.date_to = dateTo;
@@ -40,43 +66,41 @@ async function loadTransactionViewSerial(page = 1) {
     if (serial)   params.serial = serial;
     if (orderNo)  params.order_no = orderNo;
     if (operator) params.operator = operator;
-    if (type)     params.type = type;
 
-    /* -------------------------
-     * API 呼叫
-     * ------------------------- */
+    // type: 空值或 "all"/"全部" 就不送
+    if (type && type !== "all" && type !== "全部") params.type = type;
+
+    // API 呼叫
     const res = await apiViewTransactionSerials(params);
 
-    // 🔍 Debug（現在位置是正確的）
     console.log("[view-serial] api response =", res);
 
-    // ✅ 防呆：支援 rows / data
-    const rows = res?.rows || res?.data || [];
+    // 防呆：支援 rows / data / items
+    const rows = res?.rows || res?.data || res?.items || [];
+    const total = Number(res?.total ?? rows.length ?? 0);
 
     renderViewSerialTable(rows);
 
     renderPagination(
       "viewSerialPagination",
-      res?.total || rows.length || 0,
+      total,
       page,
-      pageSize,
+      viewSerialPageSize,
       (p) => loadTransactionViewSerial(p)
     );
-
   } catch (err) {
     console.error("[view-serial] load failed:", err);
-    alert("序號檢視查詢失敗");
+    toast("序號檢視查詢失敗", "error");
   }
 }
 
 /* ------------------------------------------------------
- * API Wrapper
+ * API Wrapper（v4.x）
  * ------------------------------------------------------ */
 async function apiViewTransactionSerials(params = {}) {
-  const q = new URLSearchParams(params).toString();
-  return api(`/transactions/serials?${q}`);
+  // ✅ 交給 api-config 自動帶 Authorization + X-Customer-Id
+  return api("/transactions/serials", { params });
 }
-
 
 /* ------------------------------------------------------
  * Table Render
@@ -91,10 +115,10 @@ function renderViewSerialTable(rows) {
 
   tbody.innerHTML = "";
 
-  if (!rows || rows.length === 0) {
+  if (!Array.isArray(rows) || rows.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="9" class="text-center py-4 text-gray-500">
+        <td colspan="8" class="text-center py-4 text-gray-500">
           無資料
         </td>
       </tr>
@@ -102,26 +126,45 @@ function renderViewSerialTable(rows) {
     return;
   }
 
-  rows.forEach(r => {
+  rows.forEach((r) => {
+    const txDate =
+      r.transaction_date
+        ? new Date(r.transaction_date).toLocaleString()
+        : "-";
+
+    const txType = r.transaction_type || r.type || "-";
+    const fixtureId = r.fixture_id || "-";
+    const sourceType = r.source_type || "-";
+    const orderNo = r.order_no || "-";
+    const serialNo = r.serial_number || r.serial || "-";
+    const operator = r.operator || "-";
+    const note = r.note || "-";
+
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${r.transaction_date || "-"}</td>
-      <td>${r.transaction_type || "-"}</td>
-      <td>${r.fixture_id || "-"}</td>
-      <td>${r.customer_id || "-"}</td>
-      <td>${r.source_type || "-"}</td>
-      <td>${r.order_no || "-"}</td>
+      <td>${txDate}</td>
+      <td>${txType}</td>
+      <td>${fixtureId}</td>
+      <td>${sourceType}</td>
+      <td>${orderNo}</td>
+
       <td class="font-mono text-blue-600 font-semibold">
-        ${r.serial_number || "-"}
+        <a class="cursor-pointer hover:underline"
+           onclick="openSerialDetail('${serialNo}')">
+          ${serialNo}
+        </a>
       </td>
-      <td>${r.operator || "-"}</td>
-      <td>${r.note || "-"}</td>
+
+      <td>${operator}</td>
+      <td title="${String(note).replaceAll('"', "&quot;")}">${note}</td>
     `;
     tbody.appendChild(tr);
   });
 }
 
-
+/* ------------------------------------------------------
+ * 快捷：用單號篩選
+ * ------------------------------------------------------ */
 function filterByOrderNo(orderNo) {
   if (!orderNo) return;
 
@@ -129,25 +172,33 @@ function filterByOrderNo(orderNo) {
   showTab("viewSerialTab");
 
   // 清空其他條件
-  document.getElementById("vsFixture").value = "";
-  document.getElementById("vsSerial").value = "";
-  document.getElementById("vsOperator").value = "";
-  document.getElementById("vsType").value = "";
+  const vsFixture = document.getElementById("vsFixture");
+  const vsSerial  = document.getElementById("vsSerial");
+  const vsOperator= document.getElementById("vsOperator");
+  const vsType    = document.getElementById("vsType");
+  const vsOrderNo = document.getElementById("vsOrderNo");
 
-  // 設定單號
-  document.getElementById("vsOrderNo").value = orderNo;
+  if (vsFixture) vsFixture.value = "";
+  if (vsSerial)  vsSerial.value = "";
+  if (vsOperator)vsOperator.value = "";
+  if (vsType)    vsType.value = "all";
+
+  if (vsOrderNo) vsOrderNo.value = orderNo;
 
   loadTransactionViewSerial(1);
 }
 
+/* ======================================================
+ * 序號履歷 Drawer（v4.x）
+ * ====================================================== */
 
 async function apiGetSerialHistory(serial) {
-  const customerId = getCurrentCustomerId();
-  return api(`/serials/${encodeURIComponent(serial)}/history?customer_id=${customerId}`);
+  // ✅ v4.x：不帶 customer_id，走 header/context
+  return api(`/serials/${encodeURIComponent(serial)}/history`);
 }
 
 async function openSerialDetail(serial) {
-  if (!serial) return;
+  if (!serial || serial === "-" || serial === "null") return;
 
   try {
     const data = await apiGetSerialHistory(serial);
@@ -155,25 +206,36 @@ async function openSerialDetail(serial) {
     openSerialDetailDrawer();
   } catch (e) {
     console.error(e);
-    alert("載入序號履歷失敗");
+    toast("載入序號履歷失敗", "error");
   }
 }
 
 function openSerialDetailDrawer() {
-  document.getElementById("serialDetailOverlay").classList.remove("hidden");
-  document.getElementById("serialDetailDrawer").classList.remove("translate-x-full");
+  document.getElementById("serialDetailOverlay")?.classList.remove("hidden");
+  document.getElementById("serialDetailDrawer")?.classList.remove("translate-x-full");
+
+  // ⭐ 登記 ESC 關閉
+  window.__activeOverlayCloser = () => closeSerialDetailDrawer();
 }
 
 function closeSerialDetailDrawer() {
-  document.getElementById("serialDetailOverlay").classList.add("hidden");
-  document.getElementById("serialDetailDrawer").classList.add("translate-x-full");
+  document.getElementById("serialDetailOverlay")?.classList.add("hidden");
+  document.getElementById("serialDetailDrawer")?.classList.add("translate-x-full");
+
+  if (window.__activeOverlayCloser === closeSerialDetailDrawer) {
+    window.__activeOverlayCloser = null;
+  }
 }
 
+// （可選）點遮罩關閉
+document.getElementById("serialDetailOverlay")?.addEventListener("click", (e) => {
+  if (e.target?.id === "serialDetailOverlay") closeSerialDetailDrawer();
+});
 
 function renderSerialDetailDrawer(data) {
-  const s = data.serial;
+  const s = data?.serial || {};
 
-  document.getElementById("serialDetailTitle").textContent = s.serial_number;
+  document.getElementById("serialDetailTitle").textContent = s.serial_number || "-";
   document.getElementById("sdFixture").textContent = s.fixture_id || "-";
   document.getElementById("sdStatus").textContent = s.status || "-";
   document.getElementById("sdSource").textContent = s.source_type || "-";
@@ -181,48 +243,64 @@ function renderSerialDetailDrawer(data) {
 
   // 收 / 退料
   const txBody = document.getElementById("sdTransactions");
-  txBody.innerHTML = "";
-  data.transactions.forEach(r => {
-    txBody.innerHTML += `
-      <tr>
-        <td>${r.transaction_date || "-"}</td>
-        <td>${r.transaction_type}</td>
-        <td>
-          <a class="text-blue-600 hover:underline"
-             onclick="filterByOrderNo('${r.order_no}')">
-            ${r.order_no || "-"}
-          </a>
-        </td>
-        <td>${r.operator || "-"}</td>
-      </tr>
-    `;
-  });
+  if (txBody) {
+    txBody.innerHTML = "";
+    (data?.transactions || []).forEach((r) => {
+      const orderNo = r.order_no || "-";
+      txBody.innerHTML += `
+        <tr>
+          <td>${r.transaction_date ? new Date(r.transaction_date).toLocaleString() : "-"}</td>
+          <td>${r.transaction_type || "-"}</td>
+          <td>
+            <a class="text-blue-600 hover:underline cursor-pointer"
+               onclick="filterByOrderNo('${orderNo}')">
+              ${orderNo}
+            </a>
+          </td>
+          <td>${r.operator || "-"}</td>
+        </tr>
+      `;
+    });
+  }
 
   // 使用紀錄
   const usageBody = document.getElementById("sdUsages");
-  usageBody.innerHTML = "";
-  data.usages.forEach(u => {
-    usageBody.innerHTML += `
-      <tr>
-        <td>${u.used_at || "-"}</td>
-        <td>${u.model_id || "-"}</td>
-        <td>${u.station_id || "-"}</td>
-        <td>${u.use_count || "-"}</td>
-      </tr>
-    `;
-  });
+  if (usageBody) {
+    usageBody.innerHTML = "";
+    (data?.usages || []).forEach((u) => {
+      usageBody.innerHTML += `
+        <tr>
+          <td>${u.used_at ? new Date(u.used_at).toLocaleString() : "-"}</td>
+          <td>${u.model_id || "-"}</td>
+          <td>${u.station_id || "-"}</td>
+          <td>${u.use_count ?? "-"}</td>
+        </tr>
+      `;
+    });
+  }
 
   // 更換紀錄
   const repBody = document.getElementById("sdReplacements");
-  repBody.innerHTML = "";
-  data.replacements.forEach(r => {
-    repBody.innerHTML += `
-      <tr>
-        <td>${r.created_at || "-"}</td>
-        <td>${r.usage_before ?? "-"}</td>
-        <td>${r.usage_after ?? "-"}</td>
-      </tr>
-    `;
-  });
+  if (repBody) {
+    repBody.innerHTML = "";
+    (data?.replacements || []).forEach((r) => {
+      repBody.innerHTML += `
+        <tr>
+          <td>${r.created_at ? new Date(r.created_at).toLocaleString() : "-"}</td>
+          <td>${r.usage_before ?? "-"}</td>
+          <td>${r.usage_after ?? "-"}</td>
+        </tr>
+      `;
+    });
+  }
 }
 
+/* ------------------------------------------------------
+ * export
+ * ------------------------------------------------------ */
+window.loadTransactionViewSerial = loadTransactionViewSerial;
+window.apiViewTransactionSerials = apiViewTransactionSerials;
+window.renderViewSerialTable = renderViewSerialTable;
+window.filterByOrderNo = filterByOrderNo;
+window.openSerialDetail = openSerialDetail;
+window.closeSerialDetailDrawer = closeSerialDetailDrawer;

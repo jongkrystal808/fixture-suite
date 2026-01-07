@@ -1,6 +1,6 @@
 /**
- * 後台管理入口控制（Lazy-load + Cache 最終版）
- * /backend/web/js/app/app-admin.js
+ * 後台管理入口控制（Lazy-load + Cache 最終版 / v4.x FIX）
+ * /js/app/app-admin.js
  */
 
 // Lazy-load 狀態（只記「頁面是否初始化過 UI」）
@@ -21,6 +21,16 @@ function showAdminPage(page) {
     return;
   }
 
+  // 一律等 customer ready（v4.x 核心規則）
+  if (typeof window.onCustomerReady === "function") {
+    onCustomerReady(() => _showAdminPageInternal(page));
+  } else {
+    // fallback（理論上不該發生）
+    _showAdminPageInternal(page);
+  }
+}
+
+function _showAdminPageInternal(page) {
   // 1️⃣ 隱藏所有 admin page
   document.querySelectorAll(".admin-page").forEach(el => {
     el.classList.add("hidden");
@@ -51,11 +61,11 @@ function showAdminPage(page) {
   }
 
   // ----------------------------------------------------------
-  // 5️⃣ Lazy-load + Cache（核心修正）
+  // 5️⃣ Lazy-load + Cache（v4.x customer-aware）
   // ----------------------------------------------------------
   const customerId = window.currentCustomerId;
   if (!customerId) {
-    console.warn("[admin] no customer selected, skip load");
+    console.warn("[admin] customer not ready, skip load:", page);
     return;
   }
 
@@ -68,7 +78,6 @@ function showAdminPage(page) {
     return;
   }
 
-  // 👉 cache 未命中：第一次載入或 cache 被清掉
   console.log("[admin] load & cache:", cacheKey);
 
   switch (page) {

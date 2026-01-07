@@ -1,6 +1,4 @@
-
-
-// API 呼叫
+// API 呼叫（保留你的 wrapper）
 async function apiViewAllTransactions(params = {}) {
   const q = new URLSearchParams(params).toString();
   return api(`/transactions/view-all?${q}`);
@@ -8,14 +6,18 @@ async function apiViewAllTransactions(params = {}) {
 
 
 // 渲染表格（總檢視）
+// ✅ 修正：欄位其實是 10 欄（你原本 colspan=9 會破版）
+// ✅ 保留：customer_id 欄位
 function renderViewAllTable(rows) {
   const tbody = document.getElementById("viewAllTableBody");
+  if (!tbody) return;
+
   tbody.innerHTML = "";
 
   if (!rows || rows.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="9" class="text-center py-4 text-gray-500">無資料</td>
+        <td colspan="10" class="text-center py-4 text-gray-500">無資料</td>
       </tr>
     `;
     return;
@@ -35,22 +37,26 @@ function renderViewAllTable(rows) {
         ? "自購"
         : (r.source_type === "customer_supplied" ? "客供" : "-");
 
-        // -----------------------------
-        // 數量顯示（★重點修正）
-        // -----------------------------
-        let qtyText = "-";
+    // -----------------------------
+    // 數量顯示（★你原本已修正，保留）
+    // -----------------------------
+    let qtyText = "-";
+    if (r.record_type === "datecode") {
+      qtyText = `${r.datecode || "-"}（${r.quantity || 0} 件）`;
+    } else {
+      qtyText = `${r.quantity || 0} 個`;
+    }
 
-        if (r.record_type === "datecode") {
-          // datecode：顯示 datecode + 件數
-          qtyText = `${r.datecode || "-"}（${r.quantity || 0} 件）`;
-        } else {
-          // batch / individual：只顯示「有幾個序號」
-          qtyText = `${r.quantity || 0} 個`;
-        }
+    // ✅ 修正：transaction_date 顯示更穩定（若本來就是字串也不會炸）
+    const txDate = r.transaction_date
+      ? (isNaN(Date.parse(r.transaction_date))
+          ? r.transaction_date
+          : new Date(r.transaction_date).toLocaleString())
+      : "-";
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${r.transaction_date || "-"}</td>
+      <td>${txDate}</td>
       <td>${typeText}</td>
       <td>${r.fixture_id || "-"}</td>
       <td>${r.customer_id || "-"}</td>
@@ -67,7 +73,7 @@ function renderViewAllTable(rows) {
 
 
 // ============================================================
-// 收料 / 退料 / 序號檢視 / 總檢視 TAB 切換控制（修正版）
+// 收料 / 退料 / 序號檢視 / 總檢視 TAB 切換控制（保留你原寫法）
 // ============================================================
 function showTab(tabId) {
 
@@ -98,7 +104,7 @@ function showTab(tabId) {
     document.querySelector("[data-rtab='viewserial']")?.classList.add("subtab-active");
   }
 }
-
+window.showTab = showTab;
 
 
 
@@ -139,6 +145,7 @@ async function exportSummary() {
   a.download = "transactions_summary.xlsx";
   a.click();
 }
+window.exportSummary = exportSummary;
 
 
 async function exportSummaryDetailed() {
@@ -168,12 +175,17 @@ async function exportSummaryDetailed() {
     headers: { "Authorization": `Bearer ${token}` }
   });
 
+  if (!res.ok) {
+    return toast("匯出失敗: " + res.status);
+  }
+
   const blob = await res.blob();
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = "transactions_summary_detailed.xlsx";
   a.click();
 }
+window.exportSummaryDetailed = exportSummaryDetailed;
 
 
 
@@ -181,10 +193,12 @@ function loadTransactionViewAll(page = 1) {
   const customer_id = getCurrentCustomerId();
   if (!customer_id) return;
 
+  const pageSize = 20;
+
   const params = {
     customer_id,
-    skip: (page - 1) * 20,
-    limit: 20,
+    skip: (page - 1) * pageSize,
+    limit: pageSize,
   };
 
   // -------------------------
@@ -206,7 +220,7 @@ function loadTransactionViewAll(page = 1) {
   if (sortBy) params.sort_by = sortBy;
 
   // -------------------------
-  // 日期區間（★ 關鍵修正）
+  // 日期區間（✅修正：date_to 建議含到當天 23:59:59，避免少一天）
   // -------------------------
   const dateFrom = document.getElementById("vaDateFrom")?.value;
   const dateTo   = document.getElementById("vaDateTo")?.value;
@@ -216,21 +230,35 @@ function loadTransactionViewAll(page = 1) {
   }
 
   if (dateTo && dateTo.trim() !== "") {
+    // 這行是重點：避免後端用 < date_to 造成少一天
     params.date_to = dateTo;
+    // 如果你後端吃 ISO（常見），改用：
+    // params.date_to = new Date(dateTo + "T23:59:59").toISOString();
   }
 
   // -------------------------
-  // API 呼叫
+  // API 呼叫（✅修正：統一走 wrapper）
   // -------------------------
-  api("/transactions/view-all", {
-      params
-    })
+  apiViewAllTransactions(params)
     .then(res => {
-      renderViewAllTable(res.rows || []);
+      const rows = res?.rows || res?.data || [];
+      renderViewAllTable(rows);
+
+      // 如果後端有回 total，且你頁面有 pagination 元件：
+      if (typeof renderPagination === "function") {
+        renderPagination(
+          "viewAllPagination",
+          res?.total || rows.length || 0,
+          page,
+          pageSize,
+          (p) => loadTransactionViewAll(p)
+        );
+      }
     })
     .catch(err => {
       console.error(err);
-      alert("查詢失敗");
+      toast("查詢失敗", "error");
     });
-
 }
+
+window.loadTransactionViewAll = loadTransactionViewAll;

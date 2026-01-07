@@ -14,22 +14,16 @@ let drawerSelectedModel = null;
 
 let stage3FixtureSearchTimer = null;
 
-
-function getCurrentCustomerId() {
-  return localStorage.getItem("current_customer_id");
-}
-
 /* ============================================================
  * 機種清單
  * ============================================================ */
 
 async function mmLoadModelList() {
-  const customer_id = getCurrentCustomerId();
-  if (!customer_id) return alert("請先選擇客戶");
+  if (!window.currentCustomerId) return;
 
   const search = document.getElementById("mmSearch")?.value.trim() || "";
 
-  const params = { customer_id };
+  const params = {};
   if (search) params.search = search;
 
   try {
@@ -66,20 +60,19 @@ function renderMachineModelTable(list) {
         <td class="py-2 pr-4 max-w-[200px] truncate text-center">${m.model_name || "-"}</td>
         <td class="py-2 pr-4 max-w-[200px] truncate text-center">${m.note || "-"}</td>
         <td class="py-1 px-3 whitespace-nowrap w-32 align-middle">
-            <div class="flex justify-center gap-2">
-                <button class="btn btn-xs btn-outline" onclick="openModelEditModal('${m.id}')">
-                    編輯
-                </button>
-                <button class="btn btn-error btn-xs" onclick="stageDeleteModel('${m.id}')">
-                    刪除
-                </button>
-                </div>
-            </td>
-        </tr>
+          <div class="flex justify-center gap-2">
+            <button class="btn btn-xs btn-outline" onclick="openModelEditModal('${m.id}')">
+              編輯
+            </button>
+            <button class="btn btn-error btn-xs" onclick="stageDeleteModel('${m.id}')">
+              刪除
+            </button>
+          </div>
+        </td>
+      </tr>
     `);
   });
 }
-
 
 async function stageDeleteModel(modelId) {
   if (!modelId) return;
@@ -109,7 +102,6 @@ async function stageDeleteModel(modelId) {
   }
 }
 
-
 /* ============================================================
  * 機種編輯 Modal
  * ============================================================ */
@@ -119,7 +111,7 @@ async function openModelEditModal(modelId) {
   meCurrentStationId = null;
 
   const modal = document.getElementById("modelEditModal");
-  modal.classList.remove("hidden");
+  modal?.classList.remove("hidden");
 
   document.getElementById("meModelId").textContent = `（${modelId}）`;
   document.getElementById("meSelectedStationLabel").textContent = "";
@@ -135,20 +127,18 @@ function closeModelEditModal() {
     ?.classList.add("hidden");
 }
 
-
 /* ============================================================
  * Modal：站點綁定
  * ============================================================ */
 
 async function meReloadStations() {
   if (!meCurrentModelId) return;
-
-  const customer_id = getCurrentCustomerId();
+  if (!window.currentCustomerId) return;
 
   const detail = await apiGetModelDetail(meCurrentModelId);
   const bound = detail.stations || [];
 
-  const allStations = await apiListStations({ customer_id });
+  const allStations = await apiListStations();
   const boundIds = new Set(bound.map(s => s.station_id));
   const available = allStations.filter(s => !boundIds.has(s.id));
 
@@ -159,85 +149,86 @@ function renderMeStations(bound, available) {
   const box = document.getElementById("meStationPanel");
   if (!box) return;
 
+  const boundHtml = (bound || []).length
+    ? (bound || []).map(s => `
+        <div class="flex items-center justify-between px-2 py-1 border rounded-lg text-sm">
+          <span class="font-mono">${s.station_id}</span>
+
+          <div class="flex gap-1">
+            <button class="btn btn-xs btn-outline"
+                    onclick="meSelectStation('${s.station_id}', '${s.station_name || ""}')">
+              治具
+            </button>
+            <button class="btn btn-xs btn-error"
+                    onclick="meUnbindStation('${s.station_id}')">
+              解綁
+            </button>
+          </div>
+        </div>
+      `).join("")
+    : `<div class="text-xs text-gray-400">尚未綁定</div>`;
+
+  const availHtml = (available || []).length
+    ? (available || []).map(s => `
+        <div class="flex items-center justify-between px-2 py-1 border rounded-lg text-sm">
+          <span class="font-mono">${s.id}</span>
+
+          <button class="btn btn-xs btn-primary"
+                  onclick="meBindStation('${s.id}')">
+            綁定
+          </button>
+        </div>
+      `).join("")
+    : `<div class="text-xs text-gray-400">無可綁定</div>`;
+
   box.innerHTML = `
     <div class="grid grid-cols-2 gap-6">
 
       <!-- 已綁定站點 -->
       <div>
         <div class="text-sm font-semibold mb-2">已綁定站點</div>
-
         <div class="space-y-1">
-          ${
-            bound.length
-              ? bound.map(s => `
-                  <div class="flex items-center justify-between
-                              px-2 py-1 border rounded-lg text-sm">
-                    <span class="font-mono">${s.station_id}</span>
-
-                    <div class="flex gap-1">
-                      <button class="btn btn-xs btn-outline"
-                              onclick="meSelectStation('${s.station_id}', '')">
-                        治具
-                      </button>
-                      <button class="btn btn-xs btn-error"
-                              onclick="meUnbindStation('${s.station_id}')">
-                        解綁
-                      </button>
-                    </div>
-                  </div>
-                `).join("")
-              : `<div class="text-xs text-gray-400">尚未綁定</div>`
-          }
+          ${boundHtml}
         </div>
       </div>
 
       <!-- 可綁定站點 -->
       <div>
         <div class="text-sm font-semibold mb-2">可綁定站點</div>
-
         <div class="space-y-1">
-          ${
-            available.length
-              ? available.map(s => `
-                  <div class="flex items-center justify-between
-                              px-2 py-1 border rounded-lg text-sm">
-                    <span class="font-mono">${s.id}</span>
+          ${availHtml}
+        </div>
+      </div>
 
-                    <button class="btn btn-xs btn-primary"
-                            onclick="meBindStation('${s.id}')">
-                      綁定
-                    </button>
-                  </div>
-                `).join("")
-              : `<div class="text-xs text-gray-400">無可綁定</div>`
-          }
     </div>
   `;
 }
 
+/* ============================================================
+ * Station 綁定 / 解綁（v4.x）
+ * ============================================================ */
+
 async function meBindStation(stationId) {
+  if (!window.currentCustomerId) return;
+
   await apiBindStation({
-    customer_id: getCurrentCustomerId(),
     model_id: meCurrentModelId,
     station_id: stationId,
   });
 
   toast("站點已綁定");
 
-  // ⭐ 立即移動 DOM（UX 即時）
   const detail = await apiGetModelDetail(meCurrentModelId);
   const bound = detail.stations || [];
-  const allStations = await apiListStations({ customer_id: getCurrentCustomerId() });
 
+  const allStations = await apiListStations();
   const boundIds = new Set(bound.map(s => s.station_id));
   const available = allStations.filter(s => !boundIds.has(s.id));
 
   renderMeStations(bound, available);
 
-  // ⭐ 直接選中該站點
   meSelectStation(stationId, "");
 }
-
 
 async function meUnbindStation(stationId) {
   const detail = await apiGetModelDetail(meCurrentModelId);
@@ -249,7 +240,6 @@ async function meUnbindStation(stationId) {
   }
 
   await apiUnbindStation({
-    customer_id: getCurrentCustomerId(),
     model_id: meCurrentModelId,
     station_id: stationId,
   });
@@ -258,8 +248,8 @@ async function meUnbindStation(stationId) {
 
   if (meCurrentStationId === stationId) {
     meCurrentStationId = null;
-    document.getElementById("meFixturePanel").innerHTML =
-      `<div class="text-xs text-gray-400">請選擇站點</div>`;
+    const panel = document.getElementById("meFixturePanel");
+    if (panel) panel.innerHTML = `<div class="text-xs text-gray-400">請選擇站點</div>`;
   }
 
   await meReloadStations();
@@ -278,7 +268,6 @@ async function meSelectStation(stationId, stationName) {
   await meReloadFixtures();
 }
 
-
 async function meReloadFixtures() {
   const panel = document.getElementById("meFixturePanel");
   if (!panel) return;
@@ -296,9 +285,13 @@ async function meReloadFixtures() {
   renderMeFixturePanel(requirements);
 }
 
+/* ============================================================
+ * 治具需求 Panel
+ * ============================================================ */
 
 function renderMeFixturePanel(requirements) {
   const panel = document.getElementById("meFixturePanel");
+  if (!panel) return;
 
   panel.innerHTML = `
     <!-- 新增治具需求 -->
@@ -332,34 +325,30 @@ function renderMeFixturePanel(requirements) {
     <div class="overflow-auto border rounded-xl max-h-[70vh]">
       <table class="min-w-full text-xs">
         <thead class="sticky top-0 bg-gray-50 z-10">
-          <tr class="hover:bg-gray-50 transition">
-            <th class="py-1 px-2 text-center align-middle">治具</th>
-            <th class="py-1 px-2 text-center align-middle">需求</th>
-            <th class="py-1 px-2 text-center align-middle">操作</th>
+          <tr>
+            <th class="py-1 px-2 text-center">治具</th>
+            <th class="py-1 px-2 text-center">需求</th>
+            <th class="py-1 px-2 text-center">操作</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-100">
           ${
-            requirements.length
-              ? requirements.map(r => `
+            (requirements || []).length
+              ? (requirements || []).map(r => `
                   <tr>
-                    <td class="py-1 px-3 w-20 text-center align-middle">
-                      ${r.fixture_id}
-                    </td>
-                    <td class="py-1 px-3 w-20 text-center align-middle">
-                      ${r.required_qty}
-                    </td>
-                    <td class="py-1 px-3 whitespace-nowrap w-32 align-middle">
-                        <div class="flex justify-center gap-2">
-                          <button class="btn btn-xs btn-outline"
-                            onclick="meEditRequirement(${r.id}, ${r.required_qty})">
-                            編輯
-                          </button>
-                          <button class="btn btn-xs btn-error"
-                            onclick="meDeleteRequirement(${r.id})">
-                            刪除
-                          </button>
-                        </div>  
+                    <td class="py-1 px-3 text-center">${r.fixture_id}</td>
+                    <td class="py-1 px-3 text-center">${r.required_qty}</td>
+                    <td class="py-1 px-3 text-center">
+                      <div class="flex justify-center gap-2">
+                        <button class="btn btn-xs btn-outline"
+                          onclick="meEditRequirement(${r.id}, ${r.required_qty})">
+                          編輯
+                        </button>
+                        <button class="btn btn-xs btn-error"
+                          onclick="meDeleteRequirement(${r.id})">
+                          刪除
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 `).join("")
@@ -376,6 +365,9 @@ function renderMeFixturePanel(requirements) {
   `;
 }
 
+/* ============================================================
+ * 治具搜尋（v4.x）
+ * ============================================================ */
 
 let meSelectedFixtureId = null;
 let meFixtureSearchTimer = null;
@@ -387,42 +379,50 @@ async function meSearchFixture(keyword) {
   clearTimeout(meFixtureSearchTimer);
 
   if (!keyword || keyword.length < 2) {
-    box.classList.add("hidden");
+    box?.classList.add("hidden");
     return;
   }
 
   meFixtureSearchTimer = setTimeout(async () => {
-    const customer_id = getCurrentCustomerId();
+    try {
+      if (!window.currentCustomerId) return;
 
-    const resp = await apiSearchFixtures({
-      customer_id: getCurrentCustomerId(),
-      q: keyword,
-      limit: 20,
-    });
+      const resp = await apiSearchFixtures({
+        q: keyword,
+        limit: 20,
+      });
 
-const results = Array.isArray(resp) ? resp : [];
+      const results = Array.isArray(resp) ? resp : [];
 
+      const detail = await apiGetModelDetail(meCurrentModelId);
+      const boundIds = new Set(
+        (detail.requirements || [])
+          .filter(r => r.station_id === meCurrentStationId)
+          .map(r => r.fixture_id)
+      );
 
-    // 排除已綁
-    const detail = await apiGetModelDetail(meCurrentModelId);
-    const boundIds = new Set(
-      (detail.requirements || [])
-        .filter(r => r.station_id === meCurrentStationId)
-        .map(r => r.fixture_id)
-    );
+      const filtered = results.filter(f => {
+        const fid = f.fixture_id ?? f.id;
+        return fid && !boundIds.has(fid);
+      });
 
-    const filtered = results.filter(f => !boundIds.has(f.fixture_id));
+      box.innerHTML = filtered.length
+        ? filtered.map(f => {
+            const fid = f.fixture_id ?? f.id;
+            return `
+              <div class="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                   onclick="meSelectFixture('${fid}')">
+                ${fid}
+              </div>
+            `;
+          }).join("")
+        : `<div class="px-3 py-2 text-gray-400">無符合治具</div>`;
 
-    box.innerHTML = filtered.length
-      ? filtered.map(f => `
-          <div class="px-3 py-2 hover:bg-gray-100 cursor-pointer"
-               onclick="meSelectFixture('${f.fixture_id}')">
-            ${f.fixture_id}
-          </div>
-        `).join("")
-      : `<div class="px-3 py-2 text-gray-400">無符合治具</div>`;
-
-    box.classList.remove("hidden");
+      box.classList.remove("hidden");
+    } catch (err) {
+      console.error(err);
+      box?.classList.add("hidden");
+    }
   }, 300);
 }
 
@@ -432,8 +432,9 @@ function meSelectFixture(fixtureId) {
   document.getElementById("meFixtureSuggest").classList.add("hidden");
 }
 
-
 async function meAddRequirement() {
+  if (!window.currentCustomerId) return;
+
   const qty = Number(document.getElementById("meFixtureQty").value);
 
   if (!meSelectedFixtureId || qty <= 0) {
@@ -441,7 +442,6 @@ async function meAddRequirement() {
   }
 
   await apiAddRequirement({
-    customer_id: getCurrentCustomerId(),
     model_id: meCurrentModelId,
     station_id: meCurrentStationId,
     fixture_id: meSelectedFixtureId,
@@ -472,11 +472,6 @@ async function meDeleteRequirement(reqId) {
   await meReloadFixtures();
 }
 
-
-
-
-
-
 /* ============================================================
  * 機種新增 / 編輯 Modal（最小可用版）
  * ============================================================ */
@@ -505,8 +500,6 @@ function mmOpenModelModal(mode, modelId = null) {
 
   modal.classList.remove("hidden");
 }
-
-// 一定要掛到 window，HTML onclick 才找得到
 window.mmOpenModelModal = mmOpenModelModal;
 
 function mmCloseModelModal() {
@@ -515,22 +508,21 @@ function mmCloseModelModal() {
 
   modal.classList.add("hidden");
 
-  // （可選）清掉表單與狀態
   const form = document.getElementById("mmModelForm");
   form?.reset();
 
-  // 清除 dataset，避免殘留狀態
   if (form) {
     delete form.dataset.mode;
     delete form.dataset.id;
   }
 }
-
-// ⚠️ 一定要掛到 window，HTML onclick 才找得到
 window.mmCloseModelModal = mmCloseModelModal;
 
-
 async function submitModelForm() {
+  if (!window.currentCustomerId) {
+    return toast("尚未選擇客戶", "warning");
+  }
+
   const form = document.getElementById("mmModelForm");
   if (!form) return;
 
@@ -544,7 +536,6 @@ async function submitModelForm() {
   }
 
   const payload = {
-    customer_id: getCurrentCustomerId(),
     id: modelId,
     model_name: modelName,
     note,
@@ -559,10 +550,7 @@ async function submitModelForm() {
       toast("機種更新成功");
     }
 
-    // 關閉機種基本資料 Modal
     document.getElementById("mmModelModal")?.classList.add("hidden");
-
-    // 重新載入機種清單
     await mmLoadModelList();
 
   } catch (err) {
@@ -570,9 +558,7 @@ async function submitModelForm() {
     toast(err.message || "儲存失敗", "error");
   }
 }
-
 window.submitModelForm = submitModelForm;
-
 
 let stage3SelectedFixtureId = null;
 
@@ -586,20 +572,17 @@ async function stage3SearchFixture(keyword) {
     return;
   }
 
-  // debounce，避免每打一次字就打 API
   clearTimeout(stage3FixtureSearchTimer);
   stage3FixtureSearchTimer = setTimeout(async () => {
     try {
-      const customer_id = getCurrentCustomerId();
+      if (!window.currentCustomerId) return;
 
-      // 🔥 使用 fixtures API（你已經有）
       const res = await apiListFixtures({
-        customer_id,
         search: keyword,
         limit: 20,
       });
 
-      const list = res.fixtures || [];
+      const list = res?.fixtures || [];
 
       if (!list.length) {
         box.innerHTML = `
@@ -610,15 +593,19 @@ async function stage3SearchFixture(keyword) {
         return;
       }
 
-      box.innerHTML = list.map(f => `
-        <div
-          class="px-3 py-2 text-xs cursor-pointer hover:bg-gray-100"
-          onclick="stage3SelectFixture('${f.id}', '${f.fixture_name}')"
-        >
-          <span class="font-mono">${f.id}</span>
-          <span class="text-gray-500"> - ${f.fixture_name}</span>
-        </div>
-      `).join("");
+      box.innerHTML = list.map(f => {
+        const fid = f.fixture_id ?? f.id ?? "";
+        const fname = f.fixture_name ?? "";
+        return `
+          <div
+            class="px-3 py-2 text-xs cursor-pointer hover:bg-gray-100"
+            onclick="stage3SelectFixture('${fid}', '${fname}')"
+          >
+            <span class="font-mono">${fid}</span>
+            <span class="text-gray-500"> - ${fname || "-"}</span>
+          </div>
+        `;
+      }).join("");
 
       box.classList.remove("hidden");
     } catch (err) {
@@ -627,7 +614,6 @@ async function stage3SearchFixture(keyword) {
     }
   }, 300);
 }
-
 
 function stage3SelectFixture(fixtureId, fixtureName) {
   stage3SelectedFixtureId = fixtureId;
@@ -640,7 +626,7 @@ function stage3SelectFixture(fixtureId, fixtureName) {
   box.classList.add("hidden");
 }
 
-
+/* 保留一份即可 */
 function downloadBlob(blob, filename) {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
@@ -650,21 +636,23 @@ function downloadBlob(blob, filename) {
   a.remove();
 }
 
+/* ============================================================
+ * Models 匯出 / 範本下載 / 匯入（v4.x）
+ * ============================================================ */
+
 async function mmExportModelsXlsx() {
   const token = localStorage.getItem("auth_token");
-  const customer_id = getCurrentCustomerId();
 
-  if (!customer_id) {
+  if (!window.currentCustomerId) {
     return toast("尚未選擇客戶", "warning");
   }
 
-  const url = `/api/v2/models/export?customer_id=${encodeURIComponent(customer_id)}`;
-
   try {
-    const res = await fetch(url, {
+    const res = await fetch(apiURL("/models/export"), {
       method: "GET",
       headers: {
         Authorization: `Bearer ${token}`,
+        "X-Customer-Id": window.currentCustomerId,
       },
     });
 
@@ -673,49 +661,44 @@ async function mmExportModelsXlsx() {
       throw new Error(text || "匯出失敗");
     }
 
-    // ✅ 關鍵：一定要 blob
     const blob = await res.blob();
 
-    // ✅ 瀏覽器下載
-    const downloadUrl = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = downloadUrl;
-    a.download = `models_${customer_id}.xlsx`;
+    a.href = url;
+    a.download = `models_${window.currentCustomerId}.xlsx`;
     document.body.appendChild(a);
     a.click();
 
     document.body.removeChild(a);
-    URL.revokeObjectURL(downloadUrl);
+    URL.revokeObjectURL(url);
 
   } catch (err) {
     console.error(err);
     toast("機種匯出失敗", "error");
   }
 }
-
 window.mmExportModelsXlsx = mmExportModelsXlsx;
-
 
 async function mmDownloadModelsTemplate() {
   const token = localStorage.getItem("auth_token");
-  const customer_id = getCurrentCustomerId();
 
-  if (!customer_id) {
+  if (!window.currentCustomerId) {
     return toast("尚未選擇客戶", "warning");
   }
 
   try {
-    const res = await fetch(
-      `/api/v2/models/template?customer_id=${customer_id}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
+    const res = await fetch(apiURL("/models/template"), {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "X-Customer-Id": window.currentCustomerId,
+      },
+    });
 
     if (!res.ok) {
-      throw new Error("下載失敗");
+      const text = await res.text();
+      throw new Error(text || "下載失敗");
     }
 
     const blob = await res.blob();
@@ -724,8 +707,10 @@ async function mmDownloadModelsTemplate() {
     const a = document.createElement("a");
     a.href = url;
     a.download = "models_import_template.xlsx";
+    document.body.appendChild(a);
     a.click();
 
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
 
   } catch (err) {
@@ -733,10 +718,7 @@ async function mmDownloadModelsTemplate() {
     toast("下載範本失敗", "error");
   }
 }
-
 window.mmDownloadModelsTemplate = mmDownloadModelsTemplate;
-
-
 
 async function mmImportModels(file) {
   console.log("📦 file =", file);
@@ -750,9 +732,8 @@ async function mmImportModels(file) {
   }
 
   const token = localStorage.getItem("auth_token");
-  const customer_id = getCurrentCustomerId();
 
-  if (!customer_id) {
+  if (!window.currentCustomerId) {
     return toast("尚未選擇客戶", "warning");
   }
 
@@ -760,17 +741,14 @@ async function mmImportModels(file) {
   fd.append("file", file);
 
   try {
-    const res = await fetch(
-      `/api/v2/models/import?customer_id=${encodeURIComponent(customer_id)}`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          // ⚠️ 不要加 Content-Type，瀏覽器會自己處理 multipart
-        },
-        body: fd,
-      }
-    );
+    const res = await fetch(apiURL("/models/import"), {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "X-Customer-Id": window.currentCustomerId,
+      },
+      body: fd,
+    });
 
     let data = null;
     try {
@@ -783,9 +761,8 @@ async function mmImportModels(file) {
       throw new Error(data?.detail || "匯入失敗");
     }
 
-    // ✅ 對齊後端欄位
     toast(
-      `匯入完成：新增 ${data.imported} 筆、更新 ${data.updated} 筆、跳過 ${data.skipped} 筆`
+      `匯入完成：新增 ${data?.imported ?? 0} 筆、更新 ${data?.updated ?? 0} 筆、跳過 ${data?.skipped ?? 0} 筆`
     );
 
     await mmLoadModelList();
@@ -795,22 +772,20 @@ async function mmImportModels(file) {
     toast(err.message || "匯入失敗", "error");
   }
 }
-
 window.mmImportModels = mmImportModels;
 
-/* 🔧 給 HTML onchange 用的轉接函式（如果你有用） */
 function mmImportModelsXlsx(file) {
   if (!file) return;
   mmImportModels(file);
 }
 window.mmImportModelsXlsx = mmImportModelsXlsx;
 
-
 /* ============================================================
  * DRAWER MODE (機種詳情 Drawer 專用)
  * ============================================================ */
+
 async function openModelDetailDrawer(modelId) {
-  drawerSelectedModel = modelId;   // ✅ Drawer 自己用
+  drawerSelectedModel = modelId;
 
   const drawer = document.getElementById("modelDetailDrawer");
   const box = document.getElementById("modelDetailContent");
@@ -829,31 +804,27 @@ async function openModelDetailDrawer(modelId) {
   }
 }
 
-
 function renderModelDetailDrawer(data) {
   const { model, stations, requirements, capacity } = data;
   const box = document.getElementById("modelDetailContent");
 
   box.innerHTML = `
     <section class="space-y-6">
-      <!-- 基本資料 -->
       <div>
         <h3 class="font-semibold">${model.id}</h3>
         <p>${model.model_name}</p>
       </div>
 
-      <!-- 綁定站點 -->
       <div>
         <h4>綁定站點</h4>
         <ul>
-          ${stations.map(s => `<li>${s.station_id} - ${s.station_name}</li>`).join("")}
+          ${(stations || []).map(s => `<li>${s.station_id} - ${s.station_name}</li>`).join("")}
         </ul>
       </div>
 
-      <!-- 最大開站數 -->
       <div>
         <h4>最大可開站數</h4>
-        ${capacity.map(c => `
+        ${(capacity || []).map(c => `
           <div>${c.station_id}：${c.max_station}</div>
         `).join("")}
       </div>
@@ -862,12 +833,11 @@ function renderModelDetailDrawer(data) {
 }
 
 function closeModelDetailDrawer() {
-    drawerSelectedModel = null;  // 清乾淨，避免誤用
-    document.getElementById("modelDetailDrawer")
+  drawerSelectedModel = null;
+  document.getElementById("modelDetailDrawer")
     ?.classList.add("translate-x-full");
 }
 
-/* Drawer Tab 專用 */
 function drawerShowTab(tabName) {
   document.querySelectorAll("#modelDetailContent .tab-content")
     .forEach(el => el.classList.add("hidden"));
