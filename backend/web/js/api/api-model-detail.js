@@ -1,114 +1,173 @@
 /**
- * api-model-detail.js (v4.0)
- * 專門對應後端 model-detail.py (v4.0)
+ * Model Detail API Client (v4.x FINAL)
  *
- * 提供功能：
- * - 站點綁定：查詢 / 新增 / 刪除
- * - 治具需求：查詢 / 新增 / 更新 / 刪除
- * - Model Detail 三段式資料載入
+ * 對應後端 model-detail.py (v4.x)
+ *
+ * 原則：
+ * - ❌ 不讀取 currentCustomerId
+ * - ❌ 不讀取 localStorage
+ * - ❌ 不自行組 customer_id query
+ * - ✅ customer context 一律交給 api-config.js
+ * - ✅ 純描述 model-detail API 行為
  */
 
-//////////////////////////////
-//  1️⃣ 已綁定站點
-//////////////////////////////
+/* ============================================================
+ * 1️⃣ 已綁定站點
+ * ============================================================ */
 
-function apiListBoundStations(params) {
+/**
+ * 查詢已綁定站點
+ */
+function apiListBoundStations(params = {}) {
   return api("/model-detail/stations", { params });
 }
 
-//////////////////////////////
-//  2️⃣ 可綁定站點
-//////////////////////////////
+/* ============================================================
+ * 2️⃣ 可綁定站點
+ * ============================================================ */
 
-function apiListAvailableStations(params) {
+/**
+ * 查詢可綁定站點
+ */
+function apiListAvailableStations(params = {}) {
   return api("/model-detail/stations/available", { params });
 }
 
-//////////////////////////////
-//  3️⃣ 綁定站點
-//////////////////////////////
+/* ============================================================
+ * 3️⃣ 綁定站點
+ * ============================================================ */
 
-function apiBindStation({ customer_id, model_id, station_id }) {
+/**
+ * 綁定站點到機種
+ */
+function apiBindStation({ model_id, station_id }) {
+  if (!model_id || !station_id) {
+    throw new Error("apiBindStation: model_id and station_id are required");
+  }
+
   return api("/model-detail/stations", {
     method: "POST",
-    params: { customer_id, model_id },
-    body: JSON.stringify({ station_id }),
+    params: { model_id },
+    body: { station_id },
   });
 }
 
+/* ============================================================
+ * 4️⃣ 取消綁定站點
+ * ============================================================ */
 
-//////////////////////////////
-//  4️⃣ 取消綁定
-//////////////////////////////
+/**
+ * 取消站點綁定
+ */
+function apiUnbindStation({ model_id, station_id }) {
+  if (!model_id || !station_id) {
+    throw new Error("apiUnbindStation: model_id and station_id are required");
+  }
 
-function apiUnbindStation({ customer_id, model_id, station_id }) {
   return api("/model-detail/stations", {
     method: "DELETE",
-    params: { customer_id, model_id, station_id },
+    params: { model_id, station_id },
   });
 }
 
+/* ============================================================
+ * 5️⃣ 查詢治具需求
+ * ============================================================ */
 
-//////////////////////////////
-//  5️⃣ 查詢某站點的治具需求
-//////////////////////////////
-
-function apiListRequirements(params) {
+/**
+ * 查詢某站點的治具需求
+ */
+function apiListRequirements(params = {}) {
   return api("/model-detail/requirements", { params });
 }
 
-//////////////////////////////
-//  6️⃣ 新增治具需求
-//////////////////////////////
+/* ============================================================
+ * 6️⃣ 新增治具需求
+ * ============================================================ */
+
+/**
+ * 新增治具需求
+ */
 function apiAddRequirement(data) {
+  if (!data || typeof data !== "object") {
+    throw new Error("apiAddRequirement: invalid data");
+  }
+
   return api("/model-detail/requirements", {
     method: "POST",
-    body: JSON.stringify(data),
+    body: data,
   });
 }
 
+/* ============================================================
+ * 7️⃣ 更新治具需求
+ * ============================================================ */
 
-//////////////////////////////
-//  7️⃣ 更新治具需求
-//////////////////////////////
+/**
+ * 更新治具需求
+ */
 function apiUpdateRequirement(req_id, data) {
+  if (!req_id) {
+    throw new Error("apiUpdateRequirement: req_id is required");
+  }
+
+  if (!data || typeof data !== "object") {
+    throw new Error("apiUpdateRequirement: invalid data");
+  }
+
   return api(`/model-detail/requirements/${req_id}`, {
     method: "PUT",
-    body: JSON.stringify(data),
+    body: data,
   });
 }
 
+/* ============================================================
+ * 8️⃣ 刪除治具需求
+ * ============================================================ */
 
-//////////////////////////////
-//  8️⃣ 刪除治具需求
-//////////////////////////////
-
+/**
+ * 刪除治具需求
+ */
 function apiDeleteRequirement(req_id) {
+  if (!req_id) {
+    throw new Error("apiDeleteRequirement: req_id is required");
+  }
+
   return api(`/model-detail/requirements/${req_id}`, {
     method: "DELETE",
   });
 }
 
-//////////////////////////////
-//  9️⃣ Model Detail（站點 + 治具需求 + 最大可開站數）
-//////////////////////////////
+/* ============================================================
+ * 9️⃣ Model Detail（站點 + 治具需求 + 最大可開站數）
+ * ============================================================ */
 
-function apiGetModelDetail(model_id, customer_id) {
-  return api(`/model-detail/${model_id}/detail`, {
-    params: { customer_id },
-  });
+/**
+ * 取得完整 Model Detail
+ */
+function apiGetModelDetail(model_id) {
+  if (!model_id) {
+    throw new Error("apiGetModelDetail: model_id is required");
+  }
+
+  return api(`/model-detail/${encodeURIComponent(model_id)}/detail`);
 }
 
-//////////////////////////////
-//  導出全域
-//////////////////////////////
+/* ============================================================
+ * Export to Global
+ * ============================================================ */
 
 window.apiListBoundStations = apiListBoundStations;
 window.apiListAvailableStations = apiListAvailableStations;
+
 window.apiBindStation = apiBindStation;
 window.apiUnbindStation = apiUnbindStation;
+
 window.apiListRequirements = apiListRequirements;
 window.apiAddRequirement = apiAddRequirement;
 window.apiUpdateRequirement = apiUpdateRequirement;
 window.apiDeleteRequirement = apiDeleteRequirement;
+
 window.apiGetModelDetail = apiGetModelDetail;
+
+console.log("✅ api-model-detail.js v4.x FINAL loaded");

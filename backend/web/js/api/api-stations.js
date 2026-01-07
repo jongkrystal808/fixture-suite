@@ -1,31 +1,20 @@
 /**
- * 站點管理 API (v3.0)
- * api-stations.js
+ * Stations API Client (v4.x FINAL)
  *
- * 後端 routers/stations.py：
+ * 對應後端 routers/stations.py
  *
- * GET    /stations
- * GET    /stations/{station_id}
- * POST   /stations
- * PUT    /stations/{station_id}
- * DELETE /stations/{station_id}
- * GET    /stations/simple
+ * 原則：
+ * - ❌ 不處理 customer_id
+ * - ❌ 不自行 stringify
+ * - ❌ 不自行處理 token
+ * - ✅ 一律透過 api-config.js
  */
 
 /* ============================================================
- * 查詢站點（支援搜尋 / 啟用狀態 / 分頁）
+ * 查詢站點（搜尋 / 啟用狀態 / 分頁）
+ * GET /stations
  * ============================================================ */
-
-/**
- * @param {object} params
- * {
- *   page,
- *   pageSize,
- *   search,
- *   is_active
- * }
- */
-async function apiListStations(params = {}) {
+function apiListStations(params = {}) {
   const {
     page = 1,
     pageSize = 50,
@@ -33,84 +22,103 @@ async function apiListStations(params = {}) {
     is_active = ""
   } = params;
 
-  const query = new URLSearchParams();
-  query.set("skip", String((page - 1) * pageSize));
-  query.set("limit", String(pageSize));
-
-  if (search) query.set("search", search);
-  if (is_active !== "") query.set("is_active", is_active);
-
-  return api(`/stations?${query.toString()}`);
+  return api("/stations", {
+    params: {
+      skip: (page - 1) * pageSize,
+      limit: pageSize,
+      search: search || undefined,
+      is_active: is_active !== "" ? is_active : undefined,
+    },
+  });
 }
 
 /* ============================================================
  * 查詢單一站點
+ * GET /stations/{station_id}
  * ============================================================ */
+function apiGetStation(stationId) {
+  if (!stationId) {
+    throw new Error("apiGetStation: stationId is required");
+  }
 
-async function apiGetStation(stationId) {
   return api(`/stations/${encodeURIComponent(stationId)}`);
 }
 
 /* ============================================================
  * 新增站點
+ * POST /stations
  * ============================================================ */
-
 /**
  * payload:
  * {
  *   station_id,
  *   station_name,
- *   note,
- *   is_active
+ *   note?,
+ *   is_active?
  * }
  */
-async function apiCreateStation(payload) {
+function apiCreateStation(payload) {
+  if (!payload || typeof payload !== "object") {
+    throw new Error("apiCreateStation: invalid payload");
+  }
+  if (!payload.station_id) {
+    throw new Error("apiCreateStation: station_id is required");
+  }
+
   return api("/stations", {
     method: "POST",
-    body: JSON.stringify(payload)
+    body: payload,
   });
 }
 
 /* ============================================================
  * 更新站點
+ * PUT /stations/{station_id}
  * ============================================================ */
-
-async function apiUpdateStation(stationId, payload) {
-  if (typeof stationId !== "string" && typeof stationId !== "number") {
-    throw new Error("apiUpdateStation: stationId must be string or number");
+function apiUpdateStation(stationId, payload) {
+  if (!stationId) {
+    throw new Error("apiUpdateStation: stationId is required");
   }
+  if (!payload || typeof payload !== "object") {
+    throw new Error("apiUpdateStation: invalid payload");
+  }
+
   return api(`/stations/${encodeURIComponent(stationId)}`, {
     method: "PUT",
-    body: JSON.stringify(payload)
+    body: payload,
   });
 }
 
-
 /* ============================================================
  * 刪除站點
+ * DELETE /stations/{station_id}
  * ============================================================ */
+function apiDeleteStation(stationId) {
+  if (!stationId) {
+    throw new Error("apiDeleteStation: stationId is required");
+  }
 
-async function apiDeleteStation(stationId) {
   return api(`/stations/${encodeURIComponent(stationId)}`, {
-    method: "DELETE"
+    method: "DELETE",
   });
 }
 
 /* ============================================================
  * 簡易列表（下拉用）
+ * GET /stations/simple
  * ============================================================ */
-
-async function apiListStationsSimple() {
+function apiListStationsSimple() {
   return api("/stations/simple");
 }
 
 /* ============================================================
- * 導出到全域
+ * Export to window
  * ============================================================ */
-
 window.apiListStations = apiListStations;
 window.apiGetStation = apiGetStation;
 window.apiCreateStation = apiCreateStation;
 window.apiUpdateStation = apiUpdateStation;
 window.apiDeleteStation = apiDeleteStation;
 window.apiListStationsSimple = apiListStationsSimple;
+
+console.log("✅ api-stations.js v4.x FINAL loaded");

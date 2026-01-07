@@ -1,13 +1,28 @@
 /* ============================================================
- * Customer Context（全域客戶狀態管理 v2）
- * - Header 下拉切換客戶
- * - 第一次登入強制選擇
- * - 不 reload 頁面
+ * Customer Context（v4.x FINAL）
+ *
+ * ✔ customer = permission context
+ * ✔ 不再呼叫 customer CRUD API
+ * ✔ customer 清單只來自 currentUser.allowed_customers
+ * ✔ 負責：
+ *   - 記住目前 customer
+ *   - 切換 customer
+ *   - 發出 customer-ready
+ *   - 切換後刷新 UI（不 reload）
  * ============================================================ */
 
+/* ============================================================
+ * 全域狀態
+ * ============================================================ */
 window.currentCustomerId =
   localStorage.getItem("current_customer_id") || null;
 
+// ⭐ 關鍵：customer 是否已 ready
+window.__customerReady = false;
+
+/* ============================================================
+ * 防呆：修正舊格式 customer_id（例如 moxa:xxx）
+ * ============================================================ */
 (function normalizeStoredCustomerId() {
   const raw = localStorage.getItem("current_customer_id");
   if (raw && raw.includes(":")) {
@@ -18,35 +33,76 @@ window.currentCustomerId =
   }
 })();
 
+/* ============================================================
+ * 取得「允許的 customer 清單」
+ * 👉 唯一來源：currentUser
+ * ============================================================ */
+function getAllowedCustomers() {
+  const user = window.currentUser;
+  if (!user) return [];
+
+  // v4.x：後端標準格式
+  if (Array.isArray(user.allowed_customers)) {
+    return user.allowed_customers;
+  }
+
+  // 相容舊格式
+  if (typeof user.customer_id === "string") {
+    return [user.customer_id];
+  }
+
+  return [];
+}
 
 /* ============================================================
- * 設定目前客戶（核心）
+ * customer ready helper（給其他模組用）
+ * ============================================================ */
+function onCustomerReady(cb) {
+  if (window.__customerReady) {
+    cb();
+  } else {
+    document.addEventListener("customer:ready", cb, { once: true });
+  }
+}
+window.onCustomerReady = onCustomerReady;
+
+/* ============================================================
+ * 設定目前 customer（核心）
  * ============================================================ */
 function setCurrentCustomer(customerId) {
   if (!customerId) return;
 
-  // ⭐ 核心防線：永遠只接受純 customer_id
-  let cleanId = customerId;
-  if (typeof cleanId === "string" && cleanId.includes(":")) {
-    console.warn("[customer] invalid customer_id detected:", cleanId);
-    cleanId = cleanId.split(":")[0];
+  const allowed = getAllowedCustomers();
+  if (!allowed.includes(customerId)) {
+    console.error(
+      "[customer] forbidden customer:",
+      customerId,
+      "allowed:",
+      allowed
+    );
+    alert("無權限切換到該客戶");
+    return;
   }
 
-  window.currentCustomerId = cleanId;
-  localStorage.setItem("current_customer_id", cleanId);
+  window.currentCustomerId = customerId;
+  localStorage.setItem("current_customer_id", customerId);
 
-  // 更新 Header Select 顯示
+  // 更新 Header Select
   const select = document.getElementById("currentCustomerSelect");
   if (select) {
-    select.value = cleanId;
+    select.value = customerId;
     select.classList.remove("hidden");
   }
 
-  console.log("[customer] switched to:", cleanId);
+  // ⭐ 宣告 customer ready（只做一次）
+  if (!window.__customerReady) {
+    window.__customerReady = true;
+    document.dispatchEvent(new Event("customer:ready"));
+  }
 
-  // refreshModulesAfterCustomerChange();
-    console.log("[login] user ready");
+  console.log("[customer] switched to:", customerId);
 
+  refreshModulesAfterCustomerChange();
 }
 
 /* ============================================================
@@ -57,7 +113,6 @@ function switchCustomerFromHeader(customerId) {
 
   const ok = confirm(`確定要切換客戶為「${customerId}」？`);
   if (!ok) {
-    // 還原 select
     const select = document.getElementById("currentCustomerSelect");
     if (select) select.value = window.currentCustomerId || "";
     return;
@@ -67,75 +122,86 @@ function switchCustomerFromHeader(customerId) {
 }
 
 /* ============================================================
- * 載入客戶清單 → Header Select
+ * 初始化 Header customer select
  * ============================================================ */
-async function loadCustomerHeaderSelect() {
+function initCustomerHeaderSelect() {
   const select = document.getElementById("currentCustomerSelect");
   if (!select) return;
 
-  const list = await apiListCustomers({ page: 1, pageSize: 200 });
+  const customers = getAllowedCustomers();
+  if (customers.length === 0) {
+    select.classList.add("hidden");
+    return;
+  }
 
-  select.innerHTML = `<option value="">客戶：--</option>`;
+  select.innerHTML = `<option value="">--</option>`;
 
-  list.forEach(c => {
+  customers.forEach(id => {
     const opt = document.createElement("option");
-    opt.value = c.id;
-    opt.textContent = `${c.id}${c.customer_abbr ? " — " + c.customer_abbr : ""}`;
+    opt.value = id;
+    opt.textContent = id;
     select.appendChild(opt);
   });
 
-  // 修改：登入後就顯示選單，不管有沒有選過客戶
   select.classList.remove("hidden");
 
-  // 如果之前有選過客戶，就設定預設值
-  if (window.currentCustomerId) {
+  if (
+    window.currentCustomerId &&
+    customers.includes(window.currentCustomerId)
+  ) {
     select.value = window.currentCustomerId;
   }
 }
 
 /* ============================================================
- * 第一次登入：強制選客戶（沿用 modal）
+ * 第一次登入：強制選 customer（若多個）
  * ============================================================ */
-async function loadCustomerSelector() {
-  const list = await apiListCustomers({ page: 1, pageSize: 200 });
+function ensureCustomerSelected() {
+  const customers = getAllowedCustomers();
+
+  // 只有一個 → 自動選
+  if (customers.length === 1 && !window.currentCustomerId) {
+    setCurrentCustomer(customers[0]);
+    return;
+  }
+
+  if (customers.length <= 1) return;
+  if (window.currentCustomerId) return;
 
   const select = document.getElementById("customerSelect");
-  if (!select) return;
+  const modal = document.getElementById("customerSelectModal");
+  if (!select || !modal) return;
 
-  select.innerHTML = `<option value="" disabled selected>請選擇客戶</option>`;
+  select.innerHTML =
+    `<option value="" disabled selected>請選擇客戶</option>`;
 
-  list.forEach(c => {
+  customers.forEach(id => {
     const opt = document.createElement("option");
-    opt.value = c.id;
-    opt.textContent = `${c.id}${c.customer_abbr ? " — " + c.customer_abbr : ""}`;
+    opt.value = id;
+    opt.textContent = id;
     select.appendChild(opt);
   });
 
-  document.getElementById("customerSelectModal")?.showModal();
+  modal.showModal();
 }
 
 function confirmCustomerSelection() {
   const select = document.getElementById("customerSelect");
-  const customerId = select?.value;
-  if (!customerId) return;
+  const value = select?.value;
+  if (!value) return;
 
   document.getElementById("customerSelectModal")?.close();
-  setCurrentCustomer(customerId);
+  setCurrentCustomer(value);
 }
 
 /* ============================================================
  * 客戶切換後刷新模組（不 reload）
  * ============================================================ */
 function refreshModulesAfterCustomerChange() {
-  // 找出目前顯示中的主 tab
   const activeTab = document.querySelector(
     'section[id^="tab-"]:not(.hidden)'
   );
-
-  if (!activeTab) {
-    console.warn("[customer] no active tab found");
-    return;
-  }
+  if (!activeTab) return;
 
   const tabId = activeTab.id;
   console.log("[customer] refresh for tab:", tabId);
@@ -145,8 +211,7 @@ function refreshModulesAfterCustomerChange() {
       window.loadDashboard?.();
       break;
 
-    case "tab-receipts":
-      // 依目前子頁再細分（收料 / 退料 / 總檢視）
+    case "tab-receipts": {
       const activeSub = document.querySelector(
         '#tab-receipts [data-rtab].subtab-active'
       )?.dataset?.rtab;
@@ -159,9 +224,9 @@ function refreshModulesAfterCustomerChange() {
         window.loadTransactionViewAll?.();
       }
       break;
+    }
 
-    case "tab-query":
-      // 依查詢類型決定
+    case "tab-query": {
       const type = document.getElementById("queryType")?.value;
       if (type === "model") {
         window.loadModelsQuery?.();
@@ -169,34 +234,32 @@ function refreshModulesAfterCustomerChange() {
         window.loadFixturesQuery?.();
       }
       break;
+    }
 
     case "tab-stats":
       window.loadStats?.();
       break;
 
-    case "tab-admin":
-      // admin 再看是哪個子頁
+    case "tab-admin": {
       const activeAdmin = document.querySelector(
         ".admin-page:not(.hidden)"
       )?.id;
 
       if (activeAdmin === "admin-owners") {
         window.loadOwners?.();
-      } else if (activeAdmin === "admin-users") {
-        window.loadUsers?.();
       } else if (activeAdmin === "admin-fixtures") {
         window.loadAdminFixtures?.();
       }
       break;
+    }
 
     default:
       console.warn("[customer] no refresh handler for", tabId);
   }
 }
 
-
 /* ============================================================
- * 登出時隱藏客戶選單
+ * 登出時隱藏 Header select
  * ============================================================ */
 function hideCustomerHeaderSelect() {
   const select = document.getElementById("currentCustomerSelect");
@@ -207,11 +270,19 @@ function hideCustomerHeaderSelect() {
 }
 
 /* ============================================================
- * 導出全域
+ * user ready 後初始化（只做 customer UI，不載業務）
+ * ============================================================ */
+window.onUserReady?.(() => {
+  initCustomerHeaderSelect();
+  ensureCustomerSelected();
+});
+
+/* ============================================================
+ * 全域導出
  * ============================================================ */
 window.setCurrentCustomer = setCurrentCustomer;
 window.switchCustomerFromHeader = switchCustomerFromHeader;
-window.loadCustomerHeaderSelect = loadCustomerHeaderSelect;
-window.loadCustomerSelector = loadCustomerSelector;
 window.confirmCustomerSelection = confirmCustomerSelection;
 window.hideCustomerHeaderSelect = hideCustomerHeaderSelect;
+
+console.log("✅ customer-context.js v4.x FINAL loaded");

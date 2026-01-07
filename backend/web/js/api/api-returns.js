@@ -1,41 +1,42 @@
 /**
- * api-returns.js (v4.x FINAL)
- * - Event-based API
- * - customer_id 一律由後端從登入狀態取得
- * - 前端不處理 customer
- * - 與 api-receipts.js v4.x 完全同構
+ * Returns API Client (v4.x FINAL)
+ *
+ * 原則：
+ * - ❌ 不處理 customer_id
+ * - ❌ 不自行處理 token
+ * - ❌ 不直接 fetch
+ * - ✅ 一律透過 api-config.js
+ * - ✅ 與 api-receipts.js 完全同構
  */
 
 /* ============================================================
  * LIST：查詢退料
  * GET /returns
  * ============================================================ */
-async function apiListReturns(params = {}) {
-  const q = new URLSearchParams();
-
-  if (params.fixture_id) q.set("fixture_id", params.fixture_id);
-  if (params.order_no) q.set("order_no", params.order_no);
-  if (params.operator) q.set("operator", params.operator);
-  if (params.record_type) q.set("record_type", params.record_type);
-  if (params.date_from) q.set("date_from", params.date_from);
-  if (params.date_to) q.set("date_to", params.date_to);
-  if (params.serial) q.set("serial", params.serial);
-
-  if (Number.isInteger(params.skip) && params.skip >= 0) {
-    q.set("skip", params.skip);
-  }
-  if (Number.isInteger(params.limit) && params.limit > 0) {
-    q.set("limit", params.limit);
-  }
-
-  return api(`/returns?${q.toString()}`);
+function apiListReturns(params = {}) {
+  return api("/returns", {
+    params: {
+      fixture_id: params.fixture_id,
+      order_no: params.order_no,
+      operator: params.operator,
+      record_type: params.record_type,
+      date_from: params.date_from,
+      date_to: params.date_to,
+      serial: params.serial,
+      skip: Number.isInteger(params.skip) ? params.skip : undefined,
+      limit: Number.isInteger(params.limit) ? params.limit : undefined,
+    },
+  });
 }
 
 /* ============================================================
  * GET：取得單筆退料
  * GET /returns/{id}
  * ============================================================ */
-async function apiGetReturn(id) {
+function apiGetReturn(id) {
+  if (!id) {
+    throw new Error("apiGetReturn: id is required");
+  }
   return api(`/returns/${encodeURIComponent(id)}`);
 }
 
@@ -43,10 +44,14 @@ async function apiGetReturn(id) {
  * POST：新增退料
  * POST /returns
  * ============================================================ */
-async function apiCreateReturn(payload) {
-  return api(`/returns`, {
+function apiCreateReturn(payload) {
+  if (!payload || typeof payload !== "object") {
+    throw new Error("apiCreateReturn: invalid payload");
+  }
+
+  return api("/returns", {
     method: "POST",
-    body: payload
+    body: payload,
   });
 }
 
@@ -54,56 +59,34 @@ async function apiCreateReturn(payload) {
  * IMPORT：Excel 匯入（XLSX）
  * POST /returns/import
  * ============================================================ */
-async function apiImportReturnsXlsx(file) {
+function apiImportReturnsXlsx(file) {
+  if (!file) {
+    throw new Error("apiImportReturnsXlsx: file is required");
+  }
+
   const form = new FormData();
   form.append("file", file);
 
-  const token = localStorage.getItem("auth_token");
-  const headers = token ? { Authorization: `Bearer ${token}` } : {};
-
-  const url = new URL(
-    apiURL("/returns/import"),
-    window.location.origin
-  );
-
-  const res = await fetch(url.toString(), {
+  return api("/returns/import", {
     method: "POST",
-    headers,
-    body: form
+    body: form,
   });
-
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`Import failed: ${res.status} ${txt}`);
-  }
-
-  return res.json();
 }
 
 /* ============================================================
  * EXPORT：匯出單筆退料（XLSX）
  * GET /returns/{id}/export
  * ============================================================ */
-async function apiExportReturnXlsx(returnId) {
-  const token = localStorage.getItem("auth_token");
-  const headers = token ? { Authorization: `Bearer ${token}` } : {};
-
-  const url = new URL(
-    apiURL(`/returns/${encodeURIComponent(returnId)}/export`),
-    window.location.origin
-  );
-
-  const res = await fetch(url.toString(), {
-    method: "GET",
-    headers
-  });
-
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`Export failed: ${res.status} ${txt}`);
+function apiExportReturnXlsx(returnId) {
+  if (!returnId) {
+    throw new Error("apiExportReturnXlsx: returnId is required");
   }
 
-  return await res.blob();
+  // 下載類 API：直接交給瀏覽器
+  window.open(
+    apiURL(`/returns/${encodeURIComponent(returnId)}/export`),
+    "_blank"
+  );
 }
 
 /* ============================================================
@@ -114,3 +97,5 @@ window.apiGetReturn = apiGetReturn;
 window.apiCreateReturn = apiCreateReturn;
 window.apiImportReturnsXlsx = apiImportReturnsXlsx;
 window.apiExportReturnXlsx = apiExportReturnXlsx;
+
+console.log("✅ api-returns.js v4.x FINAL loaded");

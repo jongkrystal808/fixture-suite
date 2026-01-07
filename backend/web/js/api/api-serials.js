@@ -1,88 +1,101 @@
 /**
- * 序號工具 API (v3.0)
- * api-serials.js
+ * Serial Utilities API (v4.x FINAL)
  *
  * 後端 routers/serials.py：
+ * - GET  /serials/expand
+ * - POST /serials/normalize
+ * - POST /serials/validate
+ * - POST /serials/detect-prefix
+ * - POST /serials/range
  *
- * GET    /serials/expand?start=&end=
- * POST   /serials/normalize
- * POST   /serials/validate
- * POST   /serials/detect-prefix
- * POST   /serials/range
+ * 原則：
+ * - ❌ 不處理 customer_id
+ * - ❌ 不自行 stringify
+ * - ❌ 不自行處理 token
+ * - ✅ 純工具 API
  */
 
 /* ============================================================
- * 展開序號範圍 expand_serial_range()
- * ============================================================ */
-
-/**
  * 展開序號區間
- * @param {string} start
- * @param {string} end
- * @returns {Promise<{serials: Array}>}
- */
-async function apiExpandSerialRange(start, end) {
-  const params = new URLSearchParams();
-  params.set("start", start);
-  params.set("end", end);
+ * GET /serials/expand?start=&end=
+ * ============================================================ */
+function apiExpandSerialRange(start, end) {
+  if (!start || !end) {
+    throw new Error("apiExpandSerialRange: start & end are required");
+  }
 
-  return api(`/serials/expand?${params.toString()}`);
+  return api("/serials/expand", {
+    params: { start, end },
+  });
 }
 
 /* ============================================================
- * 正規化序號清單 normalise_serial_list()
+ * 正規化序號清單
+ * POST /serials/normalize
  * ============================================================ */
+function apiNormalizeSerials(serials) {
+  if (!Array.isArray(serials)) {
+    throw new Error("apiNormalizeSerials: serials must be an array");
+  }
 
-/**
- * @param {Array<string>} serials
- * @returns {Promise<{serials: Array}>}
- */
-async function apiNormalizeSerials(serials) {
   return api("/serials/normalize", {
     method: "POST",
-    body: JSON.stringify({ serials })
+    body: { serials },
   });
 }
 
 /* ============================================================
- * 驗證序號格式 validate_serial()
+ * 驗證序號格式
+ * POST /serials/validate
  * ============================================================ */
+function apiValidateSerials(serials) {
+  if (!Array.isArray(serials)) {
+    throw new Error("apiValidateSerials: serials must be an array");
+  }
 
-async function apiValidateSerials(serials) {
   return api("/serials/validate", {
     method: "POST",
-    body: JSON.stringify({ serials })
+    body: { serials },
   });
 }
 
 /* ============================================================
- * 偵測序號前綴 detect_prefix()
+ * 偵測序號前綴
+ * POST /serials/detect-prefix
  * ============================================================ */
+function apiDetectSerialPrefix(serials) {
+  if (!Array.isArray(serials)) {
+    throw new Error("apiDetectSerialPrefix: serials must be an array");
+  }
 
-async function apiDetectSerialPrefix(serials) {
   return api("/serials/detect-prefix", {
     method: "POST",
-    body: JSON.stringify({ serials })
+    body: { serials },
   });
 }
 
 /* ============================================================
- * 計算範圍內總數 calculate_range_total()
+ * 計算序號區間數量
+ * POST /serials/range
  * ============================================================ */
+function apiCalculateSerialRange(start, end) {
+  if (!start || !end) {
+    throw new Error("apiCalculateSerialRange: start & end are required");
+  }
 
-async function apiCalculateSerialRange(start, end) {
   return api("/serials/range", {
     method: "POST",
-    body: JSON.stringify({ start, end })
+    body: { start, end },
   });
 }
 
 /* ============================================================
- * 導出到全域
+ * Export to window
  * ============================================================ */
-
 window.apiExpandSerialRange = apiExpandSerialRange;
 window.apiNormalizeSerials = apiNormalizeSerials;
 window.apiValidateSerials = apiValidateSerials;
 window.apiDetectSerialPrefix = apiDetectSerialPrefix;
 window.apiCalculateSerialRange = apiCalculateSerialRange;
+
+console.log("✅ api-serials.js v4.x FINAL loaded");

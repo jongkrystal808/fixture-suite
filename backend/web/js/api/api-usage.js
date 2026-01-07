@@ -1,152 +1,168 @@
 /**
- * 使用紀錄 API (v3.0)
- * api-usage.js
+ * Usage Logs API Client (v4.x FINAL)
  *
- * ✔ 完全對應後端 /api/v2/usage
- * ✔ station_id 需為字串（如 "T1_RF"）
- * ✔ 不需也不能傳 customer_id（由 Token 決定）
- * ✔ 支援 Excel 匯入 / 匯入批次
- * ✔ 支援分頁、搜尋 fixture_id / station_id / operator
+ * 對應後端 /api/v2/usage
+ *
+ * 原則：
+ * - ❌ 不處理 customer_id
+ * - ❌ 不自行 stringify
+ * - ❌ 不自行處理 token
+ * - ✅ 一律透過 api-config.js
  */
 
-// ======================================================
-// 查詢使用紀錄列表
-// ======================================================
-
+/* ============================================================
+ * 查詢使用紀錄列表
+ * GET /usage
+ * ============================================================ */
 /**
- * 查詢使用紀錄
- * @param {object} params
+ * params:
  * {
- *   page,
- *   pageSize,
- *   fixtureId,
- *   stationId,
- *   operator
+ *   page?: number,
+ *   pageSize?: number,
+ *   fixtureId?: string,
+ *   stationId?: string,
+ *   operator?: string
  * }
  */
-async function apiListUsageLogs(params = {}) {
+function apiListUsageLogs(params = {}) {
   const {
     page = 1,
     pageSize = 20,
-    fixtureId = "",
-    stationId = "",
-    operator = ""
+    fixtureId,
+    stationId,
+    operator,
   } = params;
 
-  const query = new URLSearchParams();
-  query.set("skip", String((page - 1) * pageSize));
-  query.set("limit", String(pageSize));
-
-  if (fixtureId) query.set("fixture_id", fixtureId);
-  if (stationId) query.set("station_id", stationId);
-  if (operator) query.set("operator", operator);
-
-  return api(`/usage?${query.toString()}`);
+  return api("/usage", {
+    params: {
+      skip: (page - 1) * pageSize,
+      limit: pageSize,
+      fixture_id: fixtureId || undefined,
+      station_id: stationId || undefined,
+      operator: operator || undefined,
+    },
+  });
 }
 
-// ======================================================
-// 新增單筆
-// ======================================================
-
+/* ============================================================
+ * 新增單筆使用紀錄
+ * POST /usage
+ * ============================================================ */
 /**
- * 新增使用紀錄（v3.0）
- * 後端要求格式：
+ * data:
  * {
- *   fixture_id: "L-00018",
- *   station_id: "T1_RF",
- *   use_count: 1,
- *   abnormal_status: null,
- *   operator: "",
- *   note: "",
- *   used_at: "2025-11-20T10:00:00Z"
+ *   fixture_id,
+ *   station_id,
+ *   use_count,
+ *   abnormal_status?,
+ *   operator?,
+ *   note?,
+ *   used_at?
  * }
  */
-async function apiCreateUsageLog(data) {
+function apiCreateUsageLog(data) {
+  if (!data || typeof data !== "object") {
+    throw new Error("apiCreateUsageLog: invalid data");
+  }
+  if (!data.fixture_id || !data.station_id) {
+    throw new Error("apiCreateUsageLog: fixture_id & station_id are required");
+  }
+
   return api("/usage", {
     method: "POST",
-    body: JSON.stringify(data)
+    body: data,
   });
 }
 
-// ======================================================
-// 批量新增（多筆）
-// ======================================================
+/* ============================================================
+ * 批量新增
+ * POST /usage/batch
+ * ============================================================ */
+function apiBatchUsageLogs(rows) {
+  if (!Array.isArray(rows)) {
+    throw new Error("apiBatchUsageLogs: rows must be an array");
+  }
 
-async function apiBatchUsageLogs(data) {
   return api("/usage/batch", {
     method: "POST",
-    body: JSON.stringify(data)
+    body: rows,
   });
 }
 
-// ======================================================
-// 刪除使用紀錄
-// ======================================================
+/* ============================================================
+ * 刪除使用紀錄
+ * DELETE /usage/{id}
+ * ============================================================ */
+function apiDeleteUsageLog(id) {
+  if (!id) {
+    throw new Error("apiDeleteUsageLog: id is required");
+  }
 
-async function apiDeleteUsageLog(id) {
-  return api(`/usage/${id}`, {
-    method: "DELETE"
+  return api(`/usage/${encodeURIComponent(id)}`, {
+    method: "DELETE",
   });
 }
 
-// ======================================================
-// Excel 匯入
-// ======================================================
-
+/* ============================================================
+ * Excel 匯入
+ * POST /usage/import
+ * ============================================================ */
 /**
- * 匯入使用紀錄 (.xlsx)
- * Excel 欄位（v3.0）：
- *
+ * Excel 欄位：
  * fixture_id | station_id | use_count | abnormal_status | operator | note | used_at
- *
  */
-async function apiImportUsageLogsXlsx(file) {
+function apiImportUsageLogsXlsx(file) {
+  if (!file) {
+    throw new Error("apiImportUsageLogsXlsx: file is required");
+  }
+
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
 
-    reader.onload = async (e) => {
+    reader.onload = async e => {
       try {
         const workbook = XLSX.read(e.target.result, { type: "binary" });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
-
         const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
 
-        const rows = rawRows.map(r => {
-          return {
-            fixture_id: (r.fixture_id || "").trim(),
-            station_id: (r.station_id || "").trim(), // v3.0 為字串，如 T1_RF
-            use_count: r.use_count !== "" ? Number(r.use_count) : 1,
-            abnormal_status: r.abnormal_status || null,
-            operator: r.operator || null,
-            note: r.note || null,
-            used_at: r.used_at ? new Date(r.used_at) : null
-          };
-        });
+        const rows = rawRows.map(r => ({
+          fixture_id: String(r.fixture_id || "").trim(),
+          station_id: String(r.station_id || "").trim(),
+          use_count:
+            r.use_count !== "" && !isNaN(r.use_count)
+              ? Number(r.use_count)
+              : 1,
+          abnormal_status: r.abnormal_status || null,
+          operator: r.operator || null,
+          note: r.note || null,
+          used_at: r.used_at
+            ? new Date(r.used_at).toISOString()
+            : null,
+        }));
 
         const result = await api("/usage/import", {
           method: "POST",
-          body: JSON.stringify(rows)
+          body: rows,
         });
 
         resolve(result);
-
       } catch (err) {
         reject(err);
       }
     };
 
     reader.onerror = reject;
-
     reader.readAsBinaryString(file);
   });
 }
 
-// ======================================================
-// 導出
-// ======================================================
-
+/* ============================================================
+ * Export to window
+ * ============================================================ */
 window.apiListUsageLogs = apiListUsageLogs;
 window.apiCreateUsageLog = apiCreateUsageLog;
 window.apiBatchUsageLogs = apiBatchUsageLogs;
 window.apiImportUsageLogsXlsx = apiImportUsageLogsXlsx;
 window.apiDeleteUsageLog = apiDeleteUsageLog;
+
+console.log("✅ api-usage.js v4.x FINAL loaded");

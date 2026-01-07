@@ -160,17 +160,37 @@ async def register(user_data: UserCreate):
 
 
 # ==========================================================
-# 🔹 取得當前使用者資訊
+# 🔹 取得當前使用者資訊（v4.x）
+#    - 回傳 allowed_customers
 # ==========================================================
-@router.get("/me", response_model=UserResponse, summary="取得當前使用者資訊")
+@router.get("/me", summary="取得當前使用者資訊")
 async def get_current_user_info(current_user: dict = Depends(get_current_user)):
 
-    return UserResponse(
-        id=current_user["id"],
-        username=current_user["username"],
-        role=current_user["role"],
-        created_at=current_user.get("created_at")
+    user_id = current_user["id"]
+
+    # 🔽 查詢此使用者可使用的 customer 清單
+    rows = db.execute_query(
+        """
+        SELECT customer_id
+        FROM user_customers
+        WHERE user_id = %s
+        ORDER BY customer_id
+        """,
+        (user_id,)
     )
+
+    allowed_customers = [r["customer_id"] for r in rows]
+
+    return {
+        "id": current_user["id"],
+        "username": current_user["username"],
+        "role": current_user["role"],
+        "created_at": current_user.get("created_at"),
+
+        # ⭐ v4.x 關鍵欄位
+        "allowed_customers": allowed_customers
+    }
+
 
 
 # ==========================================================

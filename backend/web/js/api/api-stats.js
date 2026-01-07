@@ -1,71 +1,80 @@
 /**
- * 統計 API (v3.0)
- * api-stats.js
+ * Stats API Client (v4.x FINAL)
  *
  * 對應 backend/app/routers/stats.py
  *
- * GET /stats/summary
- * GET /stats/max-stations?model_id=
- * GET /stats/fixture-status
- * GET /stats/fixture-usage?fixture_id=
- * GET /stats/model-requirements?model_id=
+ * 原則：
+ * - ❌ 不處理 customer_id
+ * - ❌ 不自行拼 query string
+ * - ❌ 不自行處理 token
+ * - ✅ 一律透過 api-config.js
  */
 
 /* ============================================================
- * 取得儀表板 Summary 統計
+ * Dashboard Summary
+ * GET /stats/summary
  * ============================================================ */
-
-async function apiGetStatsSummary() {
+function apiGetStatsSummary() {
   return api("/stats/summary");
 }
 
 /* ============================================================
- * 取得某機種的最大開站數
+ * 取得某機種最大可開站數
+ * GET /stats/max-stations
  * ============================================================ */
+function apiGetMaxStations(modelId) {
+  if (!modelId) {
+    throw new Error("apiGetMaxStations: modelId is required");
+  }
 
-async function apiGetMaxStations(modelId) {
-  const q = new URLSearchParams();
-  q.set("model_id", modelId);
-
-  return api(`/stats/max-stations?${q.toString()}`);
+  return api("/stats/max-stations", {
+    params: { model_id: modelId },
+  });
 }
 
 /* ============================================================
- * 取得治具狀態視圖（view_fixture_status）
+ * 取得治具狀態視圖
+ * GET /stats/fixture-status
  * ============================================================ */
-
-async function apiGetFixtureStatus() {
+function apiGetFixtureStatus() {
   return api("/stats/fixture-status");
 }
 
 /* ============================================================
- * 取得單治具使用次數 / 更換次數 / 最近使用
+ * 取得單一治具使用 / 更換統計
+ * GET /stats/fixture-usage
  * ============================================================ */
+function apiGetFixtureUsageStats(fixtureId) {
+  if (!fixtureId) {
+    throw new Error("apiGetFixtureUsageStats: fixtureId is required");
+  }
 
-async function apiGetFixtureUsageStats(fixtureId) {
-  const q = new URLSearchParams();
-  q.set("fixture_id", fixtureId);
-
-  return api(`/stats/fixture-usage?${q.toString()}`);
+  return api("/stats/fixture-usage", {
+    params: { fixture_id: fixtureId },
+  });
 }
 
 /* ============================================================
- * 取得整個機種的治具需求總表
+ * 取得機種治具需求總表
+ * GET /stats/model-requirements
  * ============================================================ */
+function apiGetModelRequirements(modelId) {
+  if (!modelId) {
+    throw new Error("apiGetModelRequirements: modelId is required");
+  }
 
-async function apiGetModelRequirements(modelId) {
-  const q = new URLSearchParams();
-  q.set("model_id", modelId);
-
-  return api(`/stats/model-requirements?${q.toString()}`);
+  return api("/stats/model-requirements", {
+    params: { model_id: modelId },
+  });
 }
 
 /* ============================================================
- * 導出到全域
+ * Export to window
  * ============================================================ */
-
 window.apiGetStatsSummary = apiGetStatsSummary;
 window.apiGetMaxStations = apiGetMaxStations;
 window.apiGetFixtureStatus = apiGetFixtureStatus;
 window.apiGetFixtureUsageStats = apiGetFixtureUsageStats;
 window.apiGetModelRequirements = apiGetModelRequirements;
+
+console.log("✅ api-stats.js v4.x FINAL loaded");

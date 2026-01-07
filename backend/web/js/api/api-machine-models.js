@@ -1,86 +1,155 @@
 /**
- * api-machine-models.js
- * 僅負責「機種」CRUD
+ * Machine Models API Client (v4.x FINAL)
+ *
+ * 原則：
+ * - ❌ 不讀取 currentCustomerId
+ * - ❌ 不讀取 localStorage
+ * - ❌ 不自行組 customer_id query
+ * - ✅ customer context 一律交給 api-config.js
+ * - ✅ 純描述 models API 行為
  */
 
-/* ================= 機種列表 ================= */
-async function apiListMachineModels(params = {}) {
-  const q = new URLSearchParams();
+/* ============================================================
+ * Models List / Query
+ * ============================================================ */
 
-  if (params.customer_id) q.set("customer_id", params.customer_id);
-  if (params.search) q.set("q", params.search);
-  if (params.skip !== undefined) q.set("skip", params.skip);
-  if (params.limit !== undefined) q.set("limit", params.limit);
-
-  return api(`/models?${q.toString()}`);
+/**
+ * 查詢機種列表（分頁 / 搜尋）
+ */
+function apiListMachineModels(params = {}) {
+  return api("/models", {
+    params: {
+      q: params.search,
+      skip: params.skip,
+      limit: params.limit,
+    },
+  });
 }
 
-/* ================= 單一機種 ================= */
-async function apiGetMachineModel(modelId) {
+/* ============================================================
+ * Single Model
+ * ============================================================ */
+
+/**
+ * 取得單一機種
+ */
+function apiGetMachineModel(modelId) {
+  if (!modelId) {
+    throw new Error("apiGetMachineModel: modelId is required");
+  }
   return api(`/models/${encodeURIComponent(modelId)}`);
 }
 
-/* ================= 新增 ================= */
-async function apiCreateMachineModel(payload) {
+/**
+ * 取得機種詳細資料（含關聯）
+ */
+function apiGetModelDetail(modelId) {
+  if (!modelId) {
+    throw new Error("apiGetModelDetail: modelId is required");
+  }
+  return api(`/model-detail/${encodeURIComponent(modelId)}/detail`);
+}
+
+/* ============================================================
+ * Create / Update / Delete
+ * ============================================================ */
+
+/**
+ * 新增機種
+ */
+function apiCreateMachineModel(payload) {
+  if (!payload || typeof payload !== "object") {
+    throw new Error("apiCreateMachineModel: invalid payload");
+  }
+
   return api("/models", {
     method: "POST",
-    body: JSON.stringify(payload),
+    body: payload,
   });
 }
 
-/* ================= 修改 ================= */
-async function apiUpdateMachineModel(modelId, payload) {
+/**
+ * 修改機種
+ */
+function apiUpdateMachineModel(modelId, payload) {
+  if (!modelId) {
+    throw new Error("apiUpdateMachineModel: modelId is required");
+  }
+  if (!payload || typeof payload !== "object") {
+    throw new Error("apiUpdateMachineModel: invalid payload");
+  }
+
   return api(`/models/${encodeURIComponent(modelId)}`, {
     method: "PUT",
-    body: JSON.stringify(payload),
+    body: payload,
   });
 }
 
-/* ================= 刪除 ================= */
-async function apiDeleteMachineModel(modelId) {
+/**
+ * 刪除機種
+ */
+function apiDeleteMachineModel(modelId) {
+  if (!modelId) {
+    throw new Error("apiDeleteMachineModel: modelId is required");
+  }
+
   return api(`/models/${encodeURIComponent(modelId)}`, {
     method: "DELETE",
   });
 }
 
-/* ================= Model Detail ================= */
-async function apiGetModelDetail(modelId) {
-  const customer_id = localStorage.getItem("current_customer_id");
-  return api(`/model-detail/${modelId}/detail`, {
-    params: { customer_id },
-  });
+/* ============================================================
+ * Import / Export
+ * ============================================================ */
+
+/**
+ * 匯出機種（XLSX）
+ * - 使用 window.open
+ * - customer scope 由後端 token / header 決定
+ */
+function apiExportModelsXlsx() {
+  window.open("/api/v2/models/export", "_blank");
 }
 
-function apiExportModelsXlsx(customer_id) {
-  // 直接下載：不要用 fetch，避免 blob 處理麻煩
-  window.open(`/api/v2/models/export?customer_id=${encodeURIComponent(customer_id)}`, "_blank");
-}
-
+/**
+ * 下載機種匯入樣本（XLSX）
+ */
 function apiDownloadModelsTemplate() {
-  window.open(`/api/v2/models/template`, "_blank");
+  window.open("/api/v2/models/template", "_blank");
 }
 
-async function apiImportModelsXlsx(customer_id, file) {
+/**
+ * 匯入機種（XLSX）
+ */
+function apiImportModelsXlsx(file) {
+  if (!file) {
+    throw new Error("apiImportModelsXlsx: file is required");
+  }
+
   const fd = new FormData();
   fd.append("file", file);
 
-  return api(`/models/import`, {
+  return api("/models/import", {
     method: "POST",
-    params: { customer_id },
     body: fd,
-    // ⚠️ 你的 api() 若會預設 JSON header，需讓它偵測 FormData 時不要強塞 Content-Type
+    // FormData 由 api-config.js 正確處理 Content-Type
   });
 }
+
+/* ============================================================
+ * Export to Global
+ * ============================================================ */
+
+window.apiListMachineModels = apiListMachineModels;
+window.apiGetMachineModel = apiGetMachineModel;
+window.apiGetModelDetail = apiGetModelDetail;
+
+window.apiCreateMachineModel = apiCreateMachineModel;
+window.apiUpdateMachineModel = apiUpdateMachineModel;
+window.apiDeleteMachineModel = apiDeleteMachineModel;
 
 window.apiExportModelsXlsx = apiExportModelsXlsx;
 window.apiDownloadModelsTemplate = apiDownloadModelsTemplate;
 window.apiImportModelsXlsx = apiImportModelsXlsx;
 
-
-/* ================= 導出 ================= */
-window.apiListMachineModels = apiListMachineModels;
-window.apiGetMachineModel = apiGetMachineModel;
-window.apiCreateMachineModel = apiCreateMachineModel;
-window.apiUpdateMachineModel = apiUpdateMachineModel;
-window.apiDeleteMachineModel = apiDeleteMachineModel;
-window.apiGetModelDetail = apiGetModelDetail;
+console.log("✅ api-machine-models.js v4.x FINAL loaded");

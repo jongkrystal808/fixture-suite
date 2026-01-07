@@ -1,9 +1,13 @@
 /**
- * API 配置與基礎請求函數 (v4.1 FINAL)
- * - 自動 Token 注入
- * - customer_id：GET 用 query，寫入類用 Header
- * - 自動處理 params / body
- * - 統一錯誤結構
+ * API 配置與基礎請求函數 (v4.x FINAL)
+ *
+ * ✔ 自動注入 Authorization Token
+ * ✔ 自動處理 query / body
+ * ✔ 統一錯誤結構
+ *
+ * ❌ 不處理 customer_id
+ * ❌ 不注入 X-Customer-Id
+ * ❌ 不允許前端影響 customer scope
  */
 
 window.API_BASE = window.API_BASE || "";
@@ -20,30 +24,11 @@ function getToken() {
   return localStorage.getItem("auth_token");
 }
 
-function getCustomerId() {
-  const raw =
-    window.currentCustomerId ||
-    localStorage.getItem("current_customer_id");
-
-  if (!raw) {
-    console.warn("⚠ current_customer_id 尚未設定");
-    return null;
-  }
-
-  // 防止 moxa:1 這種污染值
-  if (typeof raw === "string" && raw.includes(":")) {
-    return raw.split(":")[0];
-  }
-
-  return raw;
-}
-
 /* ============================================================
  * API 主函式
  * ============================================================ */
 function api(path, options = {}) {
   const token = getToken();
-  const customerId = getCustomerId();
 
   // ----------------------------------------
   // 1️⃣ URL + Query Params
@@ -61,19 +46,7 @@ function api(path, options = {}) {
   }
 
   // ----------------------------------------
-  // 2️⃣ 決定是否跳過 customer_id
-  // ----------------------------------------
-  const ignoreCidAlways = [
-    "/auth/",
-    "/customers",
-  ];
-
-  const shouldSkipCid =
-    options.skipCustomerId ||
-    ignoreCidAlways.some(prefix => path.startsWith(prefix));
-
-  // ----------------------------------------
-  // 3️⃣ 決定 HTTP method
+  // 2️⃣ 決定 HTTP method
   // ----------------------------------------
   const hasBody =
     options.body &&
@@ -82,9 +55,8 @@ function api(path, options = {}) {
 
   const method = options.method || (hasBody ? "POST" : "GET");
 
-
   // ----------------------------------------
-  // 5️⃣ Headers
+  // 3️⃣ Headers
   // ----------------------------------------
   const headers = {
     ...(options.headers || {}),
@@ -100,13 +72,8 @@ function api(path, options = {}) {
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  // ⭐ 寫入類 API：customer_id 只走 Header
-  if (!shouldSkipCid && customerId && !headers["X-Customer-Id"]) {
-    headers["X-Customer-Id"] = customerId;
-  }
-
   // ----------------------------------------
-  // 6️⃣ Body 處理
+  // 4️⃣ Body 處理
   // ----------------------------------------
   let body = options.body;
   if (
@@ -126,7 +93,7 @@ function api(path, options = {}) {
   };
 
   // ----------------------------------------
-  // 7️⃣ 發送請求
+  // 5️⃣ 發送請求
   // ----------------------------------------
   return fetch(url.toString(), fetchOptions).then(async res => {
     const text = await res.text();

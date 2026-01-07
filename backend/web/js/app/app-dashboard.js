@@ -102,8 +102,6 @@ async function loadDashboard() {
   }
 }
 
-
-
 /**
  * 渲染庫存表
  */
@@ -132,12 +130,15 @@ function renderDashboardTable(rows) {
   });
 }
 
-
 /**
  * Dashboard 搜尋（治具 / 機種）
  */
 function filterDashboard() {
-  const keyword = document.getElementById("searchDash").value.trim().toLowerCase();
+  const keyword = document
+    .getElementById("searchDash")
+    .value
+    .trim()
+    .toLowerCase();
 
   if (!keyword) {
     renderDashboardTable(_dashboardInventoryCache);
@@ -154,11 +155,12 @@ function filterDashboard() {
 }
 
 // ===============================
-// 初始化：等 user ready 再載入
+// 初始化（v4.x 正確時序）
+// user ready → customer ready → load dashboard
 // ===============================
 onUserReady(() => {
-  console.log("[dashboard] user ready, loading dashboard");
-  loadDashboard();
+  onCustomerReady(() => {
+    console.log("[dashboard] user + customer ready, loading dashboard");
+    loadDashboard();
+  });
 });
-
-
