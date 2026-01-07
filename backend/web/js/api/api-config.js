@@ -82,17 +82,6 @@ function api(path, options = {}) {
 
   const method = options.method || (hasBody ? "POST" : "GET");
 
-  // ----------------------------------------
-  // 4️⃣ GET 才在 query 帶 customer_id
-  // ----------------------------------------
-  if (
-    method === "GET" &&
-    !shouldSkipCid &&
-    customerId &&
-    !url.searchParams.has("customer_id")
-  ) {
-    url.searchParams.set("customer_id", customerId);
-  }
 
   // ----------------------------------------
   // 5️⃣ Headers

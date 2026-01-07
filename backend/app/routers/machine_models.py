@@ -1,38 +1,34 @@
 """
-機種管理 API (v3.0 完整版本)
-Machine Models API (Aligned with DB v3.0 Schema)
-
-變更要點:
-- model_id → id
-- 新增 customer_id
-- 所有查詢都必須過濾 customer_id (多客戶隔離)
+機種管理 API (v4.x - Header-based Customer Context)
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from typing import Optional, List
 from pydantic import BaseModel
+from datetime import datetime
 
-from backend.app.dependencies import get_current_user, get_current_admin
+from backend.app.dependencies import (
+    get_current_user,
+    get_current_admin,
+    get_current_customer_id,
+)
 from backend.app.database import db
 
-from fastapi import APIRouter, Depends, Query, UploadFile, File, HTTPException
 from fastapi.responses import StreamingResponse
 from io import BytesIO
-from openpyxl import Workbook, load_workbook
+from openpyxl import Workbook
 
 router = APIRouter(
     prefix="/models",
     tags=["機種 Machine Models"],
 )
 
-
 # ============================================================
-# Pydantic Schemas
+# Schemas
 # ============================================================
 
 class ModelBase(BaseModel):
-    id: str                        # 機種代碼
-    customer_id: str               # 所屬客戶 (v3.0 新增)
+    id: str
     model_name: str
     note: Optional[str] = None
 
@@ -46,13 +42,15 @@ class ModelUpdate(BaseModel):
     note: Optional[str] = None
 
 
-from datetime import datetime
-
 class ModelResponse(ModelBase):
+    customer_id: str
     created_at: Optional[datetime] = None
 
 
-# ✅ 下載樣本
+# ============================================================
+# Template
+# ============================================================
+
 @router.get("/template", summary="下載機種匯入樣本（XLSX）")
 async def download_models_template(
     user=Depends(get_current_user)
@@ -61,10 +59,7 @@ async def download_models_template(
     ws = wb.active
     ws.title = "models"
 
-    # 欄位：你可以依你 DB 欄位調整
     ws.append(["id", "model_name", "note"])
-
-    # 範例兩筆
     ws.append(["AWK-1137C", "AWK-1137C", "備註示例"])
     ws.append(["EDS-108S", "EDS-108S", ""])
 
@@ -79,10 +74,15 @@ async def download_models_template(
     )
 
 
-# ✅ 匯出（依 customer_id）
+# ============================================================
+# Export
+# ============================================================
+
 @router.get("/export", summary="匯出機種（XLSX）")
-async def export_models_xlsx(customer_id: str = Query(...), user=Depends(get_current_user)):
-    # 你自己的 DB 查詢（請換成你實際 table 欄位）
+async def export_models_xlsx(
+    user=Depends(get_current_user),
+    customer_id: str = Depends(get_current_customer_id),
+):
     rows = db.execute_query(
         """
         SELECT id, model_name, note
@@ -112,21 +112,16 @@ async def export_models_xlsx(customer_id: str = Query(...), user=Depends(get_cur
     )
 
 
-
 # ============================================================
-# List Models (GET)
+# List
 # ============================================================
 
-@router.get("", response_model=List[ModelResponse])
+@router.get("", response_model=List[ModelResponse], summary="查詢機種列表")
 async def list_models(
-    customer_id: str = Query(..., description="客戶 ID"),
     q: Optional[str] = Query(None, description="搜尋 model id 或名稱"),
-    current_user=Depends(get_current_user),
+    user=Depends(get_current_user),
 ):
-    """
-    查詢機種列表 (v3.0)
-    必須提供 customer_id
-    """
+    customer_id = user.customer_id
 
     sql = """
         SELECT *
@@ -138,7 +133,7 @@ async def list_models(
     if q:
         sql += " AND (id LIKE %s OR model_name LIKE %s)"
         like = f"%{q}%"
-        params += [like, like]
+        params.extend([like, like])
 
     sql += " ORDER BY id"
 
@@ -147,82 +142,83 @@ async def list_models(
 
 
 # ============================================================
-# Get Model Detail
+# Get
 # ============================================================
 
-@router.get("/{model_id}", response_model=ModelResponse)
+@router.get("/{model_id}", response_model=ModelResponse, summary="查詢機種")
 async def get_model(
     model_id: str,
-    customer_id: str = Query(...),
-    current_user=Depends(get_current_user)
+    user=Depends(get_current_user)
 ):
-    sql = """
+    customer_id = user.customer_id
+
+    rows = db.execute_query(
+        """
         SELECT *
         FROM machine_models
         WHERE id = %s AND customer_id = %s
-    """
-    rows = db.execute_query(sql, (model_id, customer_id))
+        """,
+        (model_id, customer_id)
+    )
 
     if not rows:
-        raise HTTPException(404, "機種不存在")
+        raise HTTPException(status_code=404, detail="機種不存在")
 
     return ModelResponse(**rows[0])
 
 
 # ============================================================
-# Create Model (POST)
+# Create
 # ============================================================
 
-@router.post("", response_model=ModelResponse)
+@router.post("", response_model=ModelResponse, status_code=status.HTTP_201_CREATED)
 async def create_model(
     data: ModelCreate,
     admin=Depends(get_current_admin)
 ):
-    """
-    建立新機種
-    - 同 customer_id 下 id 必須唯一
-    - customer_id 必須存在
-    """
+    customer_id = admin.customer_id
 
-    # 檢查客戶存在
-    cust = db.execute_query("SELECT id FROM customers WHERE id = %s", (data.customer_id,))
-    if not cust:
-        raise HTTPException(400, "客戶不存在")
-
-    # 檢查機種唯一性
     exists = db.execute_query(
-        "SELECT id FROM machine_models WHERE id=%s AND customer_id = %s",
-        (data.id, data.customer_id)
+        """
+        SELECT id
+        FROM machine_models
+        WHERE id = %s AND customer_id = %s
+        """,
+        (data.id, customer_id)
     )
     if exists:
         raise HTTPException(400, "該客戶下的機種代碼已存在")
 
-    sql = """
+    db.execute_update(
+        """
         INSERT INTO machine_models (id, customer_id, model_name, note)
         VALUES (%s, %s, %s, %s)
-    """
-
-    db.execute_update(
-        sql,
-        (data.id, data.customer_id, data.model_name, data.note)
+        """,
+        (data.id, customer_id, data.model_name, data.note)
     )
 
-    return await get_model(data.id, data.customer_id)
+    return await get_model(data.id, admin)
 
 
 # ============================================================
-# Update Model (PUT)
+# Update
 # ============================================================
 
 @router.put("/{model_id}", response_model=ModelResponse)
 async def update_model(
     model_id: str,
     data: ModelUpdate,
-    customer_id: str = Query(...),
     admin=Depends(get_current_admin),
 ):
+    customer_id = admin.customer_id
+
     # 確認存在
-    await get_model(model_id, customer_id, admin)
+    rows = db.execute_query(
+        "SELECT id FROM machine_models WHERE id=%s AND customer_id=%s",
+        (model_id, customer_id)
+    )
+    if not rows:
+        raise HTTPException(404, "機種不存在")
 
     fields = []
     params = []
@@ -236,36 +232,39 @@ async def update_model(
         params.append(data.note)
 
     if fields:
-        sql = f"""
+        params.extend([model_id, customer_id])
+        db.execute_update(
+            f"""
             UPDATE machine_models
             SET {', '.join(fields)}
             WHERE id=%s AND customer_id=%s
-        """
-        params.append(model_id)
-        params.append(customer_id)
-        db.execute_update(sql, tuple(params))
+            """,
+            tuple(params)
+        )
 
-    return await get_model(model_id, customer_id)
+    return await get_model(model_id, admin)
 
 
 # ============================================================
-# Delete Model (DELETE)
+# Delete
 # ============================================================
 
-@router.delete("/{model_id}", status_code=204)
+@router.delete("/{model_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_model(
     model_id: str,
-    customer_id: str = Query(...),
     admin=Depends(get_current_admin)
 ):
-    sql = """
+    customer_id = admin.customer_id
+
+    affected = db.execute_update(
+        """
         DELETE FROM machine_models
         WHERE id=%s AND customer_id=%s
-    """
-    affected = db.execute_update(sql, (model_id, customer_id))
+        """,
+        (model_id, customer_id)
+    )
 
     if affected == 0:
         raise HTTPException(404, "機種不存在")
 
     return None
-

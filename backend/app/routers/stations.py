@@ -15,6 +15,11 @@ from pydantic import BaseModel
 from datetime import datetime
 from backend.app.dependencies import get_current_admin, get_current_user
 from backend.app.database import db
+from backend.app.models.station import (
+    StationCreate,
+    StationUpdate,
+    StationResponse,
+)
 
 router = APIRouter(
     prefix="/stations",
@@ -23,39 +28,16 @@ router = APIRouter(
 
 
 # ============================================================
-# Pydantic Models
-# ============================================================
-
-class StationBase(BaseModel):
-    id: str                     # 站點代碼 (主鍵)
-    customer_id: str            # 客戶 ID (v3.0 新增)
-    station_name: Optional[str] = None
-    note: Optional[str] = None
-
-
-class StationCreate(StationBase):
-    pass
-
-
-class StationUpdate(BaseModel):
-    station_name: Optional[str] = None
-    note: Optional[str] = None
-
-
-class StationResponse(StationBase):
-    created_at: Optional[datetime] = None
-
-
-# ============================================================
 # 1. 查詢站點列表 (依客戶分隔)
 # ============================================================
 
 @router.get("", response_model=List[StationResponse], summary="查詢站點列表")
 async def list_stations(
-    customer_id: str = Query(..., description="客戶 ID"),
     q: Optional[str] = Query(None, description="搜尋關鍵字"),
     current_user=Depends(get_current_user)
 ):
+    customer_id = current_user.customer_id
+
     sql = """
         SELECT *
         FROM stations
@@ -81,9 +63,10 @@ async def list_stations(
 @router.get("/{station_id}", response_model=StationResponse, summary="查詢站點詳情")
 async def get_station(
     station_id: str,
-    customer_id: str = Query(...),
     current_user=Depends(get_current_user)
 ):
+    customer_id = current_user.customer_id
+
     sql = """
         SELECT *
         FROM stations
@@ -98,34 +81,74 @@ async def get_station(
 
 
 # ============================================================
-# 3. 新增站點
+# 3. 新增站點 (v4.x)
 # ============================================================
 
-@router.post("", response_model=StationResponse, status_code=status.HTTP_201_CREATED, summary="新增站點")
+@router.post(
+    "",
+    response_model=StationResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="新增站點"
+)
 async def create_station(
     data: StationCreate,
     admin=Depends(get_current_admin)
 ):
-    # 檢查客戶是否存在
-    exists_customer = db.execute_query("SELECT id FROM customers WHERE id=%s", (data.customer_id,))
-    if not exists_customer:
-        raise HTTPException(400, "客戶不存在")
+    # ✅ customer 一律來自權限
+    customer_id = admin.customer_id
 
-    # 檢查站點是否已存在（同客戶）
+    # -------------------------------------------------
+    # 1️⃣ 檢查站點是否已存在（同客戶）
+    # -------------------------------------------------
     exists = db.execute_query(
-        "SELECT id FROM stations WHERE id=%s AND customer_id=%s",
-        (data.id, data.customer_id)
+        """
+        SELECT id
+        FROM stations
+        WHERE id = %s AND customer_id = %s
+        """,
+        (data.id, customer_id)
     )
     if exists:
-        raise HTTPException(status_code=400, detail="該客戶下站點代碼已存在")
+        raise HTTPException(
+            status_code=400,
+            detail="該客戶下站點代碼已存在"
+        )
 
+    # -------------------------------------------------
+    # 2️⃣ 插入站點
+    # -------------------------------------------------
     sql = """
-        INSERT INTO stations (id, customer_id, station_name, note)
+        INSERT INTO stations (
+            id,
+            customer_id,
+            station_name,
+            note
+        )
         VALUES (%s, %s, %s, %s)
     """
-    db.execute_update(sql, (data.id, data.customer_id, data.station_name, data.note))
+    db.execute_update(
+        sql,
+        (
+            data.id,
+            customer_id,
+            data.station_name,
+            data.note
+        )
+    )
 
-    return await get_station(data.id, data.customer_id)
+    # -------------------------------------------------
+    # 3️⃣ 回傳新建立的站點
+    # -------------------------------------------------
+    row = db.execute_query(
+        """
+        SELECT *
+        FROM stations
+        WHERE id = %s AND customer_id = %s
+        """,
+        (data.id, customer_id)
+    )[0]
+
+    return StationResponse(**row)
 
 
 # ============================================================
@@ -136,9 +159,9 @@ async def create_station(
 async def update_station(
     station_id: str,
     data: StationUpdate,
-    customer_id: str = Query(...),
     admin=Depends(get_current_admin),
 ):
+    customer_id = admin.customer_id
     # 確認存在
     existing = db.execute_query(
         "SELECT id FROM stations WHERE id = %s AND customer_id = %s",
@@ -169,7 +192,10 @@ async def update_station(
     params.extend([station_id, customer_id])
     db.execute_update(sql, tuple(params))
 
-    return await get_station(station_id, customer_id)
+    return await get_station(
+        station_id=station_id,
+        current_user=admin
+    )
 
 
 # ============================================================
@@ -179,9 +205,9 @@ async def update_station(
 @router.delete("/{station_id}", status_code=status.HTTP_204_NO_CONTENT, summary="刪除站點")
 async def delete_station(
     station_id: str,
-    customer_id: str = Query(...),
     admin=Depends(get_current_admin)
 ):
+    customer_id = admin.customer_id
     sql = """
         DELETE FROM stations
         WHERE id = %s AND customer_id = %s

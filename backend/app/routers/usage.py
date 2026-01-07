@@ -132,7 +132,6 @@ def call_sp_insert_usage(
 # -------------------------------------------------------------
 @router.get("", summary="查詢使用紀錄列表 (v4.0)")
 def list_usage_logs(
-    customer_id: str = Query(...),
     fixture_id: Optional[str] = None,
     serial_number: Optional[str] = None,
     model_id: Optional[str] = None,
@@ -144,7 +143,7 @@ def list_usage_logs(
     limit: int = 100,
     user=Depends(get_current_user),
 ):
-
+    customer_id = user.customer_id
     where = ["ul.customer_id=%s"]
     params = [customer_id]
 
@@ -205,9 +204,9 @@ def list_usage_logs(
 @router.post("", summary="新增使用紀錄（支援 fixture / individual / batch）")
 def create_usage(
     data: Dict[str, Any],
-    customer_id: str = Query(...),
     user=Depends(get_current_user),
 ):
+    customer_id = user.customer_id
     """
     前端 payload（app-usage.js v4.0）預期：
 
@@ -375,9 +374,9 @@ def create_usage(
 @router.get("/{log_id}", summary="取得單筆使用紀錄")
 def get_usage(
     log_id: int,
-    customer_id: str = Query(...),
     user=Depends(get_current_user),
 ):
+    customer_id = user.customer_id
     rows = db.execute_query(
         """
         SELECT 
@@ -409,9 +408,9 @@ def get_usage(
 @router.delete("/{log_id}", summary="刪除使用紀錄（並重算 summary）")
 def delete_usage(
     log_id: int,
-    customer_id: str = Query(...),
     user=Depends(get_current_user),
 ):
+    customer_id = user.customer_id
     # 1. 先查舊資料
     rows = db.execute_query(
         """
@@ -431,7 +430,10 @@ def delete_usage(
     record_level = row.get("record_level")
 
     # 2. 刪除 usage_logs
-    db.execute_update("DELETE FROM usage_logs WHERE id=%s", (log_id,))
+    db.execute_update(
+        "DELETE FROM usage_logs WHERE id=%s AND customer_id=%s",
+        (log_id, customer_id),
+    )
 
     # 3. 重算 fixture_usage_summary（只看 record_level='fixture'）
     agg_fx = db.execute_query(
@@ -523,9 +525,9 @@ def delete_usage(
 @router.get("/summary/{fixture_id}", summary="取得治具使用摘要")
 def get_fixture_summary(
     fixture_id: str,
-    customer_id: str = Query(...),
     user=Depends(get_current_user),
 ):
+    customer_id = user.customer_id
     rows = db.execute_query(
         """
         SELECT *
@@ -554,9 +556,10 @@ def get_fixture_summary(
 @router.get("/serial/{serial_number}", summary="取得序號使用摘要")
 def get_serial_summary(
     serial_number: str,
-    customer_id: str = Query(...),
     user=Depends(get_current_user),
 ):
+    customer_id = user.customer_id
+
     rows = db.execute_query(
         """
         SELECT *

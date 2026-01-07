@@ -1,6 +1,6 @@
 """
-Owners API (v4.0 FINAL)
-治具負責人管理 API（完全正規化 user_id）
+Owners API (v4.0 FINAL - FIXED)
+治具負責人管理 API（user_id 正規化 / 多客戶隔離）
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -52,12 +52,18 @@ async def list_owners(
 
     where_sql = " AND ".join(where)
 
+    base_sql = f"""
+        FROM owners o
+        LEFT JOIN users u1 ON u1.id = o.primary_owner_id
+        LEFT JOIN users u2 ON u2.id = o.secondary_owner_id
+        WHERE {where_sql}
+    """
+
     rows = db.execute_query(
         f"""
         SELECT
             o.id,
             o.customer_id,
-            o.customer_name,
 
             o.primary_owner_id,
             u1.username AS primary_owner_name,
@@ -69,10 +75,7 @@ async def list_owners(
             o.note,
             o.is_active,
             o.created_at
-        FROM owners o
-        JOIN users u1 ON u1.id = o.primary_owner_id
-        LEFT JOIN users u2 ON u2.id = o.secondary_owner_id
-        WHERE {where_sql}
+        {base_sql}
         ORDER BY o.id DESC
         LIMIT %s OFFSET %s
         """,
@@ -80,11 +83,7 @@ async def list_owners(
     )
 
     total = db.execute_query(
-        f"""
-        SELECT COUNT(*) AS total
-        FROM owners o
-        WHERE {where_sql}
-        """,
+        f"SELECT COUNT(*) AS total {base_sql}",
         tuple(params)
     )[0]["total"]
 
@@ -105,8 +104,8 @@ async def owner_simple_list(
         """
         SELECT
             o.id,
-            o.primary_owner_id AS user_id,
-            u.username AS name
+            o.primary_owner_id,
+            u.username AS primary_owner
         FROM owners o
         JOIN users u ON u.id = o.primary_owner_id
         WHERE o.is_active = 1
@@ -126,6 +125,20 @@ async def create_owner(
     admin=Depends(get_current_admin),
     customer_id=Depends(get_current_customer_id),
 ):
+    # primary owner 必須存在
+    if not db.execute_query(
+        "SELECT id FROM users WHERE id=%s",
+        (data.primary_owner_id,)
+    ):
+        raise HTTPException(400, "primary_owner 不存在")
+
+    if data.secondary_owner_id:
+        if not db.execute_query(
+            "SELECT id FROM users WHERE id=%s",
+            (data.secondary_owner_id,)
+        ):
+            raise HTTPException(400, "secondary_owner 不存在")
+
     new_id = db.execute_insert(
         """
         INSERT INTO owners
@@ -164,7 +177,6 @@ async def get_owner(
         SELECT
             o.id,
             o.customer_id,
-            o.customer_name,
 
             o.primary_owner_id,
             u1.username AS primary_owner_name,
@@ -177,7 +189,7 @@ async def get_owner(
             o.is_active,
             o.created_at
         FROM owners o
-        JOIN users u1 ON u1.id = o.primary_owner_id
+        LEFT JOIN users u1 ON u1.id = o.primary_owner_id
         LEFT JOIN users u2 ON u2.id = o.secondary_owner_id
         WHERE o.id = %s
           AND (o.customer_id = %s OR o.customer_id IS NULL)
@@ -204,7 +216,7 @@ async def update_owner(
     params = []
 
     for k, v in data.model_dump(exclude_unset=True).items():
-        fields.append(f"{k} = %s")
+        fields.append(f"{k}=%s")
         params.append(v)
 
     if not fields:
@@ -216,8 +228,8 @@ async def update_owner(
         f"""
         UPDATE owners
         SET {", ".join(fields)}
-        WHERE id = %s
-          AND (customer_id = %s OR customer_id IS NULL)
+        WHERE id=%s
+          AND (customer_id=%s OR customer_id IS NULL)
         """,
         tuple(params)
     )
@@ -239,9 +251,9 @@ async def disable_owner(
     affected = db.execute_update(
         """
         UPDATE owners
-        SET is_active = 0
-        WHERE id = %s
-          AND (customer_id = %s OR customer_id IS NULL)
+        SET is_active=0
+        WHERE id=%s
+          AND (customer_id=%s OR customer_id IS NULL)
         """,
         (owner_id, customer_id)
     )

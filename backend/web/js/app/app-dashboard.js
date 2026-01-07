@@ -153,10 +153,12 @@ function filterDashboard() {
   renderDashboardTable(filtered);
 }
 
-
 // ===============================
-// 初始化：切到儀表板時載入
+// 初始化：等 user ready 再載入
 // ===============================
-document.addEventListener("DOMContentLoaded", () => {
+onUserReady(() => {
+  console.log("[dashboard] user ready, loading dashboard");
   loadDashboard();
 });
+
+

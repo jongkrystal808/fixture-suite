@@ -2192,6 +2192,18 @@
 
             <!-- API 基本設定，如 api()、API_PREFIX、Token 注入、401 處理 -->
             <script src="/js/api/api-config.js"></script>
+
+            <!-- ================================ -->
+            <!-- 🔐 認證 / 使用者相關               -->
+            <!-- ================================ -->
+
+            <!-- 認證 API：/auth/login, /auth/me -->
+            <script src="/js/api/api-auth.js"></script>
+            <!-- 認證與登入 UI 控制（loginModal, doLogin, loadCurrentUser） -->
+            <script src="/js/app/app-auth.js"></script>
+            <script src="/js/app/app-admin.js"></script>
+
+
             <script src="/js/app/app-dashboard.js"></script>
 
             <!-- 共用工具（如果你有在用就保留） -->
@@ -2207,15 +2219,6 @@
             <script src="/js/shared/ui-pagination.js"></script>
 
 
-            <!-- ================================ -->
-            <!-- 🔐 認證 / 使用者相關               -->
-            <!-- ================================ -->
-
-            <!-- 認證 API：/auth/login, /auth/me -->
-            <script src="/js/api/api-auth.js"></script>
-            <!-- 認證與登入 UI 控制（loginModal, doLogin, loadCurrentUser） -->
-            <script src="/js/app/app-auth.js"></script>
-            <script src="/js/app/app-admin.js"></script>
 
 
             <!-- ================================ -->

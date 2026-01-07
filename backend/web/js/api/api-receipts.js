@@ -1,15 +1,13 @@
 /**
  * api-receipts.js (v4.x FINAL)
+ * - Event-based API
+ * - customer_id 一律由後端從登入狀態取得
+ * - 前端不處理 customer
  * - 與 api-returns.js v4.x 完全對齊
- * - customer_id 一律由 Query 傳入
- * - Event-based API（不可刪、無 details）
- * - 匯入 / 匯出使用 fetch + blob
  */
 
-
-
 /* ============================================================
- * LIST：查詢收料（v4.x）
+ * LIST：查詢收料
  * GET /receipts
  * ============================================================ */
 async function apiListReceipts(params = {}) {
@@ -34,24 +32,22 @@ async function apiListReceipts(params = {}) {
 }
 
 /* ============================================================
- * GET：取得單筆收料（v4.x）
+ * GET：取得單筆收料
+ * GET /receipts/{id}
  * ============================================================ */
 async function apiGetReceipt(id) {
-  const customer_id = _getCustomerId();
   return api(`/receipts/${encodeURIComponent(id)}`);
-
 }
 
 /* ============================================================
- * POST：新增收料（v4.x）
+ * POST：新增收料
+ * POST /receipts
  * ============================================================ */
 async function apiCreateReceipt(payload) {
-  const customer_id = _getCustomerId();
-
-      return api(`/receipts`, {
-      method: "POST",
-      body: payload
-    });
+  return api(`/receipts`, {
+    method: "POST",
+    body: payload
+  });
 }
 
 /* ============================================================
@@ -62,11 +58,13 @@ async function apiImportReceiptsXlsx(file) {
   const form = new FormData();
   form.append("file", file);
 
-  const customer_id = _getCustomerId();
   const token = localStorage.getItem("auth_token");
   const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
-  const url = new URL(apiURL("/receipts/import"), window.location.origin);
+  const url = new URL(
+    apiURL("/receipts/import"),
+    window.location.origin
+  );
 
   const res = await fetch(url.toString(), {
     method: "POST",
@@ -88,7 +86,6 @@ async function apiImportReceiptsXlsx(file) {
  * ============================================================ */
 async function apiExportReceiptXlsx(receiptId) {
   const token = localStorage.getItem("auth_token");
-  const customer_id = _getCustomerId();
   const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
   const url = new URL(

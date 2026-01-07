@@ -173,7 +173,7 @@ async def reset_password(user_id: int, data: dict, user=Depends(get_current_admi
 
     hashed = hash_password(new_pwd)
 
-    sql = "UPDATE users SET password=%s WHERE id=%s"
+    sql = "UPDATE users SET password_hash=%s WHERE id=%s"
     db.execute_update(sql, (hashed, user_id))
 
     return {"message": "密碼已更新"}

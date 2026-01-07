@@ -121,58 +121,74 @@ window.__activeOverlayCloser = null;
       // 4) 更新 hash
       if (options.updateHash) setHash(tabKey);
 
-      // 5) 載資料
-      try {
-          switch (tabKey) {
+        // 5) 載資料（⚠️ 一律等 user ready）
+        try {
+            switch (tabKey) {
 
-              // ★ Dashboard：每次切換都重新載入
-              case "dashboard":
-                  if (typeof window.loadDashboard === "function") {
-                      window.loadDashboard();
-                  }
-                  break;
+                // ★ Dashboard：每次切換都重新載入
+                case "dashboard":
+                    if (typeof window.loadDashboard === "function") {
+                        onUserReady(() => {
+                            window.loadDashboard();
+                        });
+                    }
+                    break;
 
-              // 其他頁面：只載一次
-              case "receipts":
-              case "query":
-              case "logs":
-              case "stats":
-              case "admin":
-                  if (!loadedFlags[tabKey]) {
-                      loadedFlags[tabKey] = true;
+                // 其他頁面：只載一次
+                case "receipts":
+                case "query":
+                case "logs":
+                case "stats":
+                case "admin":
+                    if (!loadedFlags[tabKey]) {
+                        loadedFlags[tabKey] = true;
 
-                      switch (tabKey) {
-                          case "receipts":
-                              if (typeof window.loadReceipts === "function") window.loadReceipts();
-                              break;
+                        onUserReady(() => {
+                            switch (tabKey) {
 
-                          case "query":
-                              if (typeof window.loadFixturesQuery === "function") window.loadFixturesQuery();
-                              break;
+                                case "receipts":
+                                    if (typeof window.loadReceipts === "function") {
+                                        window.loadReceipts();
+                                    }
+                                    break;
 
-                          case "logs":
-                              if (typeof window.loadUsageLogs === "function") window.loadUsageLogs();
-                              if (typeof window.loadReplacementLogs === "function") window.loadReplacementLogs();
-                              break;
+                                case "query":
+                                    if (typeof window.loadFixturesQuery === "function") {
+                                        window.loadFixturesQuery();
+                                    }
+                                    break;
 
-                          case "stats":
-                              if (typeof window.loadStats === "function") window.loadStats();
-                              break;
+                                case "logs":
+                                    if (typeof window.loadUsageLogs === "function") {
+                                        window.loadUsageLogs();
+                                    }
+                                    if (typeof window.loadReplacementLogs === "function") {
+                                        window.loadReplacementLogs();
+                                    }
+                                    break;
 
-                          case "admin":
-                              // ✅ 預設顯示「治具管理」
-                              switchAdminPage("fixtures");
-                              if (typeof window.loadCustomers === "function") {
-                                  window.loadCustomers();
-                              }
-                              break;
-                      }
-                  }
-                  break;
-          }
-      } catch (e) {
-          console.warn("init tab error:", tabKey, e);
-      }
+                                case "stats":
+                                    if (typeof window.loadStats === "function") {
+                                        window.loadStats();
+                                    }
+                                    break;
+
+                                case "admin":
+                                    // ✅ 預設顯示「治具管理」
+                                    switchAdminPage("fixtures");
+                                    if (typeof window.loadCustomers === "function") {
+                                        window.loadCustomers();
+                                    }
+                                    break;
+                            }
+                        });
+                    }
+                    break;
+            }
+        } catch (e) {
+            console.warn("init tab error:", tabKey, e);
+        }
+
   }
 
   // 監聽 tab 按鈕

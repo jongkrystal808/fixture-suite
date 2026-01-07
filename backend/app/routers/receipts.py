@@ -1,7 +1,7 @@
 """
-收料 Receipts Router (v4.x)
+收料 Receipts Router (v4.x FIXED)
 - SP-first 架構
-- Router 只負責參數轉接與權限
+- Router 僅負責參數轉接 / 權限 / record_type 分流
 """
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -36,7 +36,7 @@ def ensure_fixture_exists(fixture_id: str, customer_id: str):
 
 
 # ============================================================
-# 列表（v4.x / 無 JOIN / subquery only）
+# 查詢收料紀錄
 # GET /receipts
 # ============================================================
 
@@ -107,15 +107,15 @@ def list_receipts(
             t.order_no,
             t.operator,
             t.note,
-            t.created_at,
             t.source_type,
+            t.created_at,
 
             CASE
               WHEN t.record_type = 'datecode'
                 THEN (
-                  SELECT SUM(i.quantity)
-                  FROM material_transaction_items i
-                  WHERE i.transaction_id = t.id
+                  SELECT SUM(fd.quantity)
+                  FROM fixture_datecode_transactions fd
+                  WHERE fd.transaction_id = t.id
                 )
               ELSE (
                   SELECT COUNT(*)
@@ -133,7 +133,11 @@ def list_receipts(
     rows = db.execute_query(sql, tuple(params + [limit, skip]))
 
     total = db.execute_query(
-        f"SELECT COUNT(*) AS cnt FROM material_transactions t WHERE {where_sql}",
+        f"""
+        SELECT COUNT(*) AS cnt
+        FROM material_transactions t
+        WHERE {where_sql}
+        """,
         tuple(params),
     )[0]["cnt"]
 
@@ -167,9 +171,9 @@ def get_receipt(
             source_type,
             created_at
         FROM material_transactions
-        WHERE id = %s
-          AND customer_id = %s
-          AND transaction_type = 'receipt'
+        WHERE id=%s
+          AND customer_id=%s
+          AND transaction_type='receipt'
         """,
         (receipt_id, customer_id),
     )
@@ -181,7 +185,7 @@ def get_receipt(
 
 
 # ============================================================
-# 新增收料（SP v4.x）
+# 新增收料（SP）
 # POST /receipts
 # ============================================================
 
@@ -194,9 +198,9 @@ def create_receipt(
 
     fixture_id = data.fixture_id
     order_no = data.order_no
-    operator = data.operator or user["username"]
+    operator = data.operator or user.username
     note = data.note
-    created_by = user["id"]
+    created_by = user.id
 
     record_type = data.record_type.value
     source_type = data.source_type.value
@@ -206,10 +210,16 @@ def create_receipt(
     quantity = None
 
     if record_type in ("batch", "individual"):
+        if not data.serials:
+            raise HTTPException(400, "序號模式必須提供 serials")
         serials_csv = ",".join(data.serials)
-    else:
+    elif record_type == "datecode":
+        if not data.datecode or data.quantity is None:
+            raise HTTPException(400, "datecode 模式需提供 datecode 與 quantity")
         datecode = data.datecode
         quantity = data.quantity
+    else:
+        raise HTTPException(400, f"不支援的 record_type: {record_type}")
 
     ensure_fixture_exists(fixture_id, customer_id)
 
@@ -266,7 +276,7 @@ def create_receipt(
 
 
 # ============================================================
-# 匯出單筆收料 XLSX
+# 匯出收料 XLSX
 # GET /receipts/{id}/export
 # ============================================================
 
@@ -279,11 +289,11 @@ def export_receipt_xlsx(
 
     rows = db.execute_query(
         """
-        SELECT id, record_type, fixture_id, order_no, created_at
+        SELECT id, record_type, fixture_id
         FROM material_transactions
-        WHERE id = %s
-          AND customer_id = %s
-          AND transaction_type = 'receipt'
+        WHERE id=%s
+          AND customer_id=%s
+          AND transaction_type='receipt'
         """,
         (receipt_id, customer_id),
     )
@@ -304,7 +314,7 @@ def export_receipt_xlsx(
             """
             SELECT serial_number
             FROM material_transaction_items
-            WHERE transaction_id = %s
+            WHERE transaction_id=%s
             ORDER BY serial_number
             """,
             (receipt_id,),
@@ -314,21 +324,20 @@ def export_receipt_xlsx(
 
     elif record_type == "datecode":
         ws.append(["Fixture ID", "Datecode", "Quantity"])
-        item = db.execute_query(
+        items = db.execute_query(
             """
             SELECT datecode, quantity
-            FROM material_transaction_items
-            WHERE transaction_id = %s
+            FROM fixture_datecode_transactions
+            WHERE transaction_id=%s
             """,
             (receipt_id,),
         )
-        if item:
+        for i in items:
             ws.append([
                 receipt["fixture_id"],
-                item[0]["datecode"],
-                item[0]["quantity"],
+                i["datecode"],
+                i["quantity"],
             ])
-
     else:
         raise HTTPException(400, f"未知的 record_type: {record_type}")
 
@@ -336,14 +345,12 @@ def export_receipt_xlsx(
     wb.save(stream)
     stream.seek(0)
 
-    filename = f"receipt_{receipt_id}.xlsx"
-
     return StreamingResponse(
         stream,
         media_type=(
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         ),
         headers={
-            "Content-Disposition": f'attachment; filename="{filename}"'
+            "Content-Disposition": f'attachment; filename="receipt_{receipt_id}.xlsx"'
         },
     )

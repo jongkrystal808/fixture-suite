@@ -1,14 +1,12 @@
 """
-收料 Excel 匯入 Router（乾淨版）
-- 僅保留一個 /receipts/import
+收料 Excel 匯入 Router（v4.x FIXED）
+- SP-first
 - 支援 batch / individual / datecode
-- customer_id 一律由 Query 傳入
-- 使用同一 DB connection 取得 SP OUT 參數
 """
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Query
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 import pandas as pd
-from io import BytesIO   # ⭐ FIX：一定要用 BytesIO
+from io import BytesIO
 
 from backend.app.database import db
 from backend.app.dependencies import get_current_user
@@ -16,22 +14,41 @@ from backend.app.dependencies import get_current_user
 router = APIRouter(prefix="/receipts", tags=["Receipts Import"])
 
 
+# ============================================================
+# Helper
+# ============================================================
+
+def ensure_fixture_exists(fixture_id: str, customer_id: str):
+    row = db.execute_query(
+        "SELECT id FROM fixtures WHERE id=%s AND customer_id=%s",
+        (fixture_id, customer_id)
+    )
+    if not row:
+        raise ValueError(f"治具 {fixture_id} 不存在或不屬於此客戶")
+
+
+# ============================================================
+# Excel 匯入
+# ============================================================
+
 @router.post("/import", summary="收料 Excel 匯入")
 async def import_receipts(
     file: UploadFile = File(...),
-    user=Depends(get_current_user)
+    user=Depends(get_current_user),
 ):
     customer_id = user.customer_id
+    operator = user.username
+    created_by = user.id
+
     if not file.filename.lower().endswith(".xlsx"):
         raise HTTPException(400, "請使用 .xlsx 檔案匯入")
 
     try:
-        content = await file.read()
-        df = pd.read_excel(BytesIO(content))
+        df = pd.read_excel(BytesIO(await file.read()))
     except Exception as e:
-        raise HTTPException(400, f"Excel 讀取失敗：{str(e)}")
+        raise HTTPException(400, f"Excel 讀取失敗：{e}")
 
-    required_cols = ["fixture_id", "record_type"]
+    required_cols = ["fixture_id", "record_type", "source_type"]
     missing = [c for c in required_cols if c not in df.columns]
     if missing:
         raise HTTPException(400, f"缺少必要欄位：{missing}")
@@ -39,82 +56,74 @@ async def import_receipts(
     total_created = 0
     errors = []
 
-    operator = user["username"]
-    created_by = user["id"]
-
     conn = db.get_conn()
-
     try:
         cursor = conn.cursor()
 
         for idx, row in df.iterrows():
             row_no = idx + 2
-
             try:
+                # -------------------------
+                # 基本欄位
+                # -------------------------
                 fixture_id = str(row.get("fixture_id", "")).strip()
-                if not fixture_id:
-                    errors.append(f"第 {row_no} 行：缺少 fixture_id")
-                    continue
-
-                order_no = str(row.get("order_no", "")).strip()
-                note = str(row.get("note", "")).strip()
-
                 record_type = str(row.get("record_type", "")).strip().lower()
-                if record_type not in ["batch", "individual", "datecode"]:
-                    errors.append(f"第 {row_no} 行：record_type 不合法")
-                    continue
+                source_type = str(row.get("source_type", "")).strip()
 
+                if not fixture_id:
+                    raise ValueError("fixture_id 不可為空")
+
+                if record_type not in ("batch", "individual", "datecode"):
+                    raise ValueError("record_type 不合法")
+
+                if source_type not in ("self_purchased", "customer_supplied"):
+                    raise ValueError("source_type 不合法")
+
+                # 檢查治具存在
+                ensure_fixture_exists(fixture_id, customer_id)
+
+                order_no = str(row.get("order_no", "")).strip() or None
+                note = str(row.get("note", "")).strip() or None
+
+                serials_csv = None
                 datecode = None
-                serials_str = ""
+                quantity = None
 
-                # ---------- batch ----------
-                if record_type == "batch":
-                    try:
-                        start = int(row.get("serial_start"))
-                        end = int(row.get("serial_end"))
-                        if start > end:
-                            raise ValueError
-                        serials_str = ",".join(
-                            str(i) for i in range(start, end + 1)
-                        )
-                    except Exception:
-                        errors.append(f"第 {row_no} 行：batch 序號範圍錯誤")
-                        continue
-
-                # ---------- individual ----------
-                elif record_type == "individual":
-                    raw = str(row.get("serials", "")).strip()
+                # -------------------------
+                # record_type 分流
+                # -------------------------
+                if record_type in ("batch", "individual"):
+                    raw = str(row.get("serials", "") or "").strip()
                     serials = [s.strip() for s in raw.split(",") if s.strip()]
                     if not serials:
-                        errors.append(f"第 {row_no} 行：individual serials 無效")
-                        continue
-                    serials_str = ",".join(serials)
+                        raise ValueError("serials 無效")
+                    serials_csv = ",".join(serials)
 
-                # ---------- datecode ----------
-                else:
+                else:  # datecode
                     datecode = str(row.get("datecode", "")).strip()
-                    quantity = row.get("quantity")
+                    q = row.get("quantity")
 
                     if not datecode:
-                        errors.append(f"第 {row_no} 行：datecode 缺少 datecode")
-                        continue
+                        raise ValueError("datecode 不可為空")
 
-                    try:
-                        quantity = int(quantity)
-                        if quantity <= 0:
-                            raise ValueError
-                    except Exception:
-                        errors.append(f"第 {row_no} 行：datecode quantity 錯誤")
-                        continue
+                    if q is None or pd.isna(q):
+                        raise ValueError("quantity 不可為空")
 
-                    serials_str = str(quantity)
+                    quantity = int(q)
+                    if quantity <= 0:
+                        raise ValueError("quantity 必須 > 0")
 
-                # ---------- 呼叫 v4.x SP ----------
+                # -------------------------
+                # CALL SP
+                # -------------------------
                 cursor.execute(
                     """
                     CALL sp_material_receipt(
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        @tx_id, @msg
+                        %s,%s,%s,%s,%s,%s,
+                        %s,%s,
+                        %s,
+                        %s,%s,
+                        @tx_id,@msg
                     )
                     """,
                     (
@@ -125,24 +134,23 @@ async def import_receipts(
                         note,
                         created_by,
                         record_type,
+                        source_type,
+                        serials_csv,
                         datecode,
-                        serials_str
-                    )
+                        quantity,
+                    ),
                 )
 
-                cursor.execute("SELECT @tx_id AS id, @msg AS msg")
-                out = cursor.fetchone()
+                cursor.execute("SELECT @tx_id, @msg")
+                tx_id, msg = cursor.fetchone()
 
-                if not out or not out[0]:
-                    errors.append(
-                        f"第 {row_no} 行：{out[1] if out else '收料失敗'}"
-                    )
-                    continue
+                if not tx_id:
+                    raise ValueError(msg or "收料失敗")
 
                 total_created += 1
 
             except Exception as e:
-                errors.append(f"第 {row_no} 行：{str(e)}")
+                errors.append(f"第 {row_no} 行：{e}")
 
         conn.commit()
 
@@ -151,5 +159,5 @@ async def import_receipts(
 
     return {
         "count": total_created,
-        "errors": errors
+        "errors": errors,
     }

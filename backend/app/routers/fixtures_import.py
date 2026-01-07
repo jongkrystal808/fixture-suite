@@ -1,26 +1,29 @@
 """
-治具 Excel 匯入 Router（乾淨版）
-- 僅保留一個 /fixtures/import
+治具 Excel 匯入 Router（Step1 最終版）
+- 單一路徑 /fixtures/import
+- Header-based customer context
 - 支援新增 / 更新
-- 使用同一 DB connection
-- 明確回傳 imported / updated / skipped / errors
+- 回傳 imported / updated / skipped / errors
 """
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Query
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from openpyxl import load_workbook
 from io import BytesIO
 
 from backend.app.database import db
-from backend.app.dependencies import get_current_user
+from backend.app.dependencies import (
+    get_current_user,
+    get_current_customer_id,
+)
 
 router = APIRouter(prefix="/fixtures", tags=["Fixtures Import"])
 
 
 @router.post("/import", summary="匯入治具（XLSX）")
 async def import_fixtures_xlsx(
-    customer_id: str = Query(...),
     file: UploadFile = File(...),
-    user=Depends(get_current_user)
+    user=Depends(get_current_user),
+    customer_id: str = Depends(get_current_customer_id),
 ):
     # =================================================
     # 1️⃣ 基本檢查
@@ -40,7 +43,7 @@ async def import_fixtures_xlsx(
     ws = wb["fixtures"]
 
     # =================================================
-    # 2️⃣ Header 檢查（彈性但完整）
+    # 2️⃣ Header 檢查
     # =================================================
     header = [str(c.value).strip() if c.value else "" for c in ws[1]]
     required = [
@@ -72,10 +75,9 @@ async def import_fixtures_xlsx(
     errors = []
 
     conn = db.get_conn()
+    cursor = conn.cursor()
 
     try:
-        cursor = conn.cursor()
-
         # =================================================
         # 4️⃣ 逐行處理
         # =================================================
@@ -94,9 +96,10 @@ async def import_fixtures_xlsx(
                 fixture_type = row[idx["fixture_type"]] or ""
                 storage_location = row[idx["storage_location"]] or ""
                 replacement_cycle = row[idx["replacement_cycle"]]
-                cycle_unit = row[idx["cycle_unit"]] or "uses"
+                cycle_unit = (row[idx["cycle_unit"]] or "uses").lower()
                 note = row[idx["note"]] or ""
 
+                # ---------- status 正規化 ----------
                 raw_status = str(row[idx["status"]] or "").strip().lower()
                 status_map = {
                     "normal": "normal",
@@ -112,8 +115,13 @@ async def import_fixtures_xlsx(
                     errors.append(f"第 {row_no} 行：status 不合法")
                     continue
 
+                # ---------- cycle_unit 合法化 ----------
+                if cycle_unit not in ("uses", "days", "none"):
+                    errors.append(f"第 {row_no} 行：cycle_unit 不合法")
+                    continue
+
                 # -----------------------------
-                # 檢查是否存在
+                # 是否存在
                 # -----------------------------
                 cursor.execute(
                     "SELECT id FROM fixtures WHERE customer_id=%s AND id=%s",
@@ -122,7 +130,7 @@ async def import_fixtures_xlsx(
                 exist = cursor.fetchone()
 
                 # -----------------------------
-                # 更新 or 新增
+                # 更新 / 新增
                 # -----------------------------
                 if exist:
                     cursor.execute(
@@ -185,18 +193,20 @@ async def import_fixtures_xlsx(
                 errors.append(f"第 {row_no} 行：{str(e)}")
 
         # =================================================
-        # 5️⃣ Commit（一定在 try 裡）
+        # 5️⃣ Commit
         # =================================================
         conn.commit()
 
+    except Exception:
+        conn.rollback()
+        raise
+
     finally:
-        # =================================================
-        # 6️⃣ 關閉連線（一定會執行）
-        # =================================================
+        cursor.close()
         conn.close()
 
     # =================================================
-    # 7️⃣ 回傳結果
+    # 6️⃣ 回傳結果
     # =================================================
     return {
         "message": "匯入完成",

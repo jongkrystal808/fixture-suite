@@ -1,14 +1,13 @@
 /**
  * api-returns.js (v4.x FINAL)
+ * - Event-based API
+ * - customer_id 一律由後端從登入狀態取得
+ * - 前端不處理 customer
  * - 與 api-receipts.js v4.x 完全同構
- * - Event-based（不可刪）
- * - customer_id 一律 Query
- * - 匯入 / 匯出使用 fetch + blob
  */
 
-
 /* ============================================================
- * LIST：查詢退料（v4.x）
+ * LIST：查詢退料
  * GET /returns
  * ============================================================ */
 async function apiListReturns(params = {}) {
@@ -33,19 +32,18 @@ async function apiListReturns(params = {}) {
 }
 
 /* ============================================================
- * GET：取得單筆退料（v4.x）
+ * GET：取得單筆退料
+ * GET /returns/{id}
  * ============================================================ */
 async function apiGetReturn(id) {
-  const customer_id = _getCustomerId();
   return api(`/returns/${encodeURIComponent(id)}`);
 }
 
 /* ============================================================
- * POST：新增退料（v4.x）
+ * POST：新增退料
+ * POST /returns
  * ============================================================ */
 async function apiCreateReturn(payload) {
-  const customer_id = _getCustomerId();
-
   return api(`/returns`, {
     method: "POST",
     body: payload
@@ -60,11 +58,13 @@ async function apiImportReturnsXlsx(file) {
   const form = new FormData();
   form.append("file", file);
 
-  const customer_id = _getCustomerId();
   const token = localStorage.getItem("auth_token");
   const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
-  const url = new URL(apiURL("/returns/import"), window.location.origin);
+  const url = new URL(
+    apiURL("/returns/import"),
+    window.location.origin
+  );
 
   const res = await fetch(url.toString(), {
     method: "POST",
@@ -86,7 +86,6 @@ async function apiImportReturnsXlsx(file) {
  * ============================================================ */
 async function apiExportReturnXlsx(returnId) {
   const token = localStorage.getItem("auth_token");
-  const customer_id = _getCustomerId();
   const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
   const url = new URL(
