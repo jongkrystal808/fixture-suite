@@ -53,7 +53,8 @@ class ModelResponse(ModelBase):
 
 @router.get("/template", summary="下載機種匯入樣本（XLSX）")
 async def download_models_template(
-    user=Depends(get_current_user)
+    user=Depends(get_current_user),
+    customer_id: str = Depends(get_current_customer_id),
 ):
     wb = Workbook()
     ws = wb.active
@@ -120,8 +121,8 @@ async def export_models_xlsx(
 async def list_models(
     q: Optional[str] = Query(None, description="搜尋 model id 或名稱"),
     user=Depends(get_current_user),
+    customer_id: str = Depends(get_current_customer_id),
 ):
-    customer_id = user.customer_id
 
     sql = """
         SELECT *
@@ -148,9 +149,9 @@ async def list_models(
 @router.get("/{model_id}", response_model=ModelResponse, summary="查詢機種")
 async def get_model(
     model_id: str,
-    user=Depends(get_current_user)
+    user=Depends(get_current_user),
+    customer_id: str = Depends(get_current_customer_id),
 ):
-    customer_id = user.customer_id
 
     rows = db.execute_query(
         """

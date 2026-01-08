@@ -69,6 +69,22 @@ window.__activeOverlayCloser = null;
   }
 
   function showTab(tabKey, options = { updateHash: true }) {
+
+  // =====================================================
+  // 🚫 v4.x 防呆：showTab 只處理「主分頁」
+  // 收料/退料/查詢子分頁一律不在這裡處理
+  // =====================================================
+  if (
+    tabKey.startsWith("rtab-") ||
+    tabKey === "viewSerialTab" ||
+    tabKey === "viewAllTab"
+  ) {
+    console.warn("[showTab] ignore subtab:", tabKey);
+    return;
+  }
+
+  // ⬇️ 原本的 showTab 程式碼完全不動
+
     if (!TAB_CONFIG[tabKey]) tabKey = "dashboard";
     if (currentTab === tabKey) return;
 

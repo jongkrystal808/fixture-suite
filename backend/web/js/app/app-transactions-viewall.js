@@ -14,10 +14,10 @@ function renderViewAllTable(rows) {
 
   tbody.innerHTML = "";
 
-  if (!rows || rows.length === 0) {
+  if (!Array.isArray(rows) || rows.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="10" class="text-center py-4 text-gray-500">無資料</td>
+        <td colspan="8" class="text-center py-4 text-gray-500">無資料</td>
       </tr>
     `;
     return;
@@ -25,52 +25,49 @@ function renderViewAllTable(rows) {
 
   rows.forEach(r => {
     // -----------------------------
-    // 類型文字
+    // 日期（只顯示日期）
     // -----------------------------
-    const typeText = r.transaction_type === "receipt" ? "收料" : "退料";
+    const txDate = r.transaction_date
+      ? new Date(r.transaction_date).toLocaleDateString("zh-TW")
+      : "-";
 
     // -----------------------------
-    // 來源文字
+    // 交易類型（收 / 退）
     // -----------------------------
-    const sourceText =
-      r.source_type === "self_purchased"
-        ? "自購"
-        : (r.source_type === "customer_supplied" ? "客供" : "-");
+    const typeText =
+      r.transaction_type === "receipt" ? "收料" :
+      r.transaction_type === "return"  ? "退料" : "-";
 
     // -----------------------------
-    // 數量顯示（★你原本已修正，保留）
+    // 數量 / Datecode 顯示（v4.x 規則）
     // -----------------------------
     let qtyText = "-";
-    if (r.record_type === "datecode") {
-      qtyText = `${r.datecode || "-"}（${r.quantity || 0} 件）`;
-    } else {
-      qtyText = `${r.quantity || 0} 個`;
-    }
+    const qty = Math.abs(Number(r.quantity) || 0);
 
-    // ✅ 修正：transaction_date 顯示更穩定（若本來就是字串也不會炸）
-    const txDate = r.transaction_date
-      ? (isNaN(Date.parse(r.transaction_date))
-          ? r.transaction_date
-          : new Date(r.transaction_date).toLocaleString())
-      : "-";
+    if (r.record_type === "datecode") {
+      // v4.x：datecode 存在 order_no
+      const datecode = r.order_no || "-";
+      qtyText = `${datecode}（${qty} 件）`;
+    } else {
+      // batch / individual
+      qtyText = `${qty} 件`;
+    }
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${txDate}</td>
       <td>${typeText}</td>
       <td>${r.fixture_id || "-"}</td>
-      <td>${r.customer_id || "-"}</td>
-      <td>${sourceText}</td>
       <td>${r.record_type || "-"}</td>
       <td>${r.order_no || "-"}</td>
       <td>${qtyText}</td>
       <td>${r.operator || "-"}</td>
       <td>${r.note || "-"}</td>
     `;
+
     tbody.appendChild(tr);
   });
 }
-
 
 // ============================================================
 // 收料 / 退料 / 序號檢視 / 總檢視 TAB 切換控制（保留你原寫法）
@@ -109,8 +106,6 @@ window.showTab = showTab;
 
 
 async function exportSummary() {
-  const customer = getCurrentCustomerId();
-  const token = localStorage.getItem("auth_token");
 
   // 取得查詢欄位
   const fixtureId = document.getElementById("vaFixture").value.trim();
@@ -120,7 +115,6 @@ async function exportSummary() {
 
   // ★ 組查詢參數（和 loadTransactionViewAll 完全一致）
   const params = new URLSearchParams({
-    customer_id: customer,
     type: "summary",
   });
 
@@ -131,9 +125,7 @@ async function exportSummary() {
 
   const url = `${API_PREFIX}/transactions/summary/export?${params.toString()}`;
 
-  const res = await fetch(url, {
-    headers: { "Authorization": `Bearer ${token}` }
-  });
+  const res = await api(url.replace(API_PREFIX, ""));
 
   if (!res.ok) {
     return toast("匯出失敗: " + res.status);
@@ -190,13 +182,11 @@ window.exportSummaryDetailed = exportSummaryDetailed;
 
 
 function loadTransactionViewAll(page = 1) {
-  const customer_id = getCurrentCustomerId();
-  if (!customer_id) return;
+  if (!window.currentCustomerId) return;
 
   const pageSize = 20;
 
   const params = {
-    customer_id,
     skip: (page - 1) * pageSize,
     limit: pageSize,
   };

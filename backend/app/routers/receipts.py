@@ -1,7 +1,8 @@
 """
-收料 Receipts Router (v4.x FIXED)
+收料 Receipts Router (v4.x FINAL)
 - SP-first 架構
-- Router 僅負責參數轉接 / 權限 / record_type 分流
+- customer 由 X-Customer-Id 決定
+- quantity = 當次收料數量（方案 A）
 """
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,7 +11,10 @@ from datetime import datetime
 import io
 
 from backend.app.database import db
-from backend.app.dependencies import get_current_user
+from backend.app.dependencies import (
+    get_current_user,
+    get_current_customer_id,
+)
 from backend.app.models.transaction import TransactionCreate
 
 from openpyxl import Workbook
@@ -51,10 +55,8 @@ def list_receipts(
     serial: Optional[str] = None,
     skip: int = 0,
     limit: int = 50,
-    user=Depends(get_current_user),
+    customer_id: str = Depends(get_current_customer_id),
 ):
-    customer_id = user.customer_id
-
     where = [
         "t.transaction_type = 'receipt'",
         "t.customer_id = %s",
@@ -78,11 +80,11 @@ def list_receipts(
         params.append(record_type)
 
     if date_from:
-        where.append("t.transaction_date >= %s")
+        where.append("t.created_at >= %s")
         params.append(date_from)
 
     if date_to:
-        where.append("t.transaction_date <= %s")
+        where.append("t.created_at <= %s")
         params.append(date_to)
 
     if serial:
@@ -101,33 +103,34 @@ def list_receipts(
 
     sql = f"""
         SELECT
-            t.id,
-            t.record_type,
-            t.fixture_id,
-            t.order_no,
-            t.operator,
-            t.note,
-            t.source_type,
-            t.created_at,
+    t.id,
+    t.record_type,
+    t.fixture_id,
+    t.order_no,
+    t.operator,
+    t.note,
+    t.source_type,
+    t.created_at,
+    t.quantity,
 
-            CASE
-              WHEN t.record_type = 'datecode'
-                THEN (
-                  SELECT SUM(fd.quantity)
-                  FROM fixture_datecode_transactions fd
-                  WHERE fd.transaction_id = t.id
-                )
-              ELSE (
-                  SELECT COUNT(*)
-                  FROM material_transaction_items i
-                  WHERE i.transaction_id = t.id
-              )
-            END AS quantity
+    /* ⭐ 只在 datecode 時抓 datecode */
+    CASE
+          WHEN t.record_type = 'datecode' THEN (
+            SELECT fdt.datecode
+            FROM fixture_datecode_transactions fdt
+            WHERE fdt.transaction_id = t.id
+              AND fdt.transaction_type = 'receipt'
+            ORDER BY fdt.id ASC
+            LIMIT 1
+          )
+          ELSE NULL
+        END AS datecode
+    
+    FROM material_transactions t
+    WHERE {where_sql}
+    ORDER BY t.created_at DESC, t.id DESC
+    LIMIT %s OFFSET %s
 
-        FROM material_transactions t
-        WHERE {where_sql}
-        ORDER BY t.created_at DESC, t.id DESC
-        LIMIT %s OFFSET %s
     """
 
     rows = db.execute_query(sql, tuple(params + [limit, skip]))
@@ -155,10 +158,8 @@ def list_receipts(
 @router.get("/{receipt_id}", summary="取得收料單")
 def get_receipt(
     receipt_id: int,
-    user=Depends(get_current_user),
+    customer_id: str = Depends(get_current_customer_id),
 ):
-    customer_id = user.customer_id
-
     rows = db.execute_query(
         """
         SELECT
@@ -169,7 +170,8 @@ def get_receipt(
             operator,
             note,
             source_type,
-            created_at
+            created_at,
+            quantity
         FROM material_transactions
         WHERE id=%s
           AND customer_id=%s
@@ -192,15 +194,14 @@ def get_receipt(
 @router.post("", summary="新增收料")
 def create_receipt(
     data: TransactionCreate,
+    customer_id: str = Depends(get_current_customer_id),
     user=Depends(get_current_user),
 ):
-    customer_id = user.customer_id
-
     fixture_id = data.fixture_id
     order_no = data.order_no
-    operator = data.operator or user.username
+    operator = data.operator or user["username"]
     note = data.note
-    created_by = user.id
+    created_by = user["id"]
 
     record_type = data.record_type.value
     source_type = data.source_type.value
@@ -213,25 +214,26 @@ def create_receipt(
         if not data.serials:
             raise HTTPException(400, "序號模式必須提供 serials")
         serials_csv = ",".join(data.serials)
+
     elif record_type == "datecode":
         if not data.datecode or data.quantity is None:
             raise HTTPException(400, "datecode 模式需提供 datecode 與 quantity")
         datecode = data.datecode
         quantity = data.quantity
+
     else:
         raise HTTPException(400, f"不支援的 record_type: {record_type}")
 
     ensure_fixture_exists(fixture_id, customer_id)
 
     try:
-        db.execute_query(
+        rows = db.execute_query(
             """
-            CALL sp_material_receipt(
+            CALL sp_material_receipt_v4(
                 %s, %s, %s, %s, %s, %s,
                 %s, %s,
                 %s,
-                %s, %s,
-                @transaction_id, @message
+                %s, %s
             )
             """,
             (
@@ -248,31 +250,21 @@ def create_receipt(
                 quantity,
             ),
         )
-
-        out = db.execute_query(
-            "SELECT @transaction_id AS id, @message AS message"
+    except Exception as e:
+        print("🔥 SP EXECUTE ERROR:", repr(e))
+        raise HTTPException(
+            status_code=500,
+            detail=f"SP EXECUTE ERROR: {e}"
         )
 
-        if not out or out[0]["id"] is None:
-            raise HTTPException(400, out[0]["message"] or "收料失敗")
+    if not rows or rows[0]["transaction_id"] is None:
+        raise HTTPException(
+            status_code=400,
+            detail=rows[0]["message"] if rows else "收料失敗"
+        )
 
-        return {
-            "id": out[0]["id"],
-            "record_type": record_type,
-            "fixture_id": fixture_id,
-            "order_no": order_no,
-            "datecode": datecode,
-            "quantity": quantity,
-            "source_type": source_type,
-            "operator": operator,
-            "note": note,
-            "created_at": datetime.utcnow(),
-        }
+    return rows[0]
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(500, f"建立收料失敗: {e}")
 
 
 # ============================================================
@@ -283,10 +275,8 @@ def create_receipt(
 @router.get("/{receipt_id}/export", summary="匯出收料明細為 XLSX")
 def export_receipt_xlsx(
     receipt_id: int,
-    user=Depends(get_current_user),
+    customer_id: str = Depends(get_current_customer_id),
 ):
-    customer_id = user.customer_id
-
     rows = db.execute_query(
         """
         SELECT id, record_type, fixture_id

@@ -17,15 +17,16 @@ function formatSerialsIntoRows(serialsArray, perRow = 5) {
   return rows.join("<br>");
 }
 
-function fmtDateTime(v) {
+function fmtDate(v) {
   if (!v) return "-";
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return String(v);
-  return d.toLocaleString();
+  return d.toLocaleDateString("zh-TW");
 }
 
+
 function labelRecordType(t) {
-  const map = { batch: "批量", individual: "個別", datecode: "日期碼" };
+  const map = { batch: "批量", individual: "個別", datecode: "datecode" };
   return map[t] || t || "-";
 }
 
@@ -39,6 +40,47 @@ function labelSourceType(t) {
  * ============================================================ */
 let receiptsPage = 1;
 const receiptsPageSize = 20;
+
+/* ============================================================
+ * 🔹 收料區子分頁切換（⭐ 新增在這裡）
+ * ============================================================ */
+function showReceiptSubTab(id) {
+  const subTabs = [
+    "rtab-receipts",
+    "rtab-returns",
+    "viewSerialTab",
+    "viewAllTab",
+  ];
+
+  subTabs.forEach(tid => {
+    document.getElementById(tid)?.classList.add("hidden");
+  });
+
+  document.getElementById(id)?.classList.remove("hidden");
+
+  if (id === "rtab-receipts") {
+    loadReceipts();
+  } else if (id === "rtab-returns") {
+    loadReturns();
+  } else if (id === "viewSerialTab") {
+    loadTransactionViewSerial(1);
+  } else if (id === "viewAllTab") {
+    loadTransactionViewAll(1);
+  }
+}
+
+// ⚠️ 一定要掛到 window，HTML onclick 才找得到
+window.showReceiptSubTab = showReceiptSubTab;
+
+/* ============================================================
+ * v4.x：初始化時序
+ * ============================================================ */
+onUserReady?.(() => {
+  onCustomerReady?.(() => {
+    // 預設顯示收料登記
+    showReceiptSubTab("rtab-receipts");
+  });
+});
 
 /* ============================================================
  * 主列表載入（v4.x）
@@ -70,6 +112,7 @@ async function loadReceipts() {
     const data = await apiListReceipts(params);
 
     renderReceiptTable(data?.receipts || []);
+    console.log("[DEBUG] apiListReceipts result =", data);
     renderPagination?.(
       "receiptPagination",
       data?.total || 0,
@@ -99,7 +142,7 @@ function renderReceiptTable(rows) {
   if (!Array.isArray(rows) || rows.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="9" class="text-center py-2 text-gray-400">
+        <td colspan="8" class="text-center py-2 text-gray-400">
           沒有資料
         </td>
       </tr>
@@ -107,31 +150,30 @@ function renderReceiptTable(rows) {
     return;
   }
 
-  rows.forEach((r) => {
-    let qtyText = "-";
+  rows.forEach(r => {
+    // ===== 數量顯示 =====
+    let quantityText = "-";
     if (r.record_type === "datecode") {
-      qtyText = `${r.datecode || "-"}（${r.quantity || 0} 件）`;
+      quantityText = `${r.datecode || "-"} (${r.quantity || 0} 件)`;
     } else {
-      qtyText = `共 ${r.quantity || 0} 件`;
+      quantityText = `${r.quantity || 0} 件`;
     }
 
-    const id = r.id ?? r.receipt_id ?? null; // 兼容
     const tr = document.createElement("tr");
-
     tr.innerHTML = `
-      <td class="py-2 pr-4">${fmtDateTime(r.created_at)}</td>
+      <td class="py-2 pr-4">${fmtDate(r.created_at)}</td>
       <td class="py-2 pr-4">${r.fixture_id || "-"}</td>
       <td class="py-2 pr-4">${r.order_no || "-"}</td>
       <td class="py-2 pr-4">${labelRecordType(r.record_type)}</td>
       <td class="py-2 pr-4">${labelSourceType(r.source_type)}</td>
-      <td class="py-2 pr-4">${qtyText}</td>
+      <td class="py-2 pr-4">${quantityText}</td>
       <td class="py-2 pr-4">${r.operator || "-"}</td>
       <td class="py-2 pr-4">${r.note || "-"}</td>
     `;
-
     tbody.appendChild(tr);
   });
 }
+
 
 
 
@@ -161,49 +203,95 @@ async function submitReceipt() {
     note: note || null,
   };
 
+  /* ============================================================
+   * 工具：解析「前綴 + 數字」序號（batch 用）
+   * ============================================================ */
+  function parseSerial(serial) {
+    const m = serial.match(/^(.*?)(\d+)$/);
+    if (!m) return null;
+    return {
+      prefix: m[1],
+      number: parseInt(m[2], 10),
+      width: m[2].length,
+    };
+  }
+
+  /* ============================================================
+   * batch：英數序號範圍
+   * ============================================================ */
   if (type === "batch") {
     const startRaw = document.getElementById("receiptAddStart")?.value.trim();
     const endRaw = document.getElementById("receiptAddEnd")?.value.trim();
 
-    const start = Number(startRaw);
-    const end = Number(endRaw);
+    if (!startRaw || !endRaw) {
+      return toast("批量模式需輸入序號起訖", "warning");
+    }
 
-    if (!startRaw || !endRaw) return toast("批量模式需輸入序號起訖", "warning");
-    if (!Number.isFinite(start) || !Number.isFinite(end))
-      return toast("序號起訖必須為數字", "warning");
-    if (end < start) return toast("序號起訖不合法（end < start）", "warning");
+    const s1 = parseSerial(startRaw);
+    const s2 = parseSerial(endRaw);
 
-    const span = end - start + 1;
-    if (span > 5000) {
+    if (!s1 || !s2) {
+      return toast("序號格式錯誤（需為 前綴+數字，如 SM001）", "warning");
+    }
+
+    if (s1.prefix !== s2.prefix) {
+      return toast("序號起訖前綴必須一致", "warning");
+    }
+
+    if (s2.number < s1.number) {
+      return toast("序號起訖不合法（結束小於起始）", "warning");
+    }
+
+    const count = s2.number - s1.number + 1;
+    if (count > 5000) {
       return toast("批量序號過多（上限 5000）", "warning");
     }
 
     payload.serials = [];
-    for (let i = start; i <= end; i++) payload.serials.push(String(i));
-  } else if (type === "datecode") {
+    for (let i = s1.number; i <= s2.number; i++) {
+      payload.serials.push(
+        s1.prefix + String(i).padStart(s1.width, "0")
+      );
+    }
+  }
+
+  /* ============================================================
+   * datecode
+   * ============================================================ */
+  else if (type === "datecode") {
     const datecode = document.getElementById("receiptAddDatecode")?.value.trim();
     const quantity = parseInt(
       document.getElementById("receiptAddQuantity")?.value.trim() || "0",
       10
     );
 
-    if (!datecode) return toast("請輸入日期碼", "warning");
+    if (!datecode) return toast("請輸入 datecode", "warning");
     if (!quantity || quantity <= 0) return toast("請輸入有效數量", "warning");
 
     payload.datecode = datecode;
     payload.quantity = quantity;
-  } else {
+  }
+
+  /* ============================================================
+   * individual：自由英數序號（只做最小驗證）
+   * ============================================================ */
+  else {
     const raw = document.getElementById("receiptAddSerials")?.value.trim();
     if (!raw) return toast("請輸入序號列表", "warning");
 
     payload.serials = raw
       .split(",")
-      .map((s) => s.trim())
+      .map(s => s.trim())
       .filter(Boolean);
 
-    if (!payload.serials.length) return toast("序號列表不可為空", "warning");
+    if (!payload.serials.length) {
+      return toast("序號列表不可為空", "warning");
+    }
   }
 
+  /* ============================================================
+   * 提交
+   * ============================================================ */
   try {
     await apiCreateReceipt(payload);
     toast("收料新增成功");
@@ -212,10 +300,15 @@ async function submitReceipt() {
     loadReceipts();
   } catch (err) {
     console.error(err);
-    toast("收料新增失敗：" + (err?.data?.detail || err?.message || ""), "error");
+    toast(
+      "收料新增失敗：" + (err?.data?.detail || err?.message || ""),
+      "error"
+    );
   }
 }
+
 window.submitReceipt = submitReceipt;
+
 
 /* ============================================================
  * 匯入 Excel（v4.x）
@@ -330,7 +423,7 @@ function downloadReceiptTemplate() {
       source_type: "customer_supplied",
       datecode: "2024W12",
       quantity: 50,
-      note: "日期碼收料示例",
+      note: "datecode收料示例",
     },
   ];
 

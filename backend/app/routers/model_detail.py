@@ -21,7 +21,7 @@ from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 
 from backend.app.database import db
-from backend.app.dependencies import get_current_user, get_current_admin
+from backend.app.dependencies import get_current_user, get_current_admin, get_current_customer_id
 
 router = APIRouter(
     prefix="/model-detail",
@@ -98,9 +98,9 @@ def ensure_fixture(customer_id: str, fixture_id: str) -> None:
 @router.get("/stations", response_model=List[StationBound], summary="取得已綁定站點")
 async def list_bound_stations(
     model_id: str = Query(...),
+    customer_id: str = Depends(get_current_customer_id),
     user=Depends(get_current_user),
 ):
-    customer_id = user.customer_id
     ensure_model(customer_id, model_id)
 
     sql = """
@@ -127,9 +127,9 @@ async def list_bound_stations(
 @router.get("/stations/available", response_model=List[StationBound], summary="取得尚未綁定的站點")
 async def list_available_stations(
     model_id: str = Query(...),
+    customer_id: str = Depends(get_current_customer_id),
     user=Depends(get_current_user),
 ):
-    customer_id = user.customer_id
     ensure_model(customer_id, model_id)
 
     sql = """
@@ -244,9 +244,9 @@ async def unbind_station(
 async def list_requirements(
     model_id: str = Query(...),
     station_id: str = Query(...),
-    user=Depends(get_current_user)
+    customer_id: str = Depends(get_current_customer_id),
+    user=Depends(get_current_user),
 ):
-    customer_id = user.customer_id
 
     ensure_model(customer_id, model_id)
     ensure_station(customer_id, station_id)
@@ -461,9 +461,9 @@ async def delete_requirement(
 )
 async def get_model_detail(
     model_id: str,
-    user=Depends(get_current_user)
+    customer_id: str = Depends(get_current_customer_id),
+    user=Depends(get_current_user),
 ):
-    customer_id = user.customer_id
     ensure_model(customer_id, model_id)
 
     # 1️⃣ 基本資料
@@ -557,9 +557,9 @@ async def get_model_detail(
 )
 async def get_stations_by_fixture(
     fixture_id: str,
-    user=Depends(get_current_user)
+    customer_id: str = Depends(get_current_customer_id),
+    user=Depends(get_current_user),
 ):
-    customer_id = user.customer_id
 
     # 確保治具存在
     exists = db.execute_query(

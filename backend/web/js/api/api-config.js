@@ -55,22 +55,28 @@ function api(path, options = {}) {
 
   const method = options.method || (hasBody ? "POST" : "GET");
 
-  // ----------------------------------------
-  // 3️⃣ Headers
-  // ----------------------------------------
-  const headers = {
-    ...(options.headers || {}),
-  };
+    // ----------------------------------------
+      // 3️⃣ Headers
+      // ----------------------------------------
+      const headers = {
+        ...(options.headers || {}),
+      };
 
-  // Content-Type
-  if (!(options.body instanceof FormData) && !options.rawBody) {
-    headers["Content-Type"] = "application/json";
-  }
+      // Content-Type
+      if (!(options.body instanceof FormData) && !options.rawBody) {
+        headers["Content-Type"] = "application/json";
+      }
 
-  // Authorization
-  if (!options.skipAuth && token && !headers["Authorization"]) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
+      // Authorization
+      if (!options.skipAuth && token && !headers["Authorization"]) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      // ✅ v4.x：注入 Customer Context（Permission Header）
+      if (!options.skipCustomer && window.currentCustomerId) {
+        headers["X-Customer-Id"] = window.currentCustomerId;
+      }
+
 
   // ----------------------------------------
   // 4️⃣ Body 處理

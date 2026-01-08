@@ -17,11 +17,11 @@ function formatSerialsIntoRows(serialsArray, perRow = 5) {
   return rows.join("<br>");
 }
 
-function fmtDateTime(v) {
+function fmtDate(v) {
   if (!v) return "-";
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return String(v);
-  return d.toLocaleString();
+  return d.toLocaleDateString("zh-TW");
 }
 
 function labelRecordType(t) {
@@ -119,7 +119,7 @@ function renderReturnTable(rows) {
     const tr = document.createElement("tr");
 
     tr.innerHTML = `
-      <td class="py-2 pr-4">${fmtDateTime(r.created_at)}</td>
+      <td class="py-2 pr-4">${fmtDate(r.created_at)}</td>
       <td class="py-2 pr-4">${r.fixture_id || "-"}</td>
       <td class="py-2 pr-4">${r.order_no || "-"}</td>
       <td class="py-2 pr-4">${labelRecordType(r.record_type)}</td>
@@ -160,24 +160,62 @@ async function submitReturn() {
     note: note || null,
   };
 
+  /* ============================================================
+   * 工具：解析「前綴 + 數字」序號（batch 用，v4.x）
+   * ============================================================ */
+  function parseSerial(serial) {
+    const m = serial.match(/^(.*?)(\d+)$/);
+    if (!m) return null;
+    return {
+      prefix: m[1],
+      number: parseInt(m[2], 10),
+      width: m[2].length,
+    };
+  }
+
+  /* ============================================================
+   * batch：英數序號範圍（與 receipts 完全一致）
+   * ============================================================ */
   if (type === "batch") {
     const startRaw = document.getElementById("returnAddStart")?.value.trim();
-    const endRaw = document.getElementById("returnAddEnd")?.value.trim();
+    const endRaw   = document.getElementById("returnAddEnd")?.value.trim();
 
-    const start = Number(startRaw);
-    const end = Number(endRaw);
+    if (!startRaw || !endRaw) {
+      return toast("批量模式需輸入序號起訖", "warning");
+    }
 
-    if (!startRaw || !endRaw) return toast("批量模式需輸入序號起訖", "warning");
-    if (!Number.isFinite(start) || !Number.isFinite(end))
-      return toast("序號起訖必須為數字", "warning");
-    if (end < start) return toast("序號起訖不合法（end < start）", "warning");
+    const s1 = parseSerial(startRaw);
+    const s2 = parseSerial(endRaw);
 
-    const span = end - start + 1;
-    if (span > 5000) return toast("批量序號過多（上限 5000）", "warning");
+    if (!s1 || !s2) {
+      return toast("序號格式錯誤（需為 前綴+數字，如 SM001）", "warning");
+    }
+
+    if (s1.prefix !== s2.prefix) {
+      return toast("序號起訖前綴必須一致", "warning");
+    }
+
+    if (s2.number < s1.number) {
+      return toast("序號起訖不合法（結束小於起始）", "warning");
+    }
+
+    const count = s2.number - s1.number + 1;
+    if (count > 5000) {
+      return toast("批量序號過多（上限 5000）", "warning");
+    }
 
     payload.serials = [];
-    for (let i = start; i <= end; i++) payload.serials.push(String(i));
-  } else if (type === "datecode") {
+    for (let i = s1.number; i <= s2.number; i++) {
+      payload.serials.push(
+        s1.prefix + String(i).padStart(s1.width, "0")
+      );
+    }
+  }
+
+  /* ============================================================
+   * datecode
+   * ============================================================ */
+  else if (type === "datecode") {
     const datecode = document.getElementById("returnAddDatecode")?.value.trim();
     const quantity = parseInt(
       document.getElementById("returnAddQuantity")?.value.trim() || "0",
@@ -189,7 +227,12 @@ async function submitReturn() {
 
     payload.datecode = datecode;
     payload.quantity = quantity;
-  } else {
+  }
+
+  /* ============================================================
+   * individual：自由英數序號（最小驗證）
+   * ============================================================ */
+  else {
     const raw = document.getElementById("returnAddSerials")?.value.trim();
     if (!raw) return toast("請輸入序號列表", "warning");
 
@@ -198,16 +241,18 @@ async function submitReturn() {
       .map((s) => s.trim())
       .filter(Boolean);
 
-    if (!payload.serials.length) return toast("序號列表不可為空", "warning");
+    if (!payload.serials.length) {
+      return toast("序號列表不可為空", "warning");
+    }
   }
 
+  /* ============================================================
+   * 提交
+   * ============================================================ */
   try {
     await apiCreateReturn(payload);
 
     toast("退料新增成功");
-
-    // v4.x：不允許收起的話，這行要拿掉
-    // document.getElementById("returnAddForm")?.classList.add("hidden");
 
     returnsPage = 1;
     loadReturns();

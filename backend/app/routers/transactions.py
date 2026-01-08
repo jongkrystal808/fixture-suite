@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, Query, HTTPException
 from typing import Optional
-from backend.app.dependencies import get_current_user
+from backend.app.dependencies import get_current_user, get_current_customer_id
 from backend.app.database import db
 import openpyxl
 import io
@@ -28,9 +28,9 @@ async def view_all_transactions(
 
     skip: int = Query(0),
     limit: int = Query(200),
+    customer_id: str = Depends(get_current_customer_id),
     user=Depends(get_current_user)
 ):
-    customer_id = user.customer_id
 
     where = ["t.customer_id = %s"]
     params = [customer_id]
@@ -121,9 +121,9 @@ async def view_transaction_serials(
 
     skip: int = Query(0),
     limit: int = Query(100),
+    customer_id: str = Depends(get_current_customer_id),
     user=Depends(get_current_user)
 ):
-    customer_id = user.customer_id
 
     where = [
         "t.customer_id = %s",
@@ -189,9 +189,9 @@ async def view_transaction_serials(
 @router.get("/serials/{serial_number}/history", summary="序號完整履歷")
 async def get_serial_history(
     serial_number: str,
+    customer_id: str = Depends(get_current_customer_id),
     user=Depends(get_current_user)
 ):
-    customer_id = user.customer_id
     serial = serial_number.strip()
 
     serial_info = db.execute_query(
@@ -278,9 +278,9 @@ async def export_summary(
     # ?type=summary | detailed
     export_type: str = Query("summary", alias="type"),
 
+    customer_id: str = Depends(get_current_customer_id),
     user=Depends(get_current_user)
 ):
-    customer_id = user.customer_id
 
     # --------------------------------------------------
     # WHERE 條件（v4.x）

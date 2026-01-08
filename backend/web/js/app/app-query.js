@@ -218,7 +218,7 @@ async function openFixtureDetail(fixtureId) {
         <div>
           <h3 class="text-lg font-semibold">基本資料</h3>
           <div class="grid grid-cols-2 gap-2 text-sm mt-2">
-            <div><b>治具編號：</b>${f.fixture_id}</div>
+            <div><b>治具編號：</b>${f.id}</div>
             <div><b>名稱：</b>${f.fixture_name ?? "-"}</div>
             <div><b>狀態：</b>${f.status ?? "-"}</div>
             <div><b>負責人：</b>${f.owner_name ?? "-"}</div>

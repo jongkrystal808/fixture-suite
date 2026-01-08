@@ -129,12 +129,12 @@ function renderViewSerialTable(rows) {
   rows.forEach((r) => {
     const txDate =
       r.transaction_date
-        ? new Date(r.transaction_date).toLocaleString()
+        ? new Date(r.transaction_date).toLocaleDateString("zh-TW")
         : "-";
+
 
     const txType = r.transaction_type || r.type || "-";
     const fixtureId = r.fixture_id || "-";
-    const sourceType = r.source_type || "-";
     const orderNo = r.order_no || "-";
     const serialNo = r.serial_number || r.serial || "-";
     const operator = r.operator || "-";
@@ -145,7 +145,6 @@ function renderViewSerialTable(rows) {
       <td>${txDate}</td>
       <td>${txType}</td>
       <td>${fixtureId}</td>
-      <td>${sourceType}</td>
       <td>${orderNo}</td>
 
       <td class="font-mono text-blue-600 font-semibold">
@@ -194,7 +193,7 @@ function filterByOrderNo(orderNo) {
 
 async function apiGetSerialHistory(serial) {
   // ✅ v4.x：不帶 customer_id，走 header/context
-  return api(`/serials/${encodeURIComponent(serial)}/history`);
+  return api(`/transactions/serials/${encodeURIComponent(serial)}/history`);
 }
 
 async function openSerialDetail(serial) {
