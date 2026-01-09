@@ -93,7 +93,7 @@
     <!-- 功能分頁 -->
     <nav class="grid grid-cols-2 md:grid-cols-7 gap-2">
       <button data-tab="dashboard" class="tab tab-active">儀表板</button>
-      <button data-tab="receipts"  class="tab">收料/退料登記</button>
+      <button data-tab="transactions"  class="tab">收料/退料登記</button>
       <button data-tab="query"    class="tab">治具/機種查詢</button>
       <button data-tab="logs"     class="tab">使用/更換記錄</button>
       <button data-tab="stats"    class="tab">治具情況統計</button>
@@ -164,7 +164,7 @@
     </section>
 
        <!-- 收料 / 退料 -->
-    <section id="tab-receipts" class="hidden space-y-4">
+    <section id="tab-transactions" class="hidden space-y-4">
 
       <!-- 子分頁 -->
         <div class="flex gap-2">
@@ -1699,9 +1699,9 @@
               </div>
 
               <!-- 表格 -->
-              <div class="overflow-auto">
+              <div class="overflow-auto border rounded-xl max-h-[70vh]">
                 <table class="min-w-full text-sm">
-                  <thead class="text-left text-gray-500">
+                  <thead class="sticky top-0 bg-gray-50 z-10">
                     <tr>
                       <th class="py-2 pr-4">ID</th>
                       <th class="py-2 pr-4">主負責人</th>

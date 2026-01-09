@@ -37,8 +37,8 @@ class OwnerUpdate(BaseModel):
 
 class OwnerResponse(BaseModel):
     id: int
-    customer_id: Optional[str]
-    customer_name: Optional[str]
+    customer_id: Optional[str] = None
+    customer_name: Optional[str] = None
 
     primary_owner_id: int
     primary_owner_name: str
@@ -59,5 +59,5 @@ class OwnerListResponse(BaseModel):
 
 class OwnerSimple(BaseModel):
     id: int
-    user_id: int
-    name: str
+    primary_owner_id: int
+    primary_owner: str

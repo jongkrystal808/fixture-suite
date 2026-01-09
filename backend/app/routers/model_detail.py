@@ -158,9 +158,9 @@ async def list_available_stations(
 async def bind_station(
     model_id: str = Query(...),
     data: BindStationInput = None,
-    admin=Depends(get_current_admin)
+    admin=Depends(get_current_admin),
+    customer_id: str = Depends(get_current_customer_id),
 ):
-    customer_id = admin.customer_id
 
     if not data or not data.station_id:
         raise HTTPException(status_code=400, detail="station_id is required")
@@ -199,9 +199,9 @@ async def bind_station(
 async def unbind_station(
     model_id: str = Query(...),
     station_id: str = Query(...),
-    admin=Depends(get_current_admin)
+    admin=Depends(get_current_admin),
+    customer_id: str = Depends(get_current_customer_id),
 ):
-    customer_id = admin.customer_id
 
     ensure_model(customer_id, model_id)
     ensure_station(customer_id, station_id)
@@ -285,9 +285,9 @@ async def list_requirements(
 )
 async def create_requirement(
     data: FixtureRequirementCreate,
-    admin=Depends(get_current_admin)
+    admin=Depends(get_current_admin),
+    customer_id: str = Depends(get_current_customer_id),
 ):
-    customer_id = admin.customer_id
 
     ensure_model(customer_id, data.model_id)
     ensure_station(customer_id, data.station_id)
@@ -361,9 +361,9 @@ async def create_requirement(
 async def update_requirement(
     req_id: int,
     data: FixtureRequirementUpdate,
-    admin=Depends(get_current_admin)
+    admin=Depends(get_current_admin),
+    customer_id: str = Depends(get_current_customer_id),
 ):
-    customer_id = admin.customer_id
 
     row = db.execute_query(
         """
@@ -433,9 +433,9 @@ async def update_requirement(
 )
 async def delete_requirement(
     req_id: int,
-    admin=Depends(get_current_admin)
+    admin=Depends(get_current_admin),
+    customer_id: str = Depends(get_current_customer_id),
 ):
-    customer_id = admin.customer_id
 
     affected = db.execute_update(
         """

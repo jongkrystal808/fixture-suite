@@ -175,9 +175,9 @@ async def get_model(
 @router.post("", response_model=ModelResponse, status_code=status.HTTP_201_CREATED)
 async def create_model(
     data: ModelCreate,
-    admin=Depends(get_current_admin)
+    admin=Depends(get_current_admin),
+    customer_id: str = Depends(get_current_customer_id),
 ):
-    customer_id = admin.customer_id
 
     exists = db.execute_query(
         """

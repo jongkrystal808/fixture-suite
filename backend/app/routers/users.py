@@ -196,3 +196,18 @@ async def list_users_simple(admin=Depends(get_current_admin)):
     )
 
     return rows
+
+@router.get("/simple", summary="使用者簡易清單")
+async def list_users_simple(admin=Depends(get_current_admin)):
+    rows = db.execute_query(
+        """
+        SELECT
+            id,
+            username,
+            email
+        FROM users
+        WHERE is_active = 1
+        ORDER BY username
+        """
+    )
+    return rows

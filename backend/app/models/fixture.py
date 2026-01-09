@@ -21,24 +21,21 @@ from pydantic import BaseModel, Field, ConfigDict
 # ============================================================
 
 class FixtureBase(BaseModel):
-  """治具基礎欄位（建立 / 回傳 都會用到）"""
-  fixture_id: str = Field(..., description="治具編號")
+  id: str = Field(..., description="治具編號")   # ⭐ 主鍵統一
   fixture_name: str = Field(..., description="治具名稱")
-  fixture_type: Optional[str] = Field(None, description="治具類型")
+  fixture_type: Optional[str] = None
 
-  self_purchased_qty: int = Field(0, description="自購數量")
-  customer_supplied_qty: int = Field(0, description="客供數量")
+  self_purchased_qty: int = 0
+  customer_supplied_qty: int = 0
 
-  storage_location: Optional[str] = Field(None, description="存放位置")
-  replacement_cycle: Optional[int] = Field(None, description="更換週期（數值）")
-  cycle_unit: Optional[str] = Field(None, description="週期單位（days / uses ...）")
+  storage_location: Optional[str] = None
+  replacement_cycle: Optional[int] = None
+  cycle_unit: Optional[str] = None
 
-  status: Optional[str] = Field(
-      "正常",
-      description = "顯示狀態（非 serial 狀態，例如：正常 / 停用 / 報廢）")
+  status: Optional[str] = None
+  owner_id: Optional[int] = None
+  note: Optional[str] = None
 
-  owner_id: Optional[int] = Field(None, description="負責人 ID")
-  note: Optional[str] = Field(None, description="備註")
 
 
 class FixtureCreate(FixtureBase):

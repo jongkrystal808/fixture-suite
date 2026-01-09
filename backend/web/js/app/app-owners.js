@@ -108,7 +108,6 @@ function renderOwnerTable(list) {
         <td class="text-center">${o.id}</td>
         <td>${o.primary_owner_name || "-"}</td>
         <td>${o.secondary_owner_name || ""}</td>
-        <td>${customerLabel}</td>
         <td>${o.email || ""}</td>
         <td class="text-right">
           <button class="btn btn-xs btn-outline"
@@ -151,17 +150,39 @@ async function submitInlineOwner() {
   if (!ensureAdmin()) return;
   if (!window.currentCustomerId) return toast("尚未選擇客戶", "warning");
 
-  const primaryId = document.getElementById("addOwnerPrimary")?.value;
-  const secondaryId = document.getElementById("addOwnerSecondary")?.value;
-  const email = document.getElementById("addOwnerEmail")?.value.trim();
-  const note = document.getElementById("addOwnerNote")?.value.trim();
+  const primarySel = document.getElementById("addOwnerPrimary");
+  const secondarySel = document.getElementById("addOwnerSecondary");
+  const emailEl = document.getElementById("addOwnerEmail");
+  const noteEl = document.getElementById("addOwnerNote");
 
-  if (!primaryId) return toast("請選擇主負責人", "error");
-  if (!email) return toast("Email 為必填", "error");
+  const primaryIdRaw = primarySel?.value || "";
+  const secondaryIdRaw = secondarySel?.value || "";
+  let email = (emailEl?.value || "").trim();
+  const note = (noteEl?.value || "").trim();
+
+  if (!primaryIdRaw) return toast("請選擇主負責人", "error");
+
+  // ✅ 主/副不可相同
+  if (secondaryIdRaw && secondaryIdRaw === primaryIdRaw) {
+    return toast("主負責人與副負責人不可相同", "error");
+  }
+
+  // ✅ email 若沒填 → 自動用主負責人 option 的 data-email
+  if (!email) {
+    const opt = primarySel?.selectedOptions?.[0];
+    const autoEmail = (opt?.dataset?.email || "").trim();
+    if (autoEmail) {
+      email = autoEmail;
+      if (emailEl) emailEl.value = autoEmail; // 讓 UI 同步顯示
+    }
+  }
+
+  // ✅ 仍然沒 email 就擋（後端也會再擋一次）
+  if (!email) return toast("Email 為必填（或該使用者未設定 Email）", "error");
 
   const payload = {
-    primary_owner_id: Number(primaryId),
-    secondary_owner_id: secondaryId ? Number(secondaryId) : null,
+    primary_owner_id: Number(primaryIdRaw),
+    secondary_owner_id: secondaryIdRaw ? Number(secondaryIdRaw) : null,
     email,
     note: note || null,
   };
@@ -174,7 +195,14 @@ async function submitInlineOwner() {
     loadOwners();
   } catch (err) {
     console.error(err);
-    toast(err?.data?.detail || "新增失敗", "error");
+
+    // ✅ 盡量把後端 detail 顯示出來
+    const msg =
+      err?.data?.detail ||
+      err?.message ||
+      "新增失敗";
+
+    toast(msg, "error");
   }
 }
 window.submitInlineOwner = submitInlineOwner;
@@ -221,6 +249,8 @@ async function loadOwnerUserOptions() {
       const opt1 = document.createElement("option");
       opt1.value = u.id;
       opt1.textContent = label;
+      opt1.dataset.email = u.email || "";
+
       primarySel.appendChild(opt1);
 
       const opt2 = document.createElement("option");

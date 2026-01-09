@@ -342,20 +342,22 @@ async function submitFixtureForm(e) {
   const mappedStatus = mapStatusToBackend(rawStatus);
 
   const payload = {
-    fixture_name: document.getElementById("fmFixtureName").value.trim(),
-    fixture_type: document.getElementById("fmFixtureType").value.trim(),
-    serial_number: document.getElementById("fmSerialNumber").value.trim(),
-    storage_location: document.getElementById("fmStorage").value.trim(),
-    replacement_cycle: Number(document.getElementById("fmCycle").value),
-    cycle_unit: document.getElementById("fmCycleUnit").value,
-    status: mappedStatus,
-    owner_id: Number(document.getElementById("fmOwnerId").value) || null,
-    note: document.getElementById("fmNote").value.trim(),
-  };
+      id: fixture_id, // 只有 create 時會用
+      fixture_name: document.getElementById("fmFixtureName").value.trim(),
+      fixture_type: document.getElementById("fmFixtureType").value.trim(),
+      serial_number: document.getElementById("fmSerialNumber").value.trim(),
+      storage_location: document.getElementById("fmStorage").value.trim(),
+      replacement_cycle: Number(document.getElementById("fmCycle").value),
+      cycle_unit: document.getElementById("fmCycleUnit").value,
+      status: mappedStatus,
+      owner_id: Number(document.getElementById("fmOwnerId").value) || null,
+      note: document.getElementById("fmNote").value.trim(),
+    };
+
 
   if (mode === "create") {
-    payload.fixture_id = fixture_id;
-  }
+    payload.id = fixture_id;
+    }
 
   try {
     if (mode === "create") {

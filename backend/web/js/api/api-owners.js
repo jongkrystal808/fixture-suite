@@ -100,17 +100,15 @@ async function apiDisableOwner(ownerId) {
   );
 }
 
+
 /* ============================================================
- * 簡易清單（下拉選單用）
+ * Users Simple API（給下拉選單用）
  * ============================================================ */
-/**
- * 回傳條件：
- * - is_active = 1
- * - customer_id = current OR NULL
- */
-async function apiListOwnersSimple() {
-  return api("/owners/simple");
+async function apiListUsersSimple() {
+  return api("/users/simple");
 }
+
+window.apiListUsersSimple = apiListUsersSimple;
 
 /* ============================================================
  * 全域導出
@@ -120,4 +118,3 @@ window.apiGetOwner = apiGetOwner;
 window.apiCreateOwner = apiCreateOwner;
 window.apiUpdateOwner = apiUpdateOwner;
 window.apiDisableOwner = apiDisableOwner;
-window.apiListOwnersSimple = apiListOwnersSimple;

@@ -49,27 +49,32 @@ function apiGetStation(stationId) {
  * POST /stations
  * ============================================================ */
 /**
- * payload:
+ * payload (v4.x):
  * {
- *   station_id,
+ *   id,            // station primary key
  *   station_name,
- *   note?,
- *   is_active?
+ *   note?
  * }
  */
+
 function apiCreateStation(payload) {
   if (!payload || typeof payload !== "object") {
     throw new Error("apiCreateStation: invalid payload");
   }
-  if (!payload.station_id) {
-    throw new Error("apiCreateStation: station_id is required");
+  if (!payload.id) {
+    throw new Error("apiCreateStation: id is required");
   }
 
   return api("/stations", {
     method: "POST",
-    body: payload,
+    body: {
+      id: payload.id,
+      station_name: payload.station_name,
+      note: payload.note ?? null,
+    },
   });
 }
+
 
 /* ============================================================
  * 更新站點

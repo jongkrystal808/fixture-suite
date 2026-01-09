@@ -23,9 +23,7 @@ router = APIRouter(
 @router.post("/import", summary="匯入機種（XLSX）")
 async def import_models_xlsx(
     file: UploadFile = File(...),
-    user=Depends(get_current_user)
 ):
-    customer_id = user.customer_id
 
     # =================================================
     # 1️⃣ 基本檢查

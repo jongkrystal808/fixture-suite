@@ -41,7 +41,7 @@ from openpyxl import Workbook
 from io import BytesIO
 
 from backend.app.database import db
-from backend.app.dependencies import get_current_user
+from backend.app.dependencies import get_current_user, get_current_customer_id, get_current_admin
 from backend.app.models.fixture import (
     FixtureCreate,
     FixtureUpdate,
@@ -64,9 +64,9 @@ router = APIRouter(
 async def search_fixtures(
     q: str = Query(..., min_length=1),
     limit: int = Query(20, le=50),
-    user=Depends(get_current_user)
+    customer_id: str = Depends(get_current_customer_id),
+    user=Depends(get_current_user),
 ):
-    customer_id = user.customer_id
     try:
         rows = db.execute_query(
             """
@@ -95,9 +95,9 @@ async def search_fixtures(
     summary="治具統計摘要"
 )
 async def fixture_statistics(
-    user=Depends(get_current_user)
+    customer_id: str = Depends(get_current_customer_id),
+    user=Depends(get_current_user),
 ):
-    customer_id = user.customer_id
     try:
         row = db.execute_query(
             """
@@ -139,9 +139,9 @@ async def fixture_statistics(
 async def fixture_status_view(
     skip: int = 0,
     limit: int = 100,
-    user=Depends(get_current_user)
+    customer_id: str = Depends(get_current_customer_id),
+    user=Depends(get_current_user),
 ):
-    customer_id = user.customer_id
     try:
         rows = db.execute_query(
             """
@@ -169,9 +169,9 @@ async def fixture_status_view(
     summary="簡化治具列表"
 )
 async def simple_fixture_list(
-    user=Depends(get_current_user)
+    customer_id: str = Depends(get_current_customer_id),
+    user=Depends(get_current_user),
 ):
-    customer_id = user.customer_id
     try:
         rows = db.execute_query(
             """
@@ -197,7 +197,8 @@ async def simple_fixture_list(
 # ============================================================
 @router.get("/template", summary="下載治具匯入樣本（XLSX）")
 async def download_fixtures_template(
-    user=Depends(get_current_user)
+    customer_id: str = Depends(get_current_customer_id),
+    user=Depends(get_current_user),
 ):
     wb = Workbook()
     ws = wb.active
@@ -371,7 +372,7 @@ async def create_fixture(
             ) VALUES (
                 %s, %s, %s, %s,
                 %s, %s,
-                0, 0, 0, 0, 0,
+                %s, %s, %s, %s, %s,
                 %s,
                 %s, %s,
                 %s,
@@ -387,10 +388,18 @@ async def create_fixture(
             data.fixture_type,
             data.self_purchased_qty or 0,
             data.customer_supplied_qty or 0,
+
+            # 初始化數量（v4.x 建立時統一 0）
+            0,  # available_qty
+            0,  # deployed_qty
+            0,  # maintenance_qty
+            0,  # scrapped_qty
+            0,  # returned_qty
+
             data.storage_location,
             data.replacement_cycle,
-            data.cycle_unit,
-            data.status,
+            data.cycle_unit.value if hasattr(data.cycle_unit, "value") else data.cycle_unit,
+            data.status.value if hasattr(data.status, "value") else data.status,
             data.owner_id,
             data.note,
         )

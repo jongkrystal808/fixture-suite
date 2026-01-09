@@ -2,14 +2,33 @@
 // 全域目前開啟的浮層關閉函式
 window.__activeOverlayCloser = null;
 
+
 (function () {
   const TAB_CONFIG = {
-    dashboard: { sectionId: "tab-dashboard", title: "儀表板" },
-    receipts: { sectionId: "tab-receipts", title: "收料 / 退料登記" },
-    query: { sectionId: "tab-query", title: "治具 / 機種查詢" },
-    logs: { sectionId: "tab-logs", title: "使用 / 更換記錄" },
-    stats: { sectionId: "tab-stats", title: "治具情況統計" },
-    admin: { sectionId: "tab-admin", title: "後台管理" }
+    dashboard: {
+      sectionId: "tab-dashboard",
+      title: "儀表板"
+    },
+    transactions: {
+      sectionId: "tab-transactions",
+      title: "收料 / 退料登記"
+    },
+    query: {
+      sectionId: "tab-query",
+      title: "治具 / 機種查詢"
+    },
+    logs: {
+      sectionId: "tab-logs",
+      title: "使用 / 更換記錄"
+    },
+    stats: {
+      sectionId: "tab-stats",
+      title: "治具情況統計"
+    },
+    admin: {
+      sectionId: "tab-admin",
+      title: "後台管理"
+    }
   };
 
   // admin 子頁切換
@@ -59,7 +78,17 @@ window.__activeOverlayCloser = null;
 
   function normalizeHash(hash) {
     if (!hash) return "dashboard";
-    return hash.replace(/^#/, "");
+    const cleaned = hash.replace(/^#/, "");
+    // 取第一段作為主頁籤 (例如 "transactions" → "transactions")
+    const mainTab = cleaned.split("/")[0];
+    return mainTab;
+  }
+
+  function getSubTab(hash) {
+    if (!hash) return null;
+    const cleaned = hash.replace(/^#/, "");
+    const parts = cleaned.split("/");
+    return parts.length > 1 ? parts[1] : null;
   }
 
   function setHash(hash) {
@@ -69,138 +98,92 @@ window.__activeOverlayCloser = null;
   }
 
   function showTab(tabKey, options = { updateHash: true }) {
+      if (!TAB_CONFIG[tabKey]) tabKey = "dashboard";
+      if (currentTab === tabKey) return;
 
-  // =====================================================
-  // 🚫 v4.x 防呆：showTab 只處理「主分頁」
-  // 收料/退料/查詢子分頁一律不在這裡處理
-  // =====================================================
-  if (
-    tabKey.startsWith("rtab-") ||
-    tabKey === "viewSerialTab" ||
-    tabKey === "viewAllTab"
-  ) {
-    console.warn("[showTab] ignore subtab:", tabKey);
-    return;
-  }
+      currentTab = tabKey;
 
-  // ⬇️ 原本的 showTab 程式碼完全不動
-
-    if (!TAB_CONFIG[tabKey]) tabKey = "dashboard";
-    if (currentTab === tabKey) return;
-
-    currentTab = tabKey;
-
-    // 1) 切 main section
-    Object.keys(TAB_CONFIG).forEach(key => {
-      const sec = sections[key];
-      if (!sec) return;
-      if (key === tabKey) {
-        sec.classList.remove("hidden");
-      } else {
-        sec.classList.add("hidden");
-      }
-    });
-
-    // 2) 切 tab 樣式
-    tabButtons.forEach(btn => {
-      const key = btn.dataset.tab;
-      if (key === tabKey) {
-        btn.classList.add("tab-active");
-      } else {
-        btn.classList.remove("tab-active");
-      }
-    });
-
-    // 3) 切換標題
-    if (bannerTitle) {
-      bannerTitle.textContent = TAB_CONFIG[tabKey].title;
-    }
-
-    // 4) 更新 hash
-    if (options.updateHash) setHash(tabKey);
-
-    // 5) 載資料（✅ v4.x：一律等 customer ready）
-    try {
-      switch (tabKey) {
-        // ★ Dashboard：每次切換都重新載入
-        case "dashboard":
-          if (typeof window.loadDashboard === "function") {
-            if (typeof window.onCustomerReady === "function") {
-              onCustomerReady(() => window.loadDashboard());
-            } else if (typeof window.onUserReady === "function") {
-              // fallback：避免你尚未完成 customer gate 時完全不能動
-              onUserReady(() => window.loadDashboard());
-            } else {
-              window.loadDashboard();
-            }
+      // 1) 切 main section
+      Object.keys(TAB_CONFIG).forEach(key => {
+          const sec = sections[key];
+          if (!sec) return;
+          if (key === tabKey) {
+              sec.classList.remove("hidden");
+          } else {
+              sec.classList.add("hidden");
           }
-          break;
+      });
 
-        // 其他頁面：只載一次
-        case "receipts":
-        case "query":
-        case "logs":
-        case "stats":
-        case "admin":
-          if (!loadedFlags[tabKey]) {
-            loadedFlags[tabKey] = true;
-
-            const runInit = () => {
-              switch (tabKey) {
-                case "receipts":
-                  if (typeof window.loadReceipts === "function") {
-                    window.loadReceipts();
-                  }
-                  break;
-
-                case "query":
-                  if (typeof window.loadFixturesQuery === "function") {
-                    window.loadFixturesQuery();
-                  }
-                  break;
-
-                case "logs":
-                  if (typeof window.loadUsageLogs === "function") {
-                    window.loadUsageLogs();
-                  }
-                  if (typeof window.loadReplacementLogs === "function") {
-                    window.loadReplacementLogs();
-                  }
-                  break;
-
-                case "stats":
-                  if (typeof window.loadStats === "function") {
-                    window.loadStats();
-                  }
-                  break;
-
-                case "admin":
-                  // ✅ 預設顯示「治具管理」
-                  switchAdminPage("fixtures");
-
-                  // ✅ v4.x：不再呼叫 loadCustomers（customer 是 permission context）
-                  // if (typeof window.loadCustomers === "function") {
-                  //   window.loadCustomers();
-                  // }
-                  break;
-              }
-            };
-
-            // ✅ v4.x：等 customer ready
-            if (typeof window.onCustomerReady === "function") {
-              onCustomerReady(runInit);
-            } else if (typeof window.onUserReady === "function") {
-              // fallback
-              onUserReady(runInit);
-            } else {
-              runInit();
-            }
+      // 2) 切 tab 樣式
+      tabButtons.forEach(btn => {
+          const key = btn.dataset.tab;
+          if (key === tabKey) {
+              btn.classList.add("tab-active");
+          } else {
+              btn.classList.remove("tab-active");
           }
-          break;
+      });
+
+      // 3) 切換標題
+      if (bannerTitle) {
+          bannerTitle.textContent = TAB_CONFIG[tabKey].title;
       }
-    } catch (e) {
-      console.warn("init tab error:", tabKey, e);
-    }
+
+      // 4) 更新 hash
+      if (options.updateHash) setHash(tabKey);
+
+      // 5) 載資料
+      try {
+          switch (tabKey) {
+
+              // ★ Dashboard：每次切換都重新載入
+              case "dashboard":
+                  if (typeof window.loadDashboard === "function") {
+                      window.loadDashboard();
+                  }
+                  break;
+
+              // 其他頁面：只載一次
+              case "transactions":  // ★ 新增 transactions
+              case "query":
+              case "logs":
+              case "stats":
+              case "admin":
+                  if (!loadedFlags[tabKey]) {
+                      loadedFlags[tabKey] = true;
+
+                      switch (tabKey) {
+                          case "transactions":  // ★ 新增 transactions
+                              if (typeof window.loadReceipts === "function") window.loadReceipts();
+                              break;
+
+                          case "query":
+                              if (typeof window.loadFixturesQuery === "function") window.loadFixturesQuery();
+                              break;
+
+                          case "logs":
+                              if (typeof window.loadUsageLogs === "function") window.loadUsageLogs();
+                              if (typeof window.loadReplacementLogs === "function") window.loadReplacementLogs();
+                              break;
+
+                          case "stats":
+                              if (typeof window.loadStats === "function") window.loadStats();
+                              break;
+
+                          case "admin":
+                              // ✅ 預設顯示「治具管理」
+                              switchAdminPage("fixtures");
+                              if (typeof window.loadCustomers === "function") {
+                                  window.loadCustomers();
+                              }
+                              break;
+                      }
+                  }
+                  break;
+          }
+      } catch (e) {
+          console.warn("init tab error:", tabKey, e);
+      }
   }
 
   // 監聽 tab 按鈕
@@ -220,21 +203,23 @@ window.__activeOverlayCloser = null;
   });
 
   // =====================================================
-  // ⎋ Global ESC handler (REAL version for current project)
-  // =====================================================
-  document.addEventListener("keydown", function (e) {
-    if (e.key !== "Escape") return;
+    // ⎋ Global ESC handler (REAL version for current project)
+    // =====================================================
+    document.addEventListener("keydown", function (e) {
+      if (e.key !== "Escape") return;
 
-    // 有登記的浮層，直接關
-    if (typeof window.__activeOverlayCloser === "function") {
-      window.__activeOverlayCloser();
-      window.__activeOverlayCloser = null;
-      return;
-    }
+      // 有登記的浮層，直接關
+      if (typeof window.__activeOverlayCloser === "function") {
+        window.__activeOverlayCloser();
+        window.__activeOverlayCloser = null;
+        return;
+      }
 
-    // fallback：dialog
-    document.querySelectorAll("dialog[open]").forEach(d => d.close());
-  });
+      // fallback：dialog
+      document.querySelectorAll("dialog[open]").forEach(d => d.close());
+    });
+
+
 
   // DOM Ready
   window.addEventListener("DOMContentLoaded", async () => {
@@ -243,17 +228,70 @@ window.__activeOverlayCloser = null;
       await window.loadCurrentUser();
     }
 
-    // (2) 啟動頁籤（✅ v4.x：等 customer ready 再 showTab）
-    const boot = () => {
-      const initialTab = normalizeHash(location.hash);
-      showTab(initialTab, { updateHash: true });
-    };
+    // (2) 啟動頁籤
+    const initialTab = normalizeHash(location.hash);
+    const initialSubTab = getSubTab(location.hash);
+    showTab(initialTab, { updateHash: true });
 
-    if (typeof window.onCustomerReady === "function") {
-      onCustomerReady(boot);
-    } else {
-      // fallback：避免尚未接上 customer context 時卡死
-      boot();
+    // ★ 如果有子頁籤，也要觸發對應的切換
+    if (initialSubTab) {
+      setTimeout(() => {
+        // transactions 子頁籤
+        if (initialTab === "transactions") {
+          const rtabMap = {
+            "receipts": "receipts",
+            "returns": "returns",
+            "view_all": "viewall",
+            "view_serials": "serial"
+          };
+          const rtabValue = rtabMap[initialSubTab];
+          if (rtabValue) {
+            const btn = document.querySelector(`[data-rtab="${rtabValue}"]`);
+            if (btn) btn.click();
+          }
+        }
+
+        // query 子頁籤
+        if (initialTab === "query") {
+          const qtabMap = {
+            "fixtures": "fixtures",
+            "model": "models"
+          };
+          const qtabValue = qtabMap[initialSubTab];
+          if (qtabValue) {
+            const btn = document.querySelector(`[data-qtab="${qtabValue}"]`);
+            if (btn) btn.click();
+          }
+        }
+
+        // logs 子頁籤
+        if (initialTab === "logs") {
+          const ltabMap = {
+            "usage": "usage",
+            "replacement": "replacement"
+          };
+          const ltabValue = ltabMap[initialSubTab];
+          if (ltabValue) {
+            const btn = document.querySelector(`[data-ltab="${ltabValue}"]`);
+            if (btn) btn.click();
+          }
+        }
+
+        // admin 子頁籤
+        if (initialTab === "admin") {
+          const adminMap = {
+            "station_mt": "station",
+            "fixture_mt": "fixtures",
+            "model_mt": "models",
+            "owner_mt": "owners",
+            "settings": "settings"
+          };
+          const adminPage = adminMap[initialSubTab];
+          if (adminPage) {
+            switchAdminPage(adminPage);
+          }
+        }
+      }, 100);
     }
 
     // (3) 收料 / 退料 / 總檢視 / 序號檢視 子分頁（最終穩定版）
@@ -270,6 +308,7 @@ window.__activeOverlayCloser = null;
       btn.__rtabBound = true;
 
       btn.addEventListener("click", () => {
+
         // active 樣式
         rtabButtons.forEach(b => b.classList.remove("subtab-active"));
         btn.classList.add("subtab-active");
@@ -295,12 +334,7 @@ window.__activeOverlayCloser = null;
           if (viewAll) viewAll.classList.remove("hidden");
 
           if (typeof window.loadTransactionViewAll === "function") {
-            // ✅ v4.x：需要 customer header 的 API，保險起見等 customer ready
-            if (typeof window.onCustomerReady === "function") {
-              onCustomerReady(() => window.loadTransactionViewAll(1));
-            } else {
-              window.loadTransactionViewAll(1);
-            }
+            window.loadTransactionViewAll(1);
           }
           return;
         }
@@ -321,15 +355,13 @@ window.__activeOverlayCloser = null;
             dt.value = today.toISOString().slice(0, 10);
           }
 
-          // ✅ v4.x：同樣等 customer ready
-          if (typeof window.onCustomerReady === "function") {
-            onCustomerReady(() => loadTransactionViewSerial(1));
-          } else {
-            loadTransactionViewSerial(1);
-          }
+          loadTransactionViewSerial(1);
         }
+
       });
     });
+
+
 
     // (4) Query 子分頁
     const qtabBtns = document.querySelectorAll("[data-qtab]");

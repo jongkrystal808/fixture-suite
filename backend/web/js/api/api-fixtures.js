@@ -174,6 +174,27 @@ function apiImportFixturesXlsx(file) {
   });
 }
 
+
+/* ============================================================
+ * 搜尋治具（給 Model Detail / Fixture Requirement 用）
+ * GET /fixtures/search
+ * ============================================================ */
+function apiSearchFixtures(params = {}) {
+  const { q, limit = 20 } = params;
+
+  if (!q) {
+    throw new Error("apiSearchFixtures: q is required");
+  }
+
+  return api("/fixtures/search", {
+    params: {
+      q,
+      limit,
+    },
+  });
+}
+
+
 /* ============================================================
  * Export to Global
  * ============================================================ */
@@ -194,5 +215,6 @@ window.apiGetFixtureStatisticsSummary = apiGetFixtureStatisticsSummary;
 window.apiExportFixturesXlsx = apiExportFixturesXlsx;
 window.apiDownloadFixturesTemplate = apiDownloadFixturesTemplate;
 window.apiImportFixturesXlsx = apiImportFixturesXlsx;
+window.apiSearchFixtures = apiSearchFixtures;
 
 console.log("✅ api-fixtures.js v4.x FINAL loaded");
