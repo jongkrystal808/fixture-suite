@@ -253,9 +253,9 @@ async def update_model(
 @router.delete("/{model_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_model(
     model_id: str,
-    admin=Depends(get_current_admin)
+    admin=Depends(get_current_admin),
+    customer_id: str = Depends(get_current_customer_id),
 ):
-    customer_id = admin.customer_id
 
     affected = db.execute_update(
         """

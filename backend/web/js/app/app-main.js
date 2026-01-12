@@ -51,6 +51,18 @@ window.__activeOverlayCloser = null;
       target.classList.remove("hidden");
     }
 
+    // ★ 更新 hash
+    const hashMap = {
+      "station": "admin/station_mt",
+      "fixtures": "admin/fixture_mt",
+      "models": "admin/model_mt",
+      "owners": "admin/owner_mt",
+      "settings": "admin/settings"
+    };
+    if (hashMap[page]) {
+      setHash(hashMap[page]);
+    }
+
     // 更新按鈕樣式
     document.querySelectorAll(".admin-menu").forEach(btn => {
       btn.classList.remove("btn-primary");
@@ -79,7 +91,7 @@ window.__activeOverlayCloser = null;
   function normalizeHash(hash) {
     if (!hash) return "dashboard";
     const cleaned = hash.replace(/^#/, "");
-    // 取第一段作為主頁籤 (例如 "transactions" → "transactions")
+    // 取第一段作為主頁籤 (例如 "transactions/receipts" → "transactions")
     const mainTab = cleaned.split("/")[0];
     return mainTab;
   }
@@ -144,7 +156,7 @@ window.__activeOverlayCloser = null;
                   break;
 
               // 其他頁面：只載一次
-              case "transactions":  // ★ 新增 transactions
+              case "transactions":
               case "query":
               case "logs":
               case "stats":
@@ -153,7 +165,7 @@ window.__activeOverlayCloser = null;
                       loadedFlags[tabKey] = true;
 
                       switch (tabKey) {
-                          case "transactions":  // ★ 新增 transactions
+                          case "transactions":
                               if (typeof window.loadReceipts === "function") window.loadReceipts();
                               break;
 
@@ -190,9 +202,16 @@ window.__activeOverlayCloser = null;
   tabButtons.forEach(btn => {
     btn.addEventListener("click", () => {
       const tabKey = btn.dataset.tab;
-      const hash = btn.dataset.hash || tabKey;
-      showTab(tabKey, { updateHash: true });
-      setHash(hash);
+
+      // ★ 如果是 transactions 且沒有子路徑，預設導向 receipts
+      if (tabKey === "transactions") {
+        setHash("transactions/receipts");
+        showTab(tabKey, { updateHash: false });
+      } else {
+        const hash = btn.dataset.hash || tabKey;
+        showTab(tabKey, { updateHash: true });
+        setHash(hash);
+      }
     });
   });
 
@@ -228,13 +247,91 @@ window.__activeOverlayCloser = null;
       await window.loadCurrentUser();
     }
 
+    // ★★★ (2.5) 先定義 transactions 子頁籤切換函數 ★★★
+    const rtabSections = [
+      "#rtab-receipts",
+      "#rtab-returns",
+      "#viewAllTab",
+      "#viewSerialTab"
+    ];
+
+    window.switchRTab = function(tab) {
+      const rtabButtons = document.querySelectorAll("[data-rtab]");
+
+      // active 樣式
+      rtabButtons.forEach(b => b.classList.remove("subtab-active"));
+      const currentBtn = document.querySelector(`[data-rtab="${tab}"]`);
+      if (currentBtn) currentBtn.classList.add("subtab-active");
+
+      // ★ 更新 hash
+      const hashMap = {
+        "receipts": "transactions/receipts",
+        "returns": "transactions/returns",
+        "viewall": "transactions/view_all",
+        "serial": "transactions/view_serials"
+      };
+      if (hashMap[tab]) {
+        setHash(hashMap[tab]);
+      }
+
+      // ★★★ 先確定要顯示哪個元素 ★★★
+      let targetElement = null;
+
+      if (tab === "receipts") {
+        targetElement = document.getElementById("rtab-receipts");
+      } else if (tab === "returns") {
+        targetElement = document.getElementById("rtab-returns");
+      } else if (tab === "viewall") {
+        targetElement = document.getElementById("viewAllTab");
+        // 載入資料
+        if (typeof window.loadTransactionViewAll === "function") {
+          window.loadTransactionViewAll(1);
+        }
+      } else if (tab === "serial") {
+        targetElement = document.getElementById("viewSerialTab");
+        // 預設查最近 7 天
+        const today = new Date();
+        const from = new Date(Date.now() - 7 * 86400000);
+        const df = document.getElementById("vsDateFrom");
+        const dt = document.getElementById("vsDateTo");
+        if (df && dt) {
+          df.value = from.toISOString().slice(0, 10);
+          dt.value = today.toISOString().slice(0, 10);
+        }
+        if (typeof window.loadTransactionViewSerial === "function") {
+          window.loadTransactionViewSerial(1);
+        }
+      }
+
+      // ★★★ 隱藏所有，但排除目標元素 ★★★
+      document.querySelectorAll(rtabSections.join(",")).forEach(sec => {
+        if (sec !== targetElement) {
+          sec.classList.add("hidden");
+        }
+      });
+
+      // ★★★ 最後顯示目標元素 ★★★
+      if (targetElement) {
+        targetElement.classList.remove("hidden");
+      }
+    };
+
     // (2) 啟動頁籤
     const initialTab = normalizeHash(location.hash);
     const initialSubTab = getSubTab(location.hash);
-    showTab(initialTab, { updateHash: true });
+
+    // ★ 如果是 transactions 但沒有子路徑，自動加上 /receipts
+    if (initialTab === "transactions" && !initialSubTab) {
+      setHash("transactions/receipts");
+      showTab(initialTab, { updateHash: false });
+    } else {
+      showTab(initialTab, { updateHash: true });
+    }
 
     // ★ 如果有子頁籤，也要觸發對應的切換
-    if (initialSubTab) {
+    const shouldTriggerSubTab = initialSubTab || (initialTab === "transactions");
+
+    if (shouldTriggerSubTab) {
       setTimeout(() => {
         // transactions 子頁籤
         if (initialTab === "transactions") {
@@ -244,10 +341,12 @@ window.__activeOverlayCloser = null;
             "view_all": "viewall",
             "view_serials": "serial"
           };
-          const rtabValue = rtabMap[initialSubTab];
-          if (rtabValue) {
-            const btn = document.querySelector(`[data-rtab="${rtabValue}"]`);
-            if (btn) btn.click();
+          // 如果沒有子頁籤，預設為 receipts
+          const targetSubTab = initialSubTab || "receipts";
+          const rtabValue = rtabMap[targetSubTab];
+
+          if (rtabValue && typeof window.switchRTab === "function") {
+            window.switchRTab(rtabValue);
           }
         }
 
@@ -294,70 +393,18 @@ window.__activeOverlayCloser = null;
       }, 100);
     }
 
-    // (3) 收料 / 退料 / 總檢視 / 序號檢視 子分頁（最終穩定版）
+    // (3) 收料 / 退料 / 總檢視 / 序號檢視 子分頁 - 綁定按鈕事件
     const rtabButtons = document.querySelectorAll("[data-rtab]");
-    const rtabSections = [
-      "#rtab-receipts",
-      "#rtab-returns",
-      "#viewAllTab",
-      "#viewSerialTab"
-    ];
 
     rtabButtons.forEach(btn => {
-      if (btn.__rtabBound) return;     // ★ 防重複綁定
+      if (btn.__rtabBound) return;
       btn.__rtabBound = true;
 
-      btn.addEventListener("click", () => {
-
-        // active 樣式
-        rtabButtons.forEach(b => b.classList.remove("subtab-active"));
-        btn.classList.add("subtab-active");
-
+      btn.addEventListener("click", (e) => {
+        e.preventDefault(); // ★ 阻止原本的 onclick
+        e.stopPropagation();
         const tab = btn.dataset.rtab;
-
-        // 隱藏所有子頁
-        document
-          .querySelectorAll(rtabSections.join(","))
-          .forEach(sec => sec.classList.add("hidden"));
-
-        // ==========================
-        // 顯示對應子頁 + 載資料
-        // ==========================
-        if (tab === "receipts" || tab === "returns") {
-          const target = document.getElementById(`rtab-${tab}`);
-          if (target) target.classList.remove("hidden");
-          return;
-        }
-
-        if (tab === "viewall") {
-          const viewAll = document.getElementById("viewAllTab");
-          if (viewAll) viewAll.classList.remove("hidden");
-
-          if (typeof window.loadTransactionViewAll === "function") {
-            window.loadTransactionViewAll(1);
-          }
-          return;
-        }
-
-        if (tab === "serial") {
-          const serialTab = document.getElementById("viewSerialTab");
-          if (serialTab) serialTab.classList.remove("hidden");
-
-          // 預設查最近 7 天（保險寫法）
-          const today = new Date();
-          const from = new Date(Date.now() - 7 * 86400000);
-
-          const df = document.getElementById("vsDateFrom");
-          const dt = document.getElementById("vsDateTo");
-
-          if (df && dt) {
-            df.value = from.toISOString().slice(0, 10);
-            dt.value = today.toISOString().slice(0, 10);
-          }
-
-          loadTransactionViewSerial(1);
-        }
-
+        window.switchRTab(tab);
       });
     });
 
@@ -372,8 +419,37 @@ window.__activeOverlayCloser = null;
         qtabBtns.forEach(b => b.classList.remove("subtab-active"));
         btn.classList.add("subtab-active");
 
+        // ★ 更新 hash
+        const hashMap = {
+          "fixtures": "query/fixtures",
+          "models": "query/model"
+        };
+        if (hashMap[tab]) {
+          setHash(hashMap[tab]);
+        }
+
         document.getElementById("qtab-fixtures").classList.toggle("hidden", tab !== "fixtures");
         document.getElementById("qtab-models").classList.toggle("hidden", tab !== "models");
+      });
+    });
+
+    // (4.5) Logs 子分頁
+    const ltabBtns = document.querySelectorAll("[data-ltab]");
+    ltabBtns.forEach(btn => {
+      btn.addEventListener("click", () => {
+        const tab = btn.dataset.ltab;
+
+        ltabBtns.forEach(b => b.classList.remove("subtab-active"));
+        btn.classList.add("subtab-active");
+
+        // ★ 更新 hash
+        const hashMap = {
+          "usage": "logs/usage",
+          "replacement": "logs/replacement"
+        };
+        if (hashMap[tab]) {
+          setHash(hashMap[tab]);
+        }
       });
     });
 

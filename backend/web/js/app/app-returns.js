@@ -350,38 +350,51 @@ onUserReady?.(() => {
   });
 });
 
+
+
 /* ============================================================
- * 下載退料 Excel 範本（v4.x）
- * - 無 customer_id
- * - ✅ 必須包含 source_type
+ * 匯入範本（v4.x｜退料）
+ * - ❌ 不包含 customer / customer_id
+ * - ✅ batch / individual 一律使用 serials
+ * - ✅ datecode 使用 datecode + quantity
  * ============================================================ */
 function downloadReturnTemplate() {
   const template = [
+    // =========================
+    // batch（批量退料）
+    // =========================
     {
       fixture_id: "C-00010",
-      order_no: "PO123456",
+      order_no: "PO223456",
       record_type: "batch",
       source_type: "customer_supplied",
-      serial_start: 1,
-      serial_end: 10,
+      serials: "SM001,SM002,SM003",
       note: "批量退料示例",
     },
+
+    // =========================
+    // individual（個別退料）
+    // =========================
     {
       fixture_id: "L-00018",
-      order_no: "PO123457",
+      order_no: "PO223457",
       record_type: "individual",
       source_type: "self_purchased",
-      serials: "SN001,SN002,SN003",
+      serials: "SN010,SN011",
       note: "個別退料示例",
     },
+
+    // =========================
+    // datecode
+    // =========================
     {
       fixture_id: "L-00020",
-      order_no: "PO123458",
+      order_no: "PO223458",
       record_type: "datecode",
       source_type: "customer_supplied",
       datecode: "2024W12",
-      quantity: 50,
-      note: "日期碼退料示例",
+      quantity: 30,
+      note: "datecode 退料示例",
     },
   ];
 
@@ -391,3 +404,4 @@ function downloadReturnTemplate() {
   XLSX.writeFile(wb, "return_template.xlsx");
 }
 window.downloadReturnTemplate = downloadReturnTemplate;
+

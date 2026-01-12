@@ -1,12 +1,9 @@
 /**
- * 負責人管理 UI 控制 (v4.x FINAL - PATCHED)
- * app-owners.js
+ * 負責人管理 UI 控制 (v4.2 - user assignment aligned)
  *
- * ✔ 完全正規化（只用 *_owner_id）
- * ✔ select + users/simple
- * ✔ 顯示只用 *_owner_name
- * ✔ 停用 instead of delete
- * ✔ v4.x：customer 由 header/context 決定（X-Customer-Id）
+ * - Owner = user assignment
+ * - No email / no customer_name
+ * - customer from header context (X-Customer-Id)
  */
 
 /* ============================================================
@@ -27,44 +24,70 @@ let ownerPage = 1;
 let ownerPageSize = 20;
 
 /* ============================================================
+ * 取得目前 customer context（來自 header select）
+ * ============================================================ */
+function getCurrentCustomerId() {
+  const sel = document.getElementById("currentCustomerSelect");
+  return sel?.value || "";
+}
+
+/* ============================================================
  * Admin Sidebar Entry
  * ============================================================ */
 function loadAdminOwners() {
   if (!ensureAdmin()) return;
+
+  // 只要切到 Owner 頁，就嘗試同步一次 customer 顯示 + 刷新列表
+  // 真正的「第一次初始化」仍由 onCustomerReady 保障
+  refreshOwnerCustomerContext();
+
   ownerPage = 1;
-  loadOwnerUserOptions();
   loadOwners();
-  initInlineOwnerForm();
 }
 window.loadAdminOwners = loadAdminOwners;
 
 /* ============================================================
- * 初始化（v4.x：等 customer ready）
+ * 初始化（等 customer ready）
  * ============================================================ */
 onCustomerReady(() => {
   if (!ensureAdmin()) return;
+
+  // 沒有 owner table 就不初始化（避免切到其他頁也跑）
   if (!document.getElementById("ownerTable")) return;
 
-  ownerPage = 1;
+  // 1) 顯示目前 customer
+  refreshOwnerCustomerContext();
+
+  // 2) 預先載入 users option（避免第一次打開 modal 是空的）
   loadOwnerUserOptions();
+
+  // 3) 載入列表
+  ownerPage = 1;
   loadOwners();
-  initInlineOwnerForm();
 });
 
 /* ============================================================
- * 載入負責人列表（v4.x：skip/limit）
+ * 載入負責人列表
  * ============================================================ */
 async function loadOwners() {
+  const table = document.getElementById("ownerTable");
+  if (!table) return;
+
+  const customerId = getCurrentCustomerId();
+  if (!customerId) {
+    // customer 未 ready 時不打 API，避免出現「要重整才正常」
+    renderOwnerTable([]);
+    return;
+  }
+
   const search = document.getElementById("ownerSearch")?.value.trim() || "";
   const active = document.getElementById("ownerFilterActive")?.value ?? "";
 
   const params = {
-    skip: (ownerPage - 1) * ownerPageSize,
-    limit: ownerPageSize,
+    page: ownerPage,
+    pageSize: ownerPageSize,
   };
   if (search) params.search = search;
-
-  // active: ""=全部, "1"=啟用, "0"=停用（依你 UI）
   if (active !== "") params.is_active = active;
 
   try {
@@ -90,7 +113,7 @@ function renderOwnerTable(list) {
   if (!Array.isArray(list) || list.length === 0) {
     table.innerHTML = `
       <tr>
-        <td colspan="6" class="text-center text-gray-400 py-6">
+        <td colspan="4" class="text-center text-gray-400 py-6">
           查無資料
         </td>
       </tr>
@@ -99,17 +122,12 @@ function renderOwnerTable(list) {
   }
 
   list.forEach(o => {
-    const customerLabel = o.customer_id
-      ? (o.customer_name || o.customer_id)
-      : "共用";
-
     table.insertAdjacentHTML("beforeend", `
       <tr>
         <td class="text-center">${o.id}</td>
-        <td>${o.primary_owner_name || "-"}</td>
-        <td>${o.secondary_owner_name || ""}</td>
-        <td>${o.email || ""}</td>
-        <td class="text-right">
+        <td>${o.primary_user_name}</td>
+        <td>${o.secondary_user_name || "—"}</td>
+        <td class="text-right space-x-2">
           <button class="btn btn-xs btn-outline"
                   onclick="openOwnerEdit(${o.id})">編輯</button>
           <button class="btn btn-xs btn-warning"
@@ -134,7 +152,7 @@ function renderOwnerPagination(total) {
   for (let i = 1; i <= totalPages; i++) {
     const btn = document.createElement("button");
     btn.className = `btn btn-sm ${i === ownerPage ? "btn-primary" : "btn-outline"}`;
-    btn.innerText = i;
+    btn.textContent = i;
     btn.onclick = () => {
       ownerPage = i;
       loadOwners();
@@ -144,120 +162,40 @@ function renderOwnerPagination(total) {
 }
 
 /* ============================================================
- * 新增負責人（Inline）
+ * 共同：填入 select option（新增 / 編輯共用）
  * ============================================================ */
-async function submitInlineOwner() {
-  if (!ensureAdmin()) return;
-  if (!window.currentCustomerId) return toast("尚未選擇客戶", "warning");
+function fillUserSelectOptions(primarySel, secondarySel, users) {
+  if (primarySel) primarySel.innerHTML = `<option value="">請選擇使用者</option>`;
+  if (secondarySel) secondarySel.innerHTML = `<option value="">（無）</option>`;
 
-  const primarySel = document.getElementById("addOwnerPrimary");
-  const secondarySel = document.getElementById("addOwnerSecondary");
-  const emailEl = document.getElementById("addOwnerEmail");
-  const noteEl = document.getElementById("addOwnerNote");
+  (users || []).forEach(u => {
+    const label = u.full_name ? `${u.full_name} (${u.username})` : u.username;
 
-  const primaryIdRaw = primarySel?.value || "";
-  const secondaryIdRaw = secondarySel?.value || "";
-  let email = (emailEl?.value || "").trim();
-  const note = (noteEl?.value || "").trim();
-
-  if (!primaryIdRaw) return toast("請選擇主負責人", "error");
-
-  // ✅ 主/副不可相同
-  if (secondaryIdRaw && secondaryIdRaw === primaryIdRaw) {
-    return toast("主負責人與副負責人不可相同", "error");
-  }
-
-  // ✅ email 若沒填 → 自動用主負責人 option 的 data-email
-  if (!email) {
-    const opt = primarySel?.selectedOptions?.[0];
-    const autoEmail = (opt?.dataset?.email || "").trim();
-    if (autoEmail) {
-      email = autoEmail;
-      if (emailEl) emailEl.value = autoEmail; // 讓 UI 同步顯示
-    }
-  }
-
-  // ✅ 仍然沒 email 就擋（後端也會再擋一次）
-  if (!email) return toast("Email 為必填（或該使用者未設定 Email）", "error");
-
-  const payload = {
-    primary_owner_id: Number(primaryIdRaw),
-    secondary_owner_id: secondaryIdRaw ? Number(secondaryIdRaw) : null,
-    email,
-    note: note || null,
-  };
-
-  try {
-    await apiCreateOwner(payload);
-    toast("新增成功");
-    clearInlineOwnerForm();
-    ownerPage = 1;
-    loadOwners();
-  } catch (err) {
-    console.error(err);
-
-    // ✅ 盡量把後端 detail 顯示出來
-    const msg =
-      err?.data?.detail ||
-      err?.message ||
-      "新增失敗";
-
-    toast(msg, "error");
-  }
-}
-window.submitInlineOwner = submitInlineOwner;
-
-/* ============================================================
- * 清空表單
- * ============================================================ */
-function clearInlineOwnerForm() {
-  ["addOwnerPrimary", "addOwnerSecondary", "addOwnerEmail", "addOwnerNote"]
-    .forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.value = "";
-    });
+    if (primarySel) primarySel.appendChild(new Option(label, String(u.id)));
+    if (secondarySel) secondarySel.appendChild(new Option(label, String(u.id)));
+  });
 }
 
 /* ============================================================
- * Inline 客戶顯示（v4.x：只有 currentCustomerId）
- * ============================================================ */
-function initInlineOwnerForm() {
-  const el = document.getElementById("addOwnerCustomer");
-  if (!el) return;
-
-  el.value = window.currentCustomerId || "—";
-}
-
-/* ============================================================
- * 載入使用者清單（select）
+ * 載入使用者清單（一次填入：新增 + 編輯）
  * ============================================================ */
 async function loadOwnerUserOptions() {
   try {
-    const users = await api("/users/simple");
+    const users = await apiListUsersSimple();
 
-    const primarySel = document.getElementById("addOwnerPrimary");
-    const secondarySel = document.getElementById("addOwnerSecondary");
-    if (!primarySel || !secondarySel) return;
+    // 新增用
+    const addPrimary = document.getElementById("addOwnerPrimary");
+    const addSecondary = document.getElementById("addOwnerSecondary");
 
-    primarySel.innerHTML = `<option value="">請選擇使用者</option>`;
-    secondarySel.innerHTML = `<option value="">（無）</option>`;
+    // 編輯用
+    const editPrimary = document.getElementById("editOwnerPrimary");
+    const editSecondary = document.getElementById("editOwnerSecondary");
 
-    (users || []).forEach(u => {
-      const label =
-        (u.full_name ? `${u.full_name} (${u.username})` : u.username);
+    // 若頁面尚未 render 出 select，就跳過，不報錯
+    if (!addPrimary && !addSecondary && !editPrimary && !editSecondary) return;
 
-      const opt1 = document.createElement("option");
-      opt1.value = u.id;
-      opt1.textContent = label;
-      opt1.dataset.email = u.email || "";
-
-      primarySel.appendChild(opt1);
-
-      const opt2 = document.createElement("option");
-      opt2.value = u.id;
-      opt2.textContent = label;
-      secondarySel.appendChild(opt2);
-    });
+    fillUserSelectOptions(addPrimary, addSecondary, users);
+    fillUserSelectOptions(editPrimary, editSecondary, users);
   } catch (err) {
     console.error(err);
     toast("載入使用者清單失敗", "error");
@@ -266,34 +204,100 @@ async function loadOwnerUserOptions() {
 window.loadOwnerUserOptions = loadOwnerUserOptions;
 
 /* ============================================================
- * 編輯負責人
+ * 編輯負責人時：載入 + 預選
+ * ============================================================ */
+async function loadEditOwnerUserOptions(primaryUserId, secondaryUserId) {
+  // 先確保 option 已存在（同時會填 edit 的兩個 select）
+  await loadOwnerUserOptions();
+
+  const primarySel = document.getElementById("editOwnerPrimary");
+  const secondarySel = document.getElementById("editOwnerSecondary");
+
+  // 解除所有 selected（避免 placeholder 卡住）
+  if (primarySel) Array.from(primarySel.options).forEach(opt => (opt.selected = false));
+  if (secondarySel) Array.from(secondarySel.options).forEach(opt => (opt.selected = false));
+
+  if (primarySel && primaryUserId) {
+    primarySel.value = String(primaryUserId);
+    primarySel.dispatchEvent(new Event("change"));
+  }
+
+  if (secondarySel) {
+    secondarySel.value = secondaryUserId ? String(secondaryUserId) : "";
+    secondarySel.dispatchEvent(new Event("change"));
+  }
+}
+
+/* ============================================================
+ * Inline 新增
+ * ============================================================ */
+async function submitInlineOwner() {
+  if (!ensureAdmin()) return;
+
+  const customerId = getCurrentCustomerId();
+  if (!customerId) return toast("尚未選擇客戶", "error");
+
+  const primarySel = document.getElementById("addOwnerPrimary");
+  const secondarySel = document.getElementById("addOwnerSecondary");
+  const noteEl = document.getElementById("addOwnerNote");
+
+  const primaryId = Number(primarySel?.value);
+  const secondaryId = secondarySel?.value ? Number(secondarySel.value) : null;
+  const note = noteEl?.value.trim() || null;
+
+  if (!primaryId) return toast("請選擇主負責人", "error");
+  if (secondaryId && secondaryId === primaryId) {
+    return toast("主 / 副負責人不可相同", "error");
+  }
+
+  try {
+    await apiCreateOwner({
+      primary_user_id: primaryId,
+      secondary_user_id: secondaryId,
+      note,
+    });
+
+    toast("新增成功");
+    clearInlineOwnerForm();
+    ownerPage = 1;
+    loadOwners();
+  } catch (err) {
+    console.error(err);
+    toast(err?.data?.detail || "新增失敗", "error");
+  }
+}
+window.submitInlineOwner = submitInlineOwner;
+
+function clearInlineOwnerForm() {
+  ["addOwnerPrimary", "addOwnerSecondary", "addOwnerNote"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
+  });
+}
+
+/* ============================================================
+ * 編輯
  * ============================================================ */
 async function openOwnerEdit(id) {
   if (!ensureAdmin()) return;
 
-  const modal = document.getElementById("ownerEditModal");
-  const idInput = document.getElementById("editOwnerId");
-  const emailInput = document.getElementById("editOwnerEmail");
-  const noteInput = document.getElementById("editOwnerNote");
-
-  if (!modal || !idInput || !emailInput || !noteInput) {
-    console.error("❌ ownerEditModal DOM not found");
-    toast("編輯視窗尚未初始化", "error");
-    return;
-  }
-
   try {
+    // 顯示目前 customer（僅顯示，不參與 submit）
+    const customerId = getCurrentCustomerId();
+    const customerDisplay = document.getElementById("editOwnerCustomerDisplay");
+    if (customerDisplay) customerDisplay.value = customerId || "";
+
     const data = await apiGetOwner(id);
 
-    idInput.value = data.id;
-    emailInput.value = data.email || "";
-    noteInput.value = data.note || "";
+    document.getElementById("editOwnerId").value = data.id;
+    document.getElementById("editOwnerNote").value = data.note || "";
 
     await loadEditOwnerUserOptions(
-      data.primary_owner_id,
-      data.secondary_owner_id
+      data.primary_user_id,
+      data.secondary_user_id
     );
 
+    const modal = document.getElementById("ownerEditModal");
     modal.classList.remove("hidden");
     modal.classList.add("flex");
   } catch (err) {
@@ -305,73 +309,31 @@ window.openOwnerEdit = openOwnerEdit;
 
 function closeOwnerEdit() {
   const modal = document.getElementById("ownerEditModal");
-  if (modal) {
-    modal.classList.add("hidden");
-    modal.classList.remove("flex");
-  }
+  modal.classList.add("hidden");
+  modal.classList.remove("flex");
 }
 window.closeOwnerEdit = closeOwnerEdit;
 
-async function loadEditOwnerUserOptions(primaryId, secondaryId) {
-  const users = await api("/users/simple");
-
-  const primarySel = document.getElementById("editOwnerPrimary");
-  const secondarySel = document.getElementById("editOwnerSecondary");
-  if (!primarySel || !secondarySel) return;
-
-  const pId = primaryId != null ? Number(primaryId) : null;
-  const sId = secondaryId != null ? Number(secondaryId) : null;
-
-  primarySel.innerHTML = "";
-  secondarySel.innerHTML = "";
-
-  // 主負責人：不允許空
-  (users || []).forEach(u => {
-    const opt = document.createElement("option");
-    opt.value = u.id;
-    opt.textContent =
-      (u.full_name ? `${u.full_name} (${u.username})` : u.username);
-    if (Number(u.id) === pId) opt.selected = true;
-    primarySel.appendChild(opt);
-  });
-
-  // 副負責人：允許空
-  const empty = document.createElement("option");
-  empty.value = "";
-  empty.textContent = "（無）";
-  secondarySel.appendChild(empty);
-
-  (users || []).forEach(u => {
-    const opt = document.createElement("option");
-    opt.value = u.id;
-    opt.textContent =
-      (u.full_name ? `${u.full_name} (${u.username})` : u.username);
-    if (Number(u.id) === sId) opt.selected = true;
-    secondarySel.appendChild(opt);
-  });
-}
-
-/* ============================================================
- * 送出編輯
- * ============================================================ */
 async function submitOwnerEdit() {
   if (!ensureAdmin()) return;
 
-  const id = document.getElementById("editOwnerId")?.value;
-  const primary = document.getElementById("editOwnerPrimary")?.value;
-  const secondary = document.getElementById("editOwnerSecondary")?.value;
-  const email = document.getElementById("editOwnerEmail")?.value.trim();
-  const note = document.getElementById("editOwnerNote")?.value.trim();
+  const customerId = getCurrentCustomerId();
+  if (!customerId) return toast("尚未選擇客戶", "error");
 
-  if (!id) return toast("資料異常：缺少 ID", "error");
-  if (!primary || !email) return toast("主負責人與 Email 為必填", "error");
+  const id = document.getElementById("editOwnerId").value;
+  const primary = Number(document.getElementById("editOwnerPrimary").value);
+  const secondaryRaw = document.getElementById("editOwnerSecondary").value;
+  const secondary = secondaryRaw ? Number(secondaryRaw) : null;
+  const note = document.getElementById("editOwnerNote").value.trim() || null;
+
+  if (!id || !primary) return toast("資料不完整", "error");
+  if (secondary && secondary === primary) return toast("主 / 副負責人不可相同", "error");
 
   try {
     await apiUpdateOwner(id, {
-      primary_owner_id: Number(primary),
-      secondary_owner_id: secondary ? Number(secondary) : null,
-      email,
-      note: note || null,
+      primary_user_id: primary,
+      secondary_user_id: secondary,
+      note,
     });
 
     toast("更新成功");
@@ -385,13 +347,11 @@ async function submitOwnerEdit() {
 window.submitOwnerEdit = submitOwnerEdit;
 
 /* ============================================================
- * 停用負責人（instead of delete）
+ * 停用
  * ============================================================ */
 async function disableOwner(id) {
   if (!ensureAdmin()) return;
-  if (!id) return;
-
-  if (!confirm("確定要停用這位負責人？")) return;
+  if (!confirm("確定要停用？")) return;
 
   try {
     await apiUpdateOwner(id, { is_active: 0 });
@@ -405,29 +365,54 @@ async function disableOwner(id) {
 window.disableOwner = disableOwner;
 
 /* ============================================================
- * UI 綁定（搜尋 / 篩選 / page size）
+ * UI 綁定
  * ============================================================ */
 (function bindOwnerUI() {
-  const searchEl = document.getElementById("ownerSearch");
-  const activeEl = document.getElementById("ownerFilterActive");
-  const sizeEl = document.getElementById("ownerPageSize");
-
-  searchEl?.addEventListener("keydown", e => {
+  document.getElementById("ownerSearch")?.addEventListener("keydown", e => {
     if (e.key === "Enter") {
       ownerPage = 1;
       loadOwners();
     }
   });
 
-  activeEl?.addEventListener("change", () => {
+  document.getElementById("ownerFilterActive")?.addEventListener("change", () => {
     ownerPage = 1;
     loadOwners();
   });
 
-  sizeEl?.addEventListener("change", () => {
-    const v = Number(sizeEl.value);
-    ownerPageSize = Number.isFinite(v) && v > 0 ? v : 20;
+  document.getElementById("ownerPageSize")?.addEventListener("change", e => {
+    ownerPageSize = Number(e.target.value) || 20;
     ownerPage = 1;
     loadOwners();
   });
 })();
+
+/* ============================================================
+ * customer 狀態刷新（顯示用 + 順便更新 users option）
+ * ============================================================ */
+function refreshOwnerCustomerContext() {
+  const customerId = getCurrentCustomerId();
+
+  // 新增區顯示
+  const displayEl = document.getElementById("ownerCustomerDisplay");
+  if (displayEl) {
+    if (!customerId) {
+      displayEl.value = "";
+      displayEl.placeholder = "尚未選擇客戶";
+    } else {
+      displayEl.value = customerId;
+    }
+  }
+
+  // 編輯 modal 顯示（若存在）
+  const editDisplay = document.getElementById("editOwnerCustomerDisplay");
+  if (editDisplay) {
+    editDisplay.value = customerId || "";
+  }
+
+  // 只要 customer ready，就順便更新使用者選項（避免切客戶後下拉還是舊的）
+  if (customerId) {
+    loadOwnerUserOptions?.();
+  }
+}
+window.refreshOwnerCustomerContext = refreshOwnerCustomerContext;

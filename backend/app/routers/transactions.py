@@ -13,8 +13,9 @@ router = APIRouter(
     tags=["通用交易 Transaction Wrapper"]
 )
 
+
 # ============================================================
-# ★ 收退料總檢視（v4.x）
+# ★ 收退料總檢視（v4.x FINAL）
 # ============================================================
 
 @router.get("/view-all", summary="收退料總檢視（收料 + 退料）")
@@ -74,11 +75,28 @@ async def view_all_transactions(
             t.transaction_date,
             t.transaction_type,
             t.fixture_id,
+
+            -- ✅ 單號（永遠只來自 material_transactions）
             t.order_no,
-            t.source_type,
+
+            -- ✅ Datecode（只在 record_type = datecode）
+            CASE
+                WHEN t.record_type = 'datecode'
+                    THEN (
+                        SELECT d.datecode
+                        FROM fixture_datecode_transactions d
+                        WHERE d.transaction_id = t.id
+                        LIMIT 1
+                    )
+                ELSE NULL
+            END AS datecode,
+
             t.record_type,
+            t.source_type,
             t.operator,
             t.note,
+
+            -- ✅ v4.x 正確數量算法
             CASE
                 WHEN t.record_type = 'datecode'
                     THEN (
@@ -92,6 +110,7 @@ async def view_all_transactions(
                         WHERE i.transaction_id = t.id
                 )
             END AS quantity
+
         FROM material_transactions t
         WHERE {where_sql}
         ORDER BY t.transaction_date DESC, t.id DESC
@@ -101,11 +120,18 @@ async def view_all_transactions(
     rows = db.execute_query(sql, tuple(params + [limit, skip]))
 
     total = db.execute_query(
-        f"SELECT COUNT(*) AS total FROM material_transactions t WHERE {where_sql}",
+        f"""
+        SELECT COUNT(*) AS total
+        FROM material_transactions t
+        WHERE {where_sql}
+        """,
         tuple(params)
     )[0]["total"]
 
-    return {"total": total, "rows": rows}
+    return {
+        "total": total,
+        "rows": rows
+    }
 
 
 # ============================================================
@@ -185,28 +211,53 @@ async def view_transaction_serials(
 # ============================================================
 # ★ 單一序號完整履歷
 # ============================================================
-
-@router.get("/serials/{serial_number}/history", summary="序號完整履歷")
+@router.get(
+    "/fixtures/{fixture_id}/serials/{serial_number}/history",
+    summary="序號完整履歷"
+)
 async def get_serial_history(
+    fixture_id: str,
     serial_number: str,
     customer_id: str = Depends(get_current_customer_id),
     user=Depends(get_current_user)
 ):
     serial = serial_number.strip()
 
+    # --------------------------------------------------
+    # 1️⃣ 序號基本資訊（來源改由 receipt 交易帶）
+    # --------------------------------------------------
     serial_info = db.execute_query(
         """
-        SELECT *
-        FROM fixture_serials
-        WHERE serial_number = %s
-          AND customer_id = %s
+        SELECT
+            fs.id,
+            fs.serial_number,
+            fs.fixture_id,
+            fs.status,
+            fs.total_uses,
+            fs.last_use_date,
+            fs.created_at,
+            fs.updated_at,
+
+            -- ⭐ 來源一律來自收料交易
+            mt.source_type
+
+        FROM fixture_serials fs
+        LEFT JOIN material_transactions mt
+          ON mt.id = fs.receipt_transaction_id
+
+        WHERE fs.customer_id   = %s
+          AND fs.fixture_id    = %s
+          AND fs.serial_number = %s
         """,
-        (serial, customer_id)
+        (customer_id, fixture_id, serial)
     )
 
     if not serial_info:
         raise HTTPException(404, "Serial not found")
 
+    # --------------------------------------------------
+    # 2️⃣ 收 / 退料交易紀錄
+    # --------------------------------------------------
     transactions = db.execute_query(
         """
         SELECT
@@ -220,12 +271,16 @@ async def get_serial_history(
         JOIN material_transaction_items i
           ON t.id = i.transaction_id
         WHERE i.serial_number = %s
-          AND t.customer_id = %s
+          AND i.fixture_id    = %s
+          AND t.customer_id  = %s
         ORDER BY t.transaction_date DESC, t.id DESC
         """,
-        (serial, customer_id)
+        (serial, fixture_id, customer_id)
     )
 
+    # --------------------------------------------------
+    # 3️⃣ 使用紀錄
+    # --------------------------------------------------
     usages = db.execute_query(
         """
         SELECT
@@ -237,12 +292,16 @@ async def get_serial_history(
             note
         FROM usage_logs
         WHERE serial_number = %s
-          AND customer_id = %s
+          AND fixture_id    = %s
+          AND customer_id   = %s
         ORDER BY used_at DESC
         """,
-        (serial, customer_id)
+        (serial, fixture_id, customer_id)
     )
 
+    # --------------------------------------------------
+    # 4️⃣ 更換紀錄
+    # --------------------------------------------------
     replacements = db.execute_query(
         """
         SELECT
@@ -253,10 +312,11 @@ async def get_serial_history(
             auto_predicted_replace_at
         FROM replacement_logs
         WHERE serial_number = %s
-          AND customer_id = %s
+          AND fixture_id    = %s
+          AND customer_id   = %s
         ORDER BY created_at DESC
         """,
-        (serial, customer_id)
+        (serial, fixture_id, customer_id)
     )
 
     return {
@@ -265,6 +325,9 @@ async def get_serial_history(
         "usages": usages,
         "replacements": replacements
     }
+
+
+
 
 
 @router.get("/summary/export")

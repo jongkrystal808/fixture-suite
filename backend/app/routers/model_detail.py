@@ -43,7 +43,7 @@ class FixtureRequirement(BaseModel):
     fixture_id: str
     fixture_name: Optional[str] = None
     required_qty: int
-    available_qty: Optional[int] = 0
+    in_stock_qty: Optional[int] = 0
     note: Optional[str] = None
 
 class FixtureRequirementCreate(BaseModel):
@@ -258,7 +258,7 @@ async def list_requirements(
             fr.fixture_id,
             f.fixture_name,
             fr.required_qty,
-            COALESCE(f.available_qty, 0) AS available_qty,
+            COALESCE(f.in_stock_qty, 0) AS in_stock_qty,
             fr.note
         FROM fixture_requirements fr
         JOIN fixtures f
@@ -332,7 +332,7 @@ async def create_requirement(
             fr.fixture_id,
             f.fixture_name,
             fr.required_qty,
-            COALESCE(f.available_qty, 0) AS available_qty,
+            COALESCE(f.in_stock_qty, 0) AS in_stock_qty,
             fr.note
         FROM fixture_requirements fr
         JOIN fixtures f
@@ -409,7 +409,7 @@ async def update_requirement(
             fr.fixture_id,
             f.fixture_name,
             fr.required_qty,
-            COALESCE(f.available_qty, 0) AS available_qty,
+            COALESCE(f.in_stock_qty, 0) AS in_stock_qty,
             fr.note
         FROM fixture_requirements fr
         JOIN fixtures f
@@ -502,7 +502,7 @@ async def get_model_detail(
             fr.fixture_id,
             f.fixture_name,
             fr.required_qty,
-            COALESCE(f.available_qty, 0) AS available_qty,
+            COALESCE(f.in_stock_qty, 0) AS in_stock_qty,
             fr.note
         FROM fixture_requirements fr
         JOIN stations s
@@ -523,7 +523,7 @@ async def get_model_detail(
     for r in requirements:
         sid = r["station_id"]
         req_qty = r["required_qty"]
-        avail_qty = r["available_qty"] or 0
+        avail_qty = r["in_stock_qty"] or 0
 
         if req_qty <= 0:
             continue

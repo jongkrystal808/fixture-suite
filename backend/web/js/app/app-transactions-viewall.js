@@ -34,19 +34,22 @@ function renderViewAllTable(rows) {
     // -----------------------------
     // 交易類型（收 / 退）
     // -----------------------------
-    const typeText =
-      r.transaction_type === "receipt" ? "收料" :
-      r.transaction_type === "return"  ? "退料" : "-";
+    let typeHtml = "-";
+    if (r.transaction_type === "receipt") {
+      typeHtml = `<span class="tx-receipt">收料</span>`;
+    } else if (r.transaction_type === "return") {
+      typeHtml = `<span class="tx-return">退料</span>`;
+    }
 
     // -----------------------------
-    // 數量 / Datecode 顯示（v4.x 規則）
+    // 數量 / Datecode 顯示（v4.x 正確語意）
     // -----------------------------
     let qtyText = "-";
     const qty = Math.abs(Number(r.quantity) || 0);
 
     if (r.record_type === "datecode") {
-      // v4.x：datecode 存在 order_no
-      const datecode = r.order_no || "-";
+      // ✅ v4.x：Datecode 來自後端 r.datecode
+      const datecode = r.datecode || "-";
       qtyText = `${datecode}（${qty} 件）`;
     } else {
       // batch / individual
@@ -56,7 +59,7 @@ function renderViewAllTable(rows) {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${txDate}</td>
-      <td>${typeText}</td>
+      <td>${typeHtml}</td>
       <td>${r.fixture_id || "-"}</td>
       <td>${r.record_type || "-"}</td>
       <td>${r.order_no || "-"}</td>
@@ -69,8 +72,9 @@ function renderViewAllTable(rows) {
   });
 }
 
+
 // ============================================================
-// 收料 / 退料 / 序號檢視 / 總檢視 TAB 切換控制（保留你原寫法）
+// 收料 / 退料 / 序號檢視 / 總檢視 TAB 切換控制
 // ============================================================
 function showTab(tabId) {
 
@@ -105,79 +109,87 @@ window.showTab = showTab;
 
 
 
-async function exportSummary() {
 
-  // 取得查詢欄位
-  const fixtureId = document.getElementById("vaFixture").value.trim();
-  const datecode  = document.getElementById("vaDatecode").value.trim();
-  const operator  = document.getElementById("vaOperator").value.trim();
-  const type      = document.getElementById("vaType").value;
+async function exportTransactionsXlsx({ type }) {
+  const token = localStorage.getItem("auth_token");
+  const customerId = window.currentCustomerId;
 
-  // ★ 組查詢參數（和 loadTransactionViewAll 完全一致）
-  const params = new URLSearchParams({
-    type: "summary",
-  });
+  if (!token || !customerId) {
+    toast("尚未登入或未選擇客戶", "error");
+    return;
+  }
+
+  // -------------------------
+  // 讀取查詢條件（與 view-all 完全一致）
+  // -------------------------
+  const params = new URLSearchParams({ type });
+
+  const fixtureId = document.getElementById("vaFixture")?.value?.trim();
+  const datecode  = document.getElementById("vaDatecode")?.value?.trim();
+  const operator  = document.getElementById("vaOperator")?.value?.trim();
+  const exportType = document.getElementById("vaType")?.value;
 
   if (fixtureId) params.set("fixture_id", fixtureId);
   if (datecode)  params.set("datecode", datecode);
   if (operator)  params.set("operator", operator);
-  if (type)      params.set("export_type", type);
+  if (exportType) params.set("export_type", exportType);
 
   const url = `${API_PREFIX}/transactions/summary/export?${params.toString()}`;
 
-  const res = await api(url.replace(API_PREFIX, ""));
+  try {
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "X-Customer-Id": customerId,
+      },
+    });
 
-  if (!res.ok) {
-    return toast("匯出失敗: " + res.status);
+    if (!res.ok) {
+      let msg = `匯出失敗 (${res.status})`;
+      try {
+        const err = await res.json();
+        if (err?.detail) msg = err.detail;
+      } catch {}
+      toast(msg, "error");
+      return;
+    }
+
+    // -------------------------
+    // 下載 XLSX
+    // -------------------------
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    const urlObj = URL.createObjectURL(blob);
+
+    a.href = urlObj;
+    a.download =
+      type === "detailed"
+        ? "transactions_detailed.xlsx"
+        : "transactions_summary.xlsx";
+
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(urlObj);
+
+  } catch (err) {
+    console.error(err);
+    toast("匯出過程發生錯誤", "error");
   }
+}
 
-  const blob = await res.blob();
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "transactions_summary.xlsx";
-  a.click();
+function exportSummary() {
+  exportTransactionsXlsx({ type: "summary" });
 }
 window.exportSummary = exportSummary;
 
 
-async function exportSummaryDetailed() {
-  const customer = getCurrentCustomerId();
-  const token = localStorage.getItem("auth_token");
-
-  // 取得查詢欄位
-  const fixtureId = document.getElementById("vaFixture").value.trim();
-  const datecode  = document.getElementById("vaDatecode").value.trim();
-  const operator  = document.getElementById("vaOperator").value.trim();
-  const type      = document.getElementById("vaType").value;
-
-  // ★ 組查詢參數（和 loadTransactionViewAll 完全一致）
-  const params = new URLSearchParams({
-    customer_id: customer,
-    type: "detailed",
-  });
-
-  if (fixtureId) params.set("fixture_id", fixtureId);
-  if (datecode)  params.set("datecode", datecode);
-  if (operator)  params.set("operator", operator);
-  if (type)      params.set("export_type", type);
-
-  const url = `${API_PREFIX}/transactions/summary/export?${params.toString()}`;
-
-  const res = await fetch(url, {
-    headers: { "Authorization": `Bearer ${token}` }
-  });
-
-  if (!res.ok) {
-    return toast("匯出失敗: " + res.status);
-  }
-
-  const blob = await res.blob();
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "transactions_summary_detailed.xlsx";
-  a.click();
+function exportSummaryDetailed() {
+  exportTransactionsXlsx({ type: "detailed" });
 }
 window.exportSummaryDetailed = exportSummaryDetailed;
+
+
 
 
 

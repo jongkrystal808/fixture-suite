@@ -1,8 +1,7 @@
 /**
- * 負責人 Owners API (v4.0 FINAL)
- * api-owners.js
+ * 負責人 Owners API (v4.2 - user assignment aligned)
  *
- * ✔ 完全正規化（只用 *_owner_id）
+ * ✔ 使用 primary_user_id / secondary_user_id
  * ✔ 不使用 DELETE（改用 is_active）
  * ✔ 支援搜尋 / 分頁
  * ✔ customer_id 由後端依 current customer 決定
@@ -47,23 +46,19 @@ async function apiGetOwner(ownerId) {
 }
 
 /* ============================================================
- * 新增 Owner（正規化版）
+ * 新增 Owner（user assignment）
  * ============================================================ */
 /**
  * payload:
  * {
- *   primary_owner_id: number,        // 必填
- *   secondary_owner_id?: number|null,
- *   email: string,                   // 必填
+ *   primary_user_id: number,          // 必填
+ *   secondary_user_id?: number|null,
  *   note?: string|null
  * }
  */
 async function apiCreateOwner(payload) {
-  if (!payload?.primary_owner_id) {
-    throw new Error("primary_owner_id is required");
-  }
-  if (!payload?.email) {
-    throw new Error("email is required");
+  if (!payload?.primary_user_id) {
+    throw new Error("primary_user_id is required");
   }
 
   return apiJson("/owners", payload, "POST");
@@ -75,9 +70,8 @@ async function apiCreateOwner(payload) {
 /**
  * payload:
  * {
- *   primary_owner_id?: number,
- *   secondary_owner_id?: number|null,
- *   email?: string,
+ *   primary_user_id?: number,
+ *   secondary_user_id?: number|null,
  *   note?: string|null,
  *   is_active?: 0 | 1
  * }
@@ -100,9 +94,8 @@ async function apiDisableOwner(ownerId) {
   );
 }
 
-
 /* ============================================================
- * Users Simple API（給下拉選單用）
+ * Users Simple API（給 owner 下拉選單）
  * ============================================================ */
 async function apiListUsersSimple() {
   return api("/users/simple");

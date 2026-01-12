@@ -96,7 +96,7 @@ class FixtureStatusViewRow(BaseModel):
 
   total_qty: Optional[int] = None
   in_use_qty: Optional[int] = None
-  available_qty: Optional[int] = None
+  in_stock_qty: Optional[int] = None
 
   used_count: Optional[int] = None
   last_used_at: Optional[datetime] = None
@@ -142,7 +142,7 @@ class FixtureStatus_View(BaseModel):
 
 class FixtureStatistics(BaseModel):
     total_fixtures: int
-    available_qty: int
+    in_stock_qty: int
     deployed_qty: int
     maintenance_qty: int
     scrapped_qty: int

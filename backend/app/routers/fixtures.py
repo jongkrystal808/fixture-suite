@@ -10,20 +10,12 @@ from backend.app.models.fixture import (
     FixtureCreate,
     FixtureUpdate,
     FixtureResponse,
-    FixtureListResponse,
     FixtureSimple,
     FixtureStatus_View,
     FixtureStatistics,
     FixtureStatus,
     CycleUnit
 )
-from enum import Enum
-
-class FixtureStatus(str, Enum):
-    normal = "normal"
-    returned = "returned"
-    scrapped = "scrapped"
-
 router = APIRouter(
     prefix="/fixtures",
     tags=["治具管理 Fixtures"]
@@ -32,30 +24,6 @@ router = APIRouter(
 # ============================================================
 # ⭐ 重要：所有具體路徑必須在動態路徑 /{fixture_id} 之前定義
 # ============================================================
-
-from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import StreamingResponse
-from typing import List
-import traceback
-from openpyxl import Workbook
-from io import BytesIO
-
-from backend.app.database import db
-from backend.app.dependencies import get_current_user, get_current_customer_id, get_current_admin
-from backend.app.models.fixture import (
-    FixtureCreate,
-    FixtureUpdate,
-    FixtureResponse,
-    FixtureListResponse,
-    FixtureSimple,
-    FixtureStatus_View,
-    FixtureStatistics,
-)
-
-router = APIRouter(
-    prefix="/fixtures",
-    tags=["治具管理 Fixtures"]
-)
 
 # ============================================================
 # 🔍 治具模糊搜尋
@@ -103,7 +71,7 @@ async def fixture_statistics(
             """
             SELECT
                 COUNT(*) AS total_fixtures,
-                SUM(available_qty) AS available_qty,
+                SUM(in_stock_qty) AS in_stock_qty,
                 SUM(deployed_qty) AS deployed_qty,
                 SUM(maintenance_qty) AS maintenance_qty,
                 SUM(scrapped_qty) AS scrapped_qty,
@@ -116,7 +84,7 @@ async def fixture_statistics(
 
         return {
             "total_fixtures": row["total_fixtures"] or 0,
-            "available_qty": row["available_qty"] or 0,
+            "in_stock_qty": row["in_stock_qty"] or 0,
             "deployed_qty": row["deployed_qty"] or 0,
             "maintenance_qty": row["maintenance_qty"] or 0,
             "scrapped_qty": row["scrapped_qty"] or 0,
@@ -358,7 +326,7 @@ async def create_fixture(
                 fixture_type,
                 self_purchased_qty,
                 customer_supplied_qty,
-                available_qty,
+                in_stock_qty,
                 deployed_qty,
                 maintenance_qty,
                 scrapped_qty,
@@ -390,7 +358,7 @@ async def create_fixture(
             data.customer_supplied_qty or 0,
 
             # 初始化數量（v4.x 建立時統一 0）
-            0,  # available_qty
+            0,  # in_stock_qty
             0,  # deployed_qty
             0,  # maintenance_qty
             0,  # scrapped_qty
@@ -448,7 +416,7 @@ async def get_fixture(
                 f.serial_number,
                 f.self_purchased_qty,
                 f.customer_supplied_qty,
-                f.available_qty,
+                f.in_stock_qty,
                 f.deployed_qty,
                 f.maintenance_qty,
                 f.scrapped_qty,
@@ -463,10 +431,10 @@ async def get_fixture(
                 f.note,
                 f.created_at,
                 f.updated_at,
-                o.primary_owner_id AS owner_name,
-                o.email AS owner_email
+                u.username AS owner_name
             FROM fixtures f
             LEFT JOIN owners o ON f.owner_id = o.id
+            LEFT JOIN users u ON u.id = o.primary_user_id
             WHERE f.id = %s AND f.customer_id = %s
             LIMIT 1
         """
@@ -498,10 +466,10 @@ async def get_fixture_detail(
         fixture_sql = """
             SELECT
                 f.*,
-                o.primary_owner_id AS owner_name,
-                o.email AS owner_email
+                u.username AS owner_name
             FROM fixtures f
             LEFT JOIN owners o ON f.owner_id = o.id
+            LEFT JOIN users u ON u.id = o.primary_user_id
             WHERE f.id = %s AND f.customer_id = %s
             LIMIT 1
         """
@@ -622,10 +590,10 @@ async def list_fixtures(
             f"""
             SELECT
                 f.*,
-                o.primary_owner_id AS owner_name,
-                o.email AS owner_email
+                u.username AS owner_name
             FROM fixtures f
             LEFT JOIN owners o ON f.owner_id = o.id
+            LEFT JOIN users u ON u.id = o.primary_user_id
             WHERE {where_sql}
             ORDER BY f.id
             LIMIT %s OFFSET %s

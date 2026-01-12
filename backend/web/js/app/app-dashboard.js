@@ -4,6 +4,11 @@
  */
 
 console.log("[dashboard] app-dashboard.js loaded");
+onUserReady(() => {
+  if (window.currentCustomerId) {
+    loadDashboard();
+  }
+});
 
 async function loadDashboard() {
   console.log("[dashboard] loadDashboard called");

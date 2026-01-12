@@ -145,7 +145,7 @@ function renderFixturesTable(rows) {
   for (const f of rows) {
     const purchased = f.self_purchased_qty ?? 0;
     const supplied  = f.customer_supplied_qty ?? 0;
-    const available = f.available_qty ?? 0;
+    const available = f.in_stock_qty ?? 0;
 
     const fid = f.fixture_id ?? f.id ?? "-";
 
@@ -580,7 +580,7 @@ function renderRequirementCard(f) {
       <div><b>站點：</b>${f.station_id ?? "-"}</div>
       <div><b>治具：</b>${f.fixture_id ?? "-"} - ${f.fixture_name || "-"}</div>
       <div><b>需求數量：</b>${f.required_qty ?? 0}</div>
-      <div><b>可用數量：</b>${f.available_qty ?? 0}</div>
+      <div><b>可用數量：</b>${f.in_stock_qty ?? 0}</div>
     </div>
   `;
 }

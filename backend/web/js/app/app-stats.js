@@ -11,7 +11,7 @@
  *
  * 後端已有：GET /fixtures/statistics/summary
  *   -> FixtureStatistics：
- *      total_fixtures, total_quantity, available_qty, deployed_qty,
+ *      total_fixtures, total_quantity, in_stock_qty, deployed_qty,
  *      maintenance_qty, scrapped_qty, returned_qty,
  *      active_fixtures, returned_fixtures, scrapped_fixtures
  *

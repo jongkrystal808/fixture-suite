@@ -34,7 +34,6 @@ from backend.app.routers.users import router as users_router
 from backend.app.routers.transactions import router as transactions_router
 from backend.app.routers.receipts_import import router as receipts_import_router
 from backend.app.routers.returns_import import router as returns_import_router
-from backend.app.routers.stats_dashboard import router as stats_dashboard_router
 from backend.app.routers.fixtures_import import router as fixtures_import_router
 from backend.app.routers.machine_models_import import router as machine_models_import_router
 
@@ -217,7 +216,6 @@ app.include_router(auth_router, prefix="/api/v2")
 app.include_router(users_router, prefix="/api/v2")
 app.include_router(customers_router, prefix="/api/v2")
 
-app.include_router(stats_dashboard_router, prefix="/api/v2")
 
 
 # ============================================================

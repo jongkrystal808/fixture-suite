@@ -295,3 +295,29 @@ table td {
     align-items: center;
     padding: 0 12px;
 }
+
+/* =========================================================
+ * Transaction Type Styles
+ * 收料 / 退料 類型顏色
+ * ========================================================= */
+
+.tx-receipt {
+  color: #16a34a; /* Tailwind green-600 */
+  font-weight: 600;
+}
+
+.tx-return {
+  color: #2563eb; /* Tailwind blue-600 */
+  font-weight: 600;
+}
+
+/* =========================================================
+ * Serial Number Style
+ * 序號：棕色 + 粗體
+ * ========================================================= */
+
+.tx-serial {
+  color: #65371b;        /* Tailwind amber-800，偏棕 */
+  font-weight: 700;
+}
+

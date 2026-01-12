@@ -1625,97 +1625,104 @@
           </section>
 
         </div>
+        <!-- ========== 負責人管理 ========== -->
+        <div id="admin-owners" class="admin-page card p-5 space-y-4 hidden">
+          <h3 class="font-semibold">負責人管理</h3>
 
-          <!-- ========== 負責人管理 ========== -->
-          <div id="admin-owners" class="admin-page card p-5 space-y-4 hidden">
-             <h3 class="font-semibold">負責人管理</h3>
-              <!-- ========== Inline 新增負責人 ========== -->
-                <div class="border rounded-xl p-4 bg-gray-50 space-y-3">
-                  <div class="font-semibold text-sm text-gray-700">新增負責人</div>
+          <!-- ========== Inline 新增負責人 ========== -->
+          <div class="border rounded-xl p-4 bg-gray-50 space-y-3">
+            <div class="font-semibold text-sm text-gray-700">新增負責人</div>
+            <div class="grid md:grid-cols-5 gap-3">
+              <!-- 🔒 客戶（自動帶入、不可編輯） -->
+              <div class="field">
+              <label class="label-xs flex items-center justify-between">
+                <span>客戶</span>
+                <button
+                  type="button"
+                  class="text-xs text-blue-600 hover:underline"
+                  onclick="refreshOwnerCustomerContext()"
+                  title="重新載入目前客戶狀態"
+                >
+                  ↻ 重新整理
+                </button>
+              </label>
 
-                  <div class="grid md:grid-cols-6 gap-3">
-                    <!-- 🔒 客戶（自動帶入、不可編輯） -->
-                    <div class="field">
-                      <label class="label-xs">客戶</label>
-                      <input
-                        id="addOwnerCustomer"
-                        class="input bg-gray-100 cursor-not-allowed"
-                        disabled
-                      />
-                    </div>
+              <input
+                id="ownerCustomerDisplay"
+                class="input bg-gray-100"
+                disabled
+                placeholder="尚未選擇客戶"
+              />
+            </div>
 
-                    <div class="field">
-                      <label class="label-xs">主負責人 *</label>
-                      <select id="addOwnerPrimary" class="input">
-                        <option value="">請選擇使用者</option>
-                      </select>
-                    </div>
-
-                    <div class="field">
-                      <label class="label-xs">副負責人</label>
-                      <select id="addOwnerSecondary" class="input">
-                        <option value="">（無）</option>
-                      </select>
-                    </div>
-
-
-                    <div class="field">
-                      <label class="label-xs">Email *</label>
-                      <input id="addOwnerEmail" class="input" />
-                    </div>
-
-                    <div class="field md:col-span-2">
-                      <label class="label-xs">備註</label>
-                      <input id="addOwnerNote" class="input" />
-                    </div>
-                  </div>
-
-                  <div class="flex justify-end gap-2">
-                    <button class="btn btn-ghost" onclick="clearInlineOwnerForm()">
-                      清空
-                    </button>
-                    <button class="btn btn-primary" onclick="submitInlineOwner()">
-                      新增
-                    </button>
-                  </div>
-                </div>
-
-
-                  <!-- 查詢 -->
-              <div class="grid md:grid-cols-4 gap-3">
-                <div class="field md:col-span-2">
-                  <label class="label-xs">搜尋</label>
-                  <input id="ownerSearch" class="input" placeholder="姓名 / Email" onkeydown="if(event.key==='Enter'){ownerPage=1;loadOwners();}" />
-                </div>
-
-                <div class="field">
-                  <label class="label-xs">狀態</label>
-                  <select id="ownerFilterActive" class="input" onchange="ownerPage=1;loadOwners();">
-                    <option value="">全部</option>
-                    <option value="1">啟用</option>
-                    <option value="0">停用</option>
-                  </select>
-                </div>
+              <div class="field">
+                <label class="label-xs">主負責人 *</label>
+                <select id="addOwnerPrimary" class="input">
+                  <option value="">請選擇使用者</option>
+                </select>
               </div>
 
-              <!-- 表格 -->
-              <div class="overflow-auto border rounded-xl max-h-[70vh]">
-                <table class="min-w-full text-sm">
-                  <thead class="sticky top-0 bg-gray-50 z-10">
-                    <tr>
-                      <th class="py-2 pr-4">ID</th>
-                      <th class="py-2 pr-4">主負責人</th>
-                      <th class="py-2 pr-4">副負責人</th>
-                      <th class="py-2 pr-4">Email</th>
-                      <th class="py-2 pr-4">狀態</th>
-                      <th class="py-2 pr-4 text-right">操作</th>
-                    </tr>
-                  </thead>
-                  <tbody id="ownerTable"></tbody>
-                </table>
-                <div id="ownerPagination" class="flex gap-2 mt-3 justify-center"></div>
+              <div class="field">
+                <label class="label-xs">副負責人</label>
+                <select id="addOwnerSecondary" class="input">
+                  <option value="">（無）</option>
+                </select>
               </div>
+
+              <div class="field md:col-span-2">
+                <label class="label-xs">備註</label>
+                <input id="addOwnerNote" class="input" />
+              </div>
+            </div>
+
+            <div class="flex justify-end gap-2">
+              <button class="btn btn-ghost" onclick="clearInlineOwnerForm()">
+                清空
+              </button>
+              <button class="btn btn-primary" onclick="submitInlineOwner()">
+                新增
+              </button>
+            </div>
+          </div>
+
+          <!-- 查詢 -->
+          <div class="grid md:grid-cols-3 gap-3">
+            <div class="field md:col-span-2">
+              <label class="label-xs">搜尋</label>
+              <input
+                id="ownerSearch"
+                class="input"
+                placeholder="姓名"
+              />
+            </div>
+
+            <div class="field">
+              <label class="label-xs">狀態</label>
+              <select id="ownerFilterActive" class="input">
+                <option value="">全部</option>
+                <option value="1">啟用</option>
+                <option value="0">停用</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 表格 -->
+          <div class="overflow-auto border rounded-xl max-h-[70vh]">
+            <table class="min-w-full text-sm">
+              <thead class="sticky top-0 bg-gray-50 z-10">
+                <tr>
+                  <th class="py-2 pr-4">ID</th>
+                  <th class="py-2 pr-4">主負責人</th>
+                  <th class="py-2 pr-4">副負責人</th>
+                  <th class="py-2 pr-4 text-right">操作</th>
+                </tr>
+              </thead>
+              <tbody id="ownerTable"></tbody>
+            </table>
+            <div id="ownerPagination" class="flex gap-2 mt-3 justify-center"></div>
+          </div>
         </div>
+
 
           <!-- ========== 系統設定（SMTP） ========== -->
           <div id="admin-systems" class="admin-page card p-5 space-y-4 hidden">
@@ -1871,7 +1878,14 @@
         >
           <div class="bg-white rounded-xl w-full max-w-lg p-6 space-y-4">
             <h3 class="font-semibold text-lg">編輯負責人</h3>
-
+            <div class="field">
+              <label class="label-xs">客戶</label>
+              <input
+                id="editOwnerCustomerDisplay"
+                class="input bg-gray-100"
+                disabled
+              />
+            </div>
             <!-- hidden id -->
             <input type="hidden" id="editOwnerId" />
 

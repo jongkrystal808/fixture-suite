@@ -1,34 +1,34 @@
 """
-負責人資料模型
-Owner Data Models
+負責人（Owner Assignment）資料模型
+對應 owners 表（user assignment）
 """
 
 from typing import Optional, List
 from datetime import datetime
-from pydantic import BaseModel, Field, EmailStr, validator
-
+from pydantic import BaseModel, Field
 
 
 # ============================================================
-# Create / Update
+# Create / Update Models
 # ============================================================
-
 
 class OwnerCreate(BaseModel):
-    primary_owner_id: int = Field(..., gt=0)
-    secondary_owner_id: Optional[int] = Field(None, gt=0)
-    email: str
+    """
+    新增 Owner Assignment
+    """
+    primary_user_id: int = Field(..., gt=0, description="主負責人 users.id")
+    secondary_user_id: Optional[int] = Field(None, gt=0, description="副負責人 users.id")
     note: Optional[str] = None
-
 
 
 class OwnerUpdate(BaseModel):
-    primary_owner_id: Optional[int] = Field(None, gt=0)
-    secondary_owner_id: Optional[int] = Field(None, gt=0)
-    email: Optional[str] = None
+    """
+    更新 Owner Assignment
+    """
+    primary_user_id: Optional[int] = Field(None, gt=0)
+    secondary_user_id: Optional[int] = Field(None, gt=0)
     note: Optional[str] = None
-    is_active: Optional[int] = None
-
+    is_active: Optional[int] = Field(None, ge=0, le=1)
 
 
 # ============================================================
@@ -38,18 +38,16 @@ class OwnerUpdate(BaseModel):
 class OwnerResponse(BaseModel):
     id: int
     customer_id: Optional[str] = None
-    customer_name: Optional[str] = None
 
-    primary_owner_id: int
-    primary_owner_name: str
+    primary_user_id: int
+    primary_user_name: str
 
-    secondary_owner_id: Optional[int]
-    secondary_owner_name: Optional[str]
+    secondary_user_id: Optional[int] = None
+    secondary_user_name: Optional[str] = None
 
-    email: Optional[str]
-    note: Optional[str]
+    note: Optional[str] = None
     is_active: int
-    created_at: Optional[datetime]
+    created_at: Optional[datetime] = None
 
 
 class OwnerListResponse(BaseModel):
@@ -58,6 +56,9 @@ class OwnerListResponse(BaseModel):
 
 
 class OwnerSimple(BaseModel):
+    """
+    給下拉選單使用
+    """
     id: int
-    primary_owner_id: int
-    primary_owner: str
+    primary_user_id: int
+    primary_user_name: str

@@ -395,19 +395,28 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 /* ============================================================
- * 匯入範本（前端產生 xlsx）
+ * 匯入範本（v4.x｜收料）
+ * - ❌ 不包含 customer / customer_id
+ * - ✅ batch / individual 一律使用 serials
+ * - ✅ datecode 使用 datecode + quantity
  * ============================================================ */
 function downloadReceiptTemplate() {
   const template = [
+    // =========================
+    // batch（批量收料）
+    // =========================
     {
       fixture_id: "C-00010",
       order_no: "PO123456",
       record_type: "batch",
       source_type: "customer_supplied",
-      serial_start: 1,
-      serial_end: 10,
+      serials: "SM001,SM002,SM003,SM004,SM005",
       note: "批量收料示例",
     },
+
+    // =========================
+    // individual（個別序號）
+    // =========================
     {
       fixture_id: "L-00018",
       order_no: "PO123457",
@@ -416,6 +425,10 @@ function downloadReceiptTemplate() {
       serials: "SN001,SN002,SN003",
       note: "個別收料示例",
     },
+
+    // =========================
+    // datecode
+    // =========================
     {
       fixture_id: "L-00020",
       order_no: "PO123458",
@@ -423,7 +436,7 @@ function downloadReceiptTemplate() {
       source_type: "customer_supplied",
       datecode: "2024W12",
       quantity: 50,
-      note: "datecode收料示例",
+      note: "datecode 收料示例",
     },
   ];
 

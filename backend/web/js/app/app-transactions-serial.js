@@ -132,8 +132,18 @@ function renderViewSerialTable(rows) {
         ? new Date(r.transaction_date).toLocaleDateString("zh-TW")
         : "-";
 
+    /* ===============================
+     * 類型（加顏色）
+     * =============================== */
+    let txTypeHtml = "-";
+    const txType = r.transaction_type || r.type;
 
-    const txType = r.transaction_type || r.type || "-";
+    if (txType === "receipt") {
+      txTypeHtml = `<span class="tx-receipt">收料</span>`;
+    } else if (txType === "return") {
+      txTypeHtml = `<span class="tx-return">退料</span>`;
+    }
+
     const fixtureId = r.fixture_id || "-";
     const orderNo = r.order_no || "-";
     const serialNo = r.serial_number || r.serial || "-";
@@ -143,17 +153,17 @@ function renderViewSerialTable(rows) {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${txDate}</td>
-      <td>${txType}</td>
+      <td>${txTypeHtml}</td>
       <td>${fixtureId}</td>
       <td>${orderNo}</td>
 
-      <td class="font-mono text-blue-600 font-semibold">
-        <a class="cursor-pointer hover:underline"
-           onclick="openSerialDetail('${serialNo}')">
-          ${serialNo}
-        </a>
-      </td>
-
+      <td class="font-mono tx-serial">
+          <a class="cursor-pointer hover:underline"
+             onclick="openSerialDetail('${fixtureId}', '${serialNo}')">
+            ${serialNo}
+          </a>
+        </td>
+        
       <td>${operator}</td>
       <td title="${String(note).replaceAll('"', "&quot;")}">${note}</td>
     `;
@@ -191,16 +201,15 @@ function filterByOrderNo(orderNo) {
  * 序號履歷 Drawer（v4.x）
  * ====================================================== */
 
-async function apiGetSerialHistory(serial) {
-  // ✅ v4.x：不帶 customer_id，走 header/context
-  return api(`/transactions/serials/${encodeURIComponent(serial)}/history`);
+async function apiGetSerialHistory(fixtureId, serial) {
+  return api(`/transactions/fixtures/${encodeURIComponent(fixtureId)}/serials/${encodeURIComponent(serial)}/history`);
 }
 
-async function openSerialDetail(serial) {
-  if (!serial || serial === "-" || serial === "null") return;
+async function openSerialDetail(fixtureId, serial) {
+  if (!fixtureId || !serial || serial === "-" || serial === "null") return;
 
   try {
-    const data = await apiGetSerialHistory(serial);
+    const data = await apiGetSerialHistory(fixtureId, serial);
     renderSerialDetailDrawer(data);
     openSerialDetailDrawer();
   } catch (e) {

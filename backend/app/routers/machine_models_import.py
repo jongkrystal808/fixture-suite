@@ -12,7 +12,7 @@ from openpyxl import load_workbook
 from io import BytesIO
 
 from backend.app.database import db
-from backend.app.dependencies import get_current_user
+from backend.app.dependencies import get_current_user, get_current_customer_id
 
 router = APIRouter(
     prefix="/models",
@@ -23,6 +23,8 @@ router = APIRouter(
 @router.post("/import", summary="匯入機種（XLSX）")
 async def import_models_xlsx(
     file: UploadFile = File(...),
+    user=Depends(get_current_user),
+    customer_id: str = Depends(get_current_customer_id),  # ⭐ 一定要有
 ):
 
     # =================================================

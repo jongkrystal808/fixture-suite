@@ -7,9 +7,10 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 import pandas as pd
 from io import BytesIO
+import pymysql
 
 from backend.app.database import db
-from backend.app.dependencies import get_current_user
+from backend.app.dependencies import get_current_user, get_current_customer_id
 
 router = APIRouter(prefix="/receipts", tags=["Receipts Import"])
 
@@ -26,49 +27,69 @@ def ensure_fixture_exists(fixture_id: str, customer_id: str):
     if not row:
         raise ValueError(f"治具 {fixture_id} 不存在或不屬於此客戶")
 
+def normalize_source_type(val: str) -> str:
+    v = val.strip().lower()
+    if v in ("self_purchased", "自購"):
+        return "self_purchased"
+    if v in ("customer_supplied", "客供", "customer supplied"):
+        return "customer_supplied"
+    raise ValueError("source_type 不合法")
+
+
 
 # ============================================================
-# Excel 匯入
+# Excel 匯入（收料 v4.x）
 # ============================================================
 
 @router.post("/import", summary="收料 Excel 匯入")
 async def import_receipts(
     file: UploadFile = File(...),
     user=Depends(get_current_user),
+    customer_id: str = Depends(get_current_customer_id),
 ):
-    customer_id = user.customer_id
-    operator = user.username
-    created_by = user.id
+    operator = user["username"]
+    created_by = user["id"]
 
+    # --------------------------------------------------
+    # 1️⃣ 檔案檢查
+    # --------------------------------------------------
     if not file.filename.lower().endswith(".xlsx"):
-        raise HTTPException(400, "請使用 .xlsx 檔案匯入")
+        raise HTTPException(status_code=400, detail="請使用 .xlsx 檔案匯入")
 
     try:
         df = pd.read_excel(BytesIO(await file.read()))
     except Exception as e:
-        raise HTTPException(400, f"Excel 讀取失敗：{e}")
+        raise HTTPException(status_code=400, detail=f"Excel 讀取失敗：{e}")
 
+    # --------------------------------------------------
+    # 2️⃣ 必要欄位檢查
+    # --------------------------------------------------
     required_cols = ["fixture_id", "record_type", "source_type"]
     missing = [c for c in required_cols if c not in df.columns]
     if missing:
-        raise HTTPException(400, f"缺少必要欄位：{missing}")
+        raise HTTPException(status_code=400, detail=f"缺少必要欄位：{missing}")
 
     total_created = 0
-    errors = []
+    errors: list[str] = []
 
+    # --------------------------------------------------
+    # 3️⃣ DB 操作
+    # --------------------------------------------------
     conn = db.get_conn()
     try:
-        cursor = conn.cursor()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
 
         for idx, row in df.iterrows():
-            row_no = idx + 2
+            row_no = idx + 2  # Excel 實際行號
             try:
                 # -------------------------
                 # 基本欄位
                 # -------------------------
                 fixture_id = str(row.get("fixture_id", "")).strip()
                 record_type = str(row.get("record_type", "")).strip().lower()
-                source_type = str(row.get("source_type", "")).strip()
+                source_type = normalize_source_type(
+                    str(row.get("source_type", "")).strip()
+                )
 
                 if not fixture_id:
                     raise ValueError("fixture_id 不可為空")
@@ -79,7 +100,7 @@ async def import_receipts(
                 if source_type not in ("self_purchased", "customer_supplied"):
                     raise ValueError("source_type 不合法")
 
-                # 檢查治具存在
+                # 檢查治具是否存在
                 ensure_fixture_exists(fixture_id, customer_id)
 
                 order_no = str(row.get("order_no", "")).strip() or None
@@ -114,38 +135,38 @@ async def import_receipts(
                         raise ValueError("quantity 必須 > 0")
 
                 # -------------------------
-                # CALL SP
+                # 4️⃣ CALL SP（⚠️ 完全對齊 SP 定義順序）
                 # -------------------------
                 cursor.execute(
                     """
-                    CALL sp_material_receipt(
-                        %s,%s,%s,%s,%s,%s,
-                        %s,%s,
-                        %s,
-                        %s,%s,
-                        @tx_id,@msg
+                    CALL sp_material_receipt_v4(
+                        %s, %s, %s,
+                        %s, %s, %s,
+                        %s, %s,
+                        %s, %s, %s
                     )
                     """,
                     (
-                        customer_id,
-                        fixture_id,
-                        order_no,
-                        operator,
-                        note,
-                        created_by,
-                        record_type,
-                        source_type,
-                        serials_csv,
-                        datecode,
-                        quantity,
+                        customer_id,    # 1 p_customer_id
+                        fixture_id,     # 2 p_fixture_id
+                        order_no,       # 3 p_order_no
+                        operator,       # 4 p_operator
+                        note,           # 5 p_note
+                        created_by,     # 6 p_created_by
+                        record_type,    # 7 p_record_type
+                        source_type,    # 8 p_source_type
+                        serials_csv,    # 9 p_serials_csv
+                        datecode,       # 10 p_datecode
+                        quantity,       # 11 p_quantity
                     ),
                 )
 
-                cursor.execute("SELECT @tx_id, @msg")
-                tx_id, msg = cursor.fetchone()
-
-                if not tx_id:
-                    raise ValueError(msg or "收料失敗")
+                # --------------------------------------------------
+                # 5️⃣ 讀取 SP 回傳結果（SELECT）
+                # --------------------------------------------------
+                result = cursor.fetchone()
+                if not result or not result.get("transaction_id"):
+                    raise ValueError(result.get("message") if result else "收料失敗")
 
                 total_created += 1
 
@@ -157,6 +178,9 @@ async def import_receipts(
     finally:
         conn.close()
 
+    # --------------------------------------------------
+    # 6️⃣ 回傳結果
+    # --------------------------------------------------
     return {
         "count": total_created,
         "errors": errors,
