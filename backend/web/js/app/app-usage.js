@@ -482,3 +482,195 @@ onUserReady?.(() => {
     loadUsageLogs();
   });
 });
+
+
+
+// ============================================================
+// Usage - Download Import Template (final, aligned with TokenManager)
+// ============================================================
+window.downloadUsageTemplate = async function () {
+  try {
+    if (!window.currentCustomerId) {
+      toast("請先選擇客戶", "warning");
+      return;
+    }
+
+    // 🔑 正確取得 token（與 api() 完全一致）
+    let token = null;
+
+    if (window.TokenManager && typeof window.TokenManager.getToken === "function") {
+      token = window.TokenManager.getToken();
+    } else if (typeof window.getToken === "function") {
+      token = window.getToken();
+    }
+
+    if (!token) {
+      toast("尚未登入（無法取得 Token）", "error");
+      return;
+    }
+
+    const res = await fetch("/api/v2/usage/template", {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "X-Customer-Id": window.currentCustomerId,
+      },
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+
+    // ❗ binary 一定要直接 blob
+    const blob = await res.blob();
+
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "usage_import_template.xlsx";
+    document.body.appendChild(a);
+    a.click();
+
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  } catch (err) {
+    console.error(err);
+    toast("下載樣本失敗（請確認登入狀態）", "error");
+  }
+};
+
+
+
+
+
+// ============================================================
+// Usage - Parse individual serials (comma separated)
+// ============================================================
+function parseIndividualSerials(input) {
+  if (!input) return [];
+
+  return input
+    .split(",")
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+}
+
+// ============================================================
+// Usage - Expand batch serials (frontend helper)
+// e.g. SN001 ~ SN010
+// ============================================================
+function expandBatchSerials(start, end) {
+  if (!start || !end) {
+    throw new Error("批量序號需同時填寫起始與結束");
+  }
+
+  // 抽出前綴 + 數字
+  const m1 = start.match(/^(\D*)(\d+)$/);
+  const m2 = end.match(/^(\D*)(\d+)$/);
+
+  if (!m1 || !m2) {
+    throw new Error("序號格式需為：前綴 + 數字（如 SN001）");
+  }
+
+  const prefix1 = m1[1];
+  const prefix2 = m2[1];
+  if (prefix1 !== prefix2) {
+    throw new Error("起始與結束序號前綴不一致");
+  }
+
+  const n1 = parseInt(m1[2], 10);
+  const n2 = parseInt(m2[2], 10);
+  if (n2 < n1) {
+    throw new Error("結束序號不可小於起始序號");
+  }
+
+  const width = m1[2].length;
+  const result = [];
+
+  for (let i = n1; i <= n2; i++) {
+    result.push(prefix1 + String(i).padStart(width, "0"));
+  }
+
+  return result;
+}
+
+// ============================================================
+// Usage - Import Excel (xlsx)
+// ============================================================
+window.handleUsageImport = async function (input) {
+  try {
+    if (!input || !input.files || input.files.length === 0) {
+      return;
+    }
+
+    if (!window.currentCustomerId) {
+      toast("請先選擇客戶", "warning");
+      input.value = "";
+      return;
+    }
+
+    const file = input.files[0];
+    if (!file.name.toLowerCase().endsWith(".xlsx")) {
+      toast("請選擇 xlsx 檔案", "warning");
+      input.value = "";
+      return;
+    }
+
+    // 🔑 正確取得 token（與 api() 一致）
+    let token = null;
+    if (window.TokenManager?.getToken) {
+      token = window.TokenManager.getToken();
+    } else if (typeof window.getToken === "function") {
+      token = window.getToken();
+    }
+
+    if (!token) {
+      toast("尚未登入（無法取得 Token）", "error");
+      input.value = "";
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const res = await fetch("/api/v2/usage/import", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "X-Customer-Id": window.currentCustomerId,
+      },
+      body: formData,
+    });
+
+    if (!res.ok) {
+      let msg = `匯入失敗 (${res.status})`;
+      try {
+        const data = await res.json();
+        if (data?.detail) msg = data.detail;
+      } catch (_) {}
+      throw new Error(msg);
+    }
+
+    const result = await res.json();
+
+    // 成功提示
+    toast(
+      `匯入完成：成功 ${result.success_count} 筆，失敗 ${result.error_count} 筆`,
+      "success"
+    );
+
+    // 若有錯誤，印到 console 方便 debug
+    if (Array.isArray(result.errors) && result.errors.length > 0) {
+      console.warn("Usage import errors:", result.errors);
+    }
+
+    // 重新載入列表
+    loadUsageLogs();
+  } catch (err) {
+    console.error(err);
+    toast(err.message || "匯入使用記錄失敗", "error");
+  } finally {
+    // 重置 input，避免同檔案無法再次觸發 onchange
+    input.value = "";
+  }
+};
