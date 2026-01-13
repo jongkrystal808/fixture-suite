@@ -14,22 +14,14 @@
  * 查詢使用紀錄列表
  * GET /usage
  * ============================================================ */
-/**
- * params:
- * {
- *   page?: number,
- *   pageSize?: number,
- *   fixtureId?: string,
- *   stationId?: string,
- *   operator?: string
- * }
- */
 function apiListUsageLogs(params = {}) {
   const {
     page = 1,
     pageSize = 20,
     fixtureId,
     stationId,
+    modelId,
+    serialNumber,
     operator,
   } = params;
 
@@ -39,53 +31,28 @@ function apiListUsageLogs(params = {}) {
       limit: pageSize,
       fixture_id: fixtureId || undefined,
       station_id: stationId || undefined,
+      model_id: modelId || undefined,
+      serial_number: serialNumber || undefined,
       operator: operator || undefined,
     },
   });
 }
 
 /* ============================================================
- * 新增單筆使用紀錄
+ * 新增使用紀錄
  * POST /usage
  * ============================================================ */
-/**
- * data:
- * {
- *   fixture_id,
- *   station_id,
- *   use_count,
- *   abnormal_status?,
- *   operator?,
- *   note?,
- *   used_at?
- * }
- */
 function apiCreateUsageLog(data) {
   if (!data || typeof data !== "object") {
     throw new Error("apiCreateUsageLog: invalid data");
   }
-  if (!data.fixture_id || !data.station_id) {
-    throw new Error("apiCreateUsageLog: fixture_id & station_id are required");
+  if (!data.fixture_id || !data.station_id || !data.model_id) {
+    throw new Error("apiCreateUsageLog: fixture_id, model_id, station_id are required");
   }
 
   return api("/usage", {
     method: "POST",
     body: data,
-  });
-}
-
-/* ============================================================
- * 批量新增
- * POST /usage/batch
- * ============================================================ */
-function apiBatchUsageLogs(rows) {
-  if (!Array.isArray(rows)) {
-    throw new Error("apiBatchUsageLogs: rows must be an array");
-  }
-
-  return api("/usage/batch", {
-    method: "POST",
-    body: rows,
   });
 }
 
@@ -102,6 +69,38 @@ function apiDeleteUsageLog(id) {
     method: "DELETE",
   });
 }
+
+/* ============================================================
+ * 🔍 Lookup：依機種取得站點
+ * GET /model-detail/lookup/stations-by-model
+ * ============================================================ */
+function apiLookupStationsByModel(modelId) {
+  if (!modelId) {
+    throw new Error("apiLookupStationsByModel: modelId is required");
+  }
+
+  return api("/model-detail/lookup/stations-by-model", {
+    params: { model_id: modelId },
+  });
+}
+
+/* ============================================================
+ * 🔍 Lookup：依機種 + 站點取得治具
+ * GET /model-detail/lookup/fixtures-by-model-station
+ * ============================================================ */
+function apiLookupFixturesByModelStation(modelId, stationId) {
+  if (!modelId || !stationId) {
+    throw new Error("apiLookupFixturesByModelStation: modelId & stationId are required");
+  }
+
+  return api("/model-detail/lookup/fixtures-by-model-station", {
+    params: {
+      model_id: modelId,
+      station_id: stationId,
+    },
+  });
+}
+
 
 /* ============================================================
  * Excel 匯入
@@ -161,8 +160,10 @@ function apiImportUsageLogsXlsx(file) {
  * ============================================================ */
 window.apiListUsageLogs = apiListUsageLogs;
 window.apiCreateUsageLog = apiCreateUsageLog;
-window.apiBatchUsageLogs = apiBatchUsageLogs;
-window.apiImportUsageLogsXlsx = apiImportUsageLogsXlsx;
 window.apiDeleteUsageLog = apiDeleteUsageLog;
 
-console.log("✅ api-usage.js v4.x FINAL loaded");
+window.apiLookupStationsByModel = apiLookupStationsByModel;
+window.apiLookupFixturesByModelStation = apiLookupFixturesByModelStation;
+
+console.log("✅ api-usage.js v4.x ALIGNED loaded");
+

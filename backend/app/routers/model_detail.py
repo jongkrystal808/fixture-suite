@@ -91,6 +91,70 @@ def ensure_fixture(customer_id: str, fixture_id: str) -> None:
         raise HTTPException(status_code=404, detail="治具不存在")
 
 
+
+
+
+# --------------------------------------------------------------
+# 🔍 搜尋：依機種取得可用站點（Autocomplete）
+# --------------------------------------------------------------
+@router.get(
+    "/lookup/stations-by-model",
+    summary="（搜尋用）依機種取得可用站點"
+)
+async def lookup_stations_by_model(
+    model_id: str = Query(...),
+    customer_id: str = Depends(get_current_customer_id),
+    user=Depends(get_current_user),
+):
+    rows = db.execute_query(
+        """
+        SELECT
+            ms.station_id,
+            s.station_name
+        FROM model_stations ms
+        JOIN stations s
+            ON ms.station_id = s.id
+           AND ms.customer_id = s.customer_id
+        WHERE ms.customer_id=%s
+          AND ms.model_id=%s
+        ORDER BY ms.station_id
+        """,
+        (customer_id, model_id)
+    )
+    return rows or []
+
+
+# --------------------------------------------------------------
+# 🔍 搜尋：依機種 + 站點取得可用治具（Autocomplete）
+# --------------------------------------------------------------
+@router.get(
+    "/lookup/fixtures-by-model-station",
+    summary="（搜尋用）依機種 + 站點取得可用治具"
+)
+async def lookup_fixtures_by_model_station(
+    model_id: str = Query(...),
+    station_id: str = Query(...),
+    customer_id: str = Depends(get_current_customer_id),
+    user=Depends(get_current_user),
+):
+    rows = db.execute_query(
+        """
+        SELECT
+            fr.fixture_id,
+            f.fixture_name
+        FROM fixture_requirements fr
+        JOIN fixtures f
+            ON fr.fixture_id = f.id
+           AND fr.customer_id = f.customer_id
+        WHERE fr.customer_id=%s
+          AND fr.model_id=%s
+          AND fr.station_id=%s
+        ORDER BY fr.fixture_id
+        """,
+        (customer_id, model_id, station_id)
+    )
+    return rows or []
+
 # --------------------------------------------------------------
 # 1️⃣ 取得已綁定站點
 # --------------------------------------------------------------

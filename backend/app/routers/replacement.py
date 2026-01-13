@@ -9,6 +9,7 @@ from backend.app.dependencies import (
     get_current_user,
     get_current_admin,
     get_current_username,
+    get_current_customer_id,
 )
 from backend.app.database import db
 
@@ -59,22 +60,48 @@ async def create_replacement_log(
     data: ReplacementCreate,
     user=Depends(get_current_user),
     username: str = Depends(get_current_username),
+    customer_id=Depends(get_current_customer_id),
 ):
-    customer_id = user.customer_id
-
+    # --------------------------------------------------
+    # 基本檢查
+    # --------------------------------------------------
     ensure_fixture_exists(data.fixture_id, customer_id)
 
-    record_level = data.record_level or "fixture"
+    ui_level = data.record_level or "fixture"
     serial_number = data.serial_number
-
-    if record_level not in ("fixture", "serial"):
-        raise HTTPException(400, "record_level 必須為 fixture 或 serial")
-
-    if record_level == "serial" and not serial_number:
-        raise HTTPException(400, "序號模式需要提供 serial_number")
-
     executor = data.executor or username
 
+    # --------------------------------------------------
+    # HTML 語義驗證
+    # --------------------------------------------------
+    if ui_level not in ("fixture", "individual", "batch"):
+        raise HTTPException(
+            status_code=400,
+            detail="record_level 必須為 fixture / individual / batch"
+        )
+
+    # --------------------------------------------------
+    # HTML 語義 → DB 語義轉換
+    # --------------------------------------------------
+    if ui_level == "fixture":
+        db_record_level = "fixture"
+        serial_number = None
+
+    elif ui_level in ("individual", "batch"):
+        db_record_level = "serial"
+        if not serial_number:
+            raise HTTPException(
+                status_code=400,
+                detail="individual / batch 模式必須提供 serial_number"
+            )
+
+    else:
+        # 理論上不會進來，保險
+        raise HTTPException(400, "不支援的 record_level")
+
+    # --------------------------------------------------
+    # 呼叫 Stored Procedure
+    # --------------------------------------------------
     try:
         db.execute_query(
             """
@@ -86,7 +113,7 @@ async def create_replacement_log(
             (
                 customer_id,
                 data.fixture_id,
-                record_level,
+                db_record_level,   # ⭐ DB 只吃 fixture / serial
                 serial_number,
                 data.replacement_date,
                 data.reason,
@@ -100,15 +127,24 @@ async def create_replacement_log(
         )[0]
 
         if not out["id"]:
-            raise HTTPException(400, out["message"] or "新增更換記錄失敗")
+            raise HTTPException(
+                status_code=400,
+                detail=out["message"] or "新增更換記錄失敗"
+            )
 
         rep_id = out["id"]
 
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(500, f"建立更換記錄失敗: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"建立更換記錄失敗: {e}"
+        )
 
+    # --------------------------------------------------
+    # 回傳建立後資料
+    # --------------------------------------------------
     row = db.execute_query(
         """
         SELECT rl.*, f.fixture_name
@@ -122,7 +158,10 @@ async def create_replacement_log(
     )
 
     if not row:
-        raise HTTPException(500, "新增成功但無法讀取資料")
+        raise HTTPException(
+            status_code=500,
+            detail="新增成功但無法讀取資料"
+        )
 
     return ReplacementResponse(**row[0])
 
@@ -140,9 +179,8 @@ async def update_replacement_log(
     log_id: int,
     data: ReplacementUpdate,
     admin=Depends(get_current_admin),
+    customer_id=Depends(get_current_customer_id),
 ):
-    customer_id = admin.customer_id
-
     exists = db.execute_query(
         """
         SELECT id FROM replacement_logs
@@ -199,8 +237,8 @@ async def update_replacement_log(
 async def get_replacement_log(
     log_id: int,
     user=Depends(get_current_user),
+    customer_id=Depends(get_current_customer_id),
 ):
-    customer_id = user.customer_id
 
     rows = db.execute_query(
         """
@@ -238,9 +276,8 @@ async def list_replacement_logs(
     skip: int = 0,
     limit: int = 100,
     user=Depends(get_current_user),
+    customer_id=Depends(get_current_customer_id),
 ):
-    customer_id = user.customer_id
-
     where = ["rl.customer_id = %(customer_id)s"]
     params = {"customer_id": customer_id}
 
@@ -297,9 +334,8 @@ async def list_replacement_logs(
 async def delete_replacement_log(
     log_id: int,
     admin=Depends(get_current_admin),
+    customer_id = Depends(get_current_customer_id),
 ):
-    customer_id = admin.customer_id
-
     exists = db.execute_query(
         """
         SELECT id FROM replacement_logs

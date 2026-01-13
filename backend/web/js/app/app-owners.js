@@ -123,15 +123,17 @@ function renderOwnerTable(list) {
 
   list.forEach(o => {
     table.insertAdjacentHTML("beforeend", `
-      <tr>
-        <td class="text-center">${o.id}</td>
-        <td>${o.primary_user_name}</td>
-        <td>${o.secondary_user_name || "—"}</td>
-        <td class="text-right space-x-2">
+      <tr class="hover:bg-gray-50 transition">
+        <td class="py-1 px-3 w-20 text-center align-middle">${o.id}</td>
+        <td class="py-1 px-3 w-20 text-center align-middle">${o.primary_user_name}</td>
+        <td class="py-1 px-3 w-20 text-center align-middle">${o.secondary_user_name || "—"}</td>
+        <td class="py-1 px-3 whitespace-nowrap w-32 align-middle">
+        <div class="flex justify-center gap-2">
           <button class="btn btn-xs btn-outline"
                   onclick="openOwnerEdit(${o.id})">編輯</button>
           <button class="btn btn-xs btn-warning"
                   onclick="disableOwner(${o.id})">停用</button>
+           </div>
         </td>
       </tr>
     `);

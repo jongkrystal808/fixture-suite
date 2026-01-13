@@ -22,7 +22,7 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 
 from backend.app.database import db
-from backend.app.dependencies import get_current_user
+from backend.app.dependencies import get_current_user, get_current_customer_id
 from backend.app.utils.serial_tools import expand_serial_range, normalise_serial_list
 
 router = APIRouter(prefix="/usage", tags=["使用紀錄 Usage Logs v4.0"])
@@ -142,8 +142,8 @@ def list_usage_logs(
     skip: int = 0,
     limit: int = 100,
     user=Depends(get_current_user),
+    customer_id=Depends(get_current_customer_id),
 ):
-    customer_id = user.customer_id
     where = ["ul.customer_id=%s"]
     params = [customer_id]
 
@@ -205,8 +205,8 @@ def list_usage_logs(
 def create_usage(
     data: Dict[str, Any],
     user=Depends(get_current_user),
+    customer_id=Depends(get_current_customer_id),
 ):
-    customer_id = user.customer_id
     """
     前端 payload（app-usage.js v4.0）預期：
 
@@ -375,8 +375,8 @@ def create_usage(
 def get_usage(
     log_id: int,
     user=Depends(get_current_user),
+    customer_id=Depends(get_current_customer_id),
 ):
-    customer_id = user.customer_id
     rows = db.execute_query(
         """
         SELECT 
@@ -409,8 +409,8 @@ def get_usage(
 def delete_usage(
     log_id: int,
     user=Depends(get_current_user),
+    customer_id=Depends(get_current_customer_id),
 ):
-    customer_id = user.customer_id
     # 1. 先查舊資料
     rows = db.execute_query(
         """
@@ -526,8 +526,8 @@ def delete_usage(
 def get_fixture_summary(
     fixture_id: str,
     user=Depends(get_current_user),
+    customer_id=Depends(get_current_customer_id),
 ):
-    customer_id = user.customer_id
     rows = db.execute_query(
         """
         SELECT *
@@ -557,8 +557,8 @@ def get_fixture_summary(
 def get_serial_summary(
     serial_number: str,
     user=Depends(get_current_user),
+    customer_id=Depends(get_current_customer_id),
 ):
-    customer_id = user.customer_id
 
     rows = db.execute_query(
         """

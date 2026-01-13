@@ -97,10 +97,8 @@ function renderReplacementTable(rows) {
       `
       <tr>
         <td class="py-2 pr-4">${dateText}</td>
-        <td class="py-2 pr-4">${r.record_level ?? "-"}</td>
         <td class="py-2 pr-4">${r.fixture_id ?? "-"}</td>
         <td class="py-2 pr-4">${serialText}</td>
-        <td class="py-2 pr-4">${r.usage_before ?? "-"}</td>
         <td class="py-2 pr-4">${r.reason ?? "-"}</td>
         <td class="py-2 pr-4">${r.executor ?? "-"}</td>
         <td class="py-2 pr-4">${r.note ?? "-"}</td>
@@ -146,9 +144,9 @@ async function submitReplacementLog() {
   if (!window.currentCustomerId) return toast("尚未選擇客戶", "warning");
 
   const fixtureId = document.getElementById("replaceAddFixture")?.value.trim() || "";
-  const serial    = document.getElementById("replaceAddSerial")?.value.trim() || "";
+  const serial    = document.getElementById("replaceAddSerials")?.value.trim() || "";
   const level     = document.getElementById("replaceAddLevel")?.value || "fixture";
-  const date      = document.getElementById("replaceAddTime")?.value || "";
+  const date = document.getElementById("replaceAddDate")?.value || "";
   const reason    = document.getElementById("replaceAddReason")?.value.trim() || "";
   const executor  = document.getElementById("replaceAddExecutor")?.value.trim() || "";
   const note      = document.getElementById("replaceAddNote")?.value.trim() || "";

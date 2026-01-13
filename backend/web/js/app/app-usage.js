@@ -9,15 +9,13 @@
  * 5) renderUsageTable：時間格式化、serial 欄位相容（serial_number / serials）
  * -----------------------------------------------------------
  */
-
 /* ============================================================
  * DOM 綁定
  * ============================================================ */
 
 const fxInput        = document.getElementById("usageAddFixture");
+const fxDropdown     = document.getElementById("usageFixtureDropdown");
 const modelInput     = document.getElementById("usageAddModel");
-
-// ✅ 這個是「站點下拉/輸入」本體（你原本用 stationInput）
 const stationInput   = document.getElementById("usageAddStation");
 
 const levelSelect    = document.getElementById("usageAddLevel");
@@ -32,192 +30,287 @@ const noteInput      = document.getElementById("usageAddNote");
 
 const usageTableBody = document.getElementById("usageTable");
 
+let fxOptions = []; // 目前站點下可用治具快取
+let selectedFixtureId = null; // ✅ 只能選的關鍵狀態
+
 /* ============================================================
  * Utils
  * ============================================================ */
-function fmtDateTime(v) {
+function fmtDate(v) {
   if (!v) return "-";
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return String(v);
-  return d.toLocaleString();
+  return d.toISOString().slice(0, 10); // YYYY-MM-DD
 }
 
-/* ============================================================
- * UI Mode 切換
- * ============================================================ */
 
-function toggleUsageSerialInputs() {
-  const mode = levelSelect?.value;
-
-  document.getElementById("usageSerialSingleField")?.classList.toggle(
-    "hidden",
-    mode !== "individual"
-  );
-
-  document.getElementById("usageSerialBatchField")?.classList.toggle(
-    "hidden",
-    mode !== "batch"
-  );
+// 🔵 使用日期預設為今天（YYYY-MM-DD）
+if (usedAtInput && !usedAtInput.value) {
+  const today = new Date().toISOString().slice(0, 10);
+  usedAtInput.value = today;
 }
 
-levelSelect?.addEventListener("change", toggleUsageSerialInputs);
-toggleUsageSerialInputs();
+function fmtDateInput(d) {
+  return d.toISOString().slice(0, 10); // YYYY-MM-DD
+}
+
+function quickDateRange(type) {
+  const fromEl = document.getElementById("usageSearchDateFrom");
+  const toEl   = document.getElementById("usageSearchDateTo");
+  if (!fromEl || !toEl) return;
+
+  const today = new Date();
+  let from, to;
+
+  switch (type) {
+    case "today":
+      from = new Date(today);
+      to   = new Date(today);
+      break;
+
+    case "yesterday":
+      from = new Date(today);
+      from.setDate(from.getDate() - 1);
+      to = new Date(from);
+      break;
+
+    case "7days":
+      to = new Date(today);
+      from = new Date(today);
+      from.setDate(from.getDate() - 6); // 含今天共 7 天
+      break;
+
+    default:
+      return;
+  }
+
+  fromEl.value = fmtDateInput(from);
+  toEl.value   = fmtDateInput(to);
+
+  // 🔥 直接重新查詢
+  loadUsageLogs();
+}
+
+window.quickDateRange = quickDateRange;
+
 
 /* ============================================================
- * 綁定站點帶入（依治具）
- * - v4.x：不帶 customer_id（由 header/context）
- * - 直接更新 stationInput 的 options（select）
+ * 🔍 Lookup：依機種載入站點
  * ============================================================ */
-async function loadStationsForFixture(fixtureId) {
-  if (!stationInput) return;
-
-  // stationInput 如果是 <select> 才會有 innerHTML；不是 select 的話就跳過
-  if (!("innerHTML" in stationInput)) return;
+async function loadStationsByModel(modelId) {
+  if (!stationInput || !("innerHTML" in stationInput)) return;
 
   stationInput.innerHTML = `<option value="">載入中...</option>`;
+  stationInput.disabled = true;
 
   try {
-    const url = `/model-details/stations-by-fixture/${encodeURIComponent(
-      fixtureId
-    )}`;
-    const rows = await api(url);
+    const rows = await api("/model-detail/lookup/stations-by-model", {
+      params: { model_id: modelId },
+    });
 
     stationInput.innerHTML = "";
 
     if (!Array.isArray(rows) || rows.length === 0) {
-      stationInput.innerHTML = `<option value="">無綁定站點</option>`;
+      stationInput.innerHTML = `<option value="">此機種尚未綁定站點</option>`;
       return;
     }
 
-    rows.forEach((r) => {
-      const opt = document.createElement("option");
-      opt.value = r.station_id;
-      opt.textContent = `${r.station_id} - ${r.station_name ?? ""}`;
-      stationInput.appendChild(opt);
+    stationInput.appendChild(new Option("請選擇站點", ""));
+    rows.forEach(r => {
+      stationInput.appendChild(
+        new Option(`${r.station_id} - ${r.station_name ?? ""}`, r.station_id)
+      );
     });
+
+    stationInput.disabled = false;
   } catch (err) {
     console.error(err);
-    stationInput.innerHTML = `<option value="">讀取失敗</option>`;
+    stationInput.innerHTML = `<option value="">讀取站點失敗</option>`;
   }
 }
 
-fxInput?.addEventListener("change", () => {
-  const fx = fxInput.value.trim();
-  if (fx) loadStationsForFixture(fx);
+/* ============================================================
+ * 🔍 Lookup：依機種 + 站點載入治具（Dropdown）
+ * ============================================================ */
+async function loadFixturesByModelStation(modelId, stationId) {
+  if (!fxInput || !fxDropdown) return;
+
+  fxDropdown.classList.add("hidden");
+  fxDropdown.innerHTML = "";
+  fxOptions = [];
+
+  try {
+    const rows = await api(
+      "/model-detail/lookup/fixtures-by-model-station",
+      {
+        params: { model_id: modelId, station_id: stationId },
+      }
+    );
+
+    if (!Array.isArray(rows) || rows.length === 0) return;
+
+    fxOptions = rows;
+    renderFixtureDropdown(rows);
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+/* ============================================================
+ * 治具 dropdown render + filter
+ * ============================================================ */
+function renderFixtureDropdown(options) {
+  if (!fxDropdown) return;
+
+  fxDropdown.innerHTML = "";
+
+  if (!Array.isArray(options) || options.length === 0) {
+    fxDropdown.classList.add("hidden");
+    return;
+  }
+
+  options.forEach(r => {
+    const item = document.createElement("div");
+    item.className = "px-3 py-2 cursor-pointer hover:bg-gray-100 text-sm";
+    item.textContent = `${r.fixture_id} ${r.fixture_name ?? ""}`;
+
+    item.onclick = () => {
+      fxInput.value = r.fixture_id;
+      selectedFixtureId = r.fixture_id;
+      fxDropdown.classList.add("hidden");
+    };
+
+    fxDropdown.appendChild(item);
+  });
+
+  fxDropdown.classList.remove("hidden");
+}
+
+/* ============================================================
+ * dropdown 互動控制
+ * ============================================================ */
+ fxInput?.addEventListener("input", () => {
+   // ❌ 只要手動輸入，就視為尚未選擇
+   selectedFixtureId = null;
+
+   if (!fxDropdown || fxDropdown.classList.contains("hidden")) return;
+
+   const q = fxInput.value.trim().toLowerCase();
+   const filtered = fxOptions.filter(r =>
+     `${r.fixture_id} ${r.fixture_name ?? ""}`.toLowerCase().includes(q)
+   );
+   renderFixtureDropdown(filtered);
+ });
+
+
+document.addEventListener("click", (e) => {
+  if (!fxDropdown || !fxInput) return;
+  if (e.target !== fxInput && !fxDropdown.contains(e.target)) {
+    fxDropdown.classList.add("hidden");
+  }
+});
+// ✅ focus 時自動打開 dropdown（UX 強化）
+fxInput?.addEventListener("focus", () => {
+  if (fxOptions.length > 0) {
+    renderFixtureDropdown(fxOptions);
+  }
+});
+
+
+/* ============================================================
+ * 欄位串接
+ * ============================================================ */
+modelInput?.addEventListener("change", () => {
+  const modelId = modelInput.value.trim();
+
+  if (stationInput && "innerHTML" in stationInput) {
+    stationInput.innerHTML = `<option value="">請先選擇機種</option>`;
+    stationInput.disabled = true;
+  }
+
+  fxInput.value = "";
+  selectedFixtureId = null;
+  fxDropdown?.classList.add("hidden");
+  fxOptions = [];
+
+  if (modelId) loadStationsByModel(modelId);
+});
+
+stationInput?.addEventListener("change", () => {
+  const modelId = modelInput?.value.trim();
+  const stationId = stationInput.value.trim();
+  if (modelId && stationId) {
+    fxInput.value = "";
+    selectedFixtureId = null;
+    loadFixturesByModelStation(modelId, stationId);
+  }
 });
 
 /* ============================================================
- * 序號解析工具
+ * UI Mode 切換
  * ============================================================ */
-
-function parseIndividualSerials(text) {
-  if (!text) return [];
-  return text
-    .split(/[\s,]+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
+function toggleUsageSerialInputs() {
+  const mode = levelSelect?.value;
+  document.getElementById("usageSerialSingleField")?.classList.toggle("hidden", mode !== "individual");
+  document.getElementById("usageSerialBatchField")?.classList.toggle("hidden", mode !== "batch");
 }
-
-function expandBatchSerials(start, end) {
-  const s = (start || "").trim();
-  const e = (end || "").trim();
-  if (!s || !e) return [];
-
-  const prefixS = s.match(/^\D+/)?.[0] || "";
-  const prefixE = e.match(/^\D+/)?.[0] || "";
-  if (prefixS !== prefixE) throw new Error("批量序號前綴不一致");
-
-  const numS = parseInt(s.replace(prefixS, ""), 10);
-  const numE = parseInt(e.replace(prefixE, ""), 10);
-
-  if (!Number.isFinite(numS) || !Number.isFinite(numE) || numE < numS) {
-    throw new Error("序號範圍無效");
-  }
-
-  const width = Math.max(s.length - prefixS.length, e.length - prefixE.length);
-
-  const out = [];
-  for (let i = numS; i <= numE; i++) {
-    out.push(prefixS + String(i).padStart(width, "0"));
-  }
-  return out;
-}
+levelSelect?.addEventListener("change", toggleUsageSerialInputs);
+toggleUsageSerialInputs();
 
 /* ============================================================
- * 新增使用紀錄 (POST)
+ * 新增使用紀錄
  * ============================================================ */
-
 async function submitUsageLog() {
-  if (!window.currentCustomerId) {
-    return toast("尚未選擇客戶", "warning");
-  }
-
-  const fixture_id = fxInput?.value.trim() || "";
-  const model_id   = modelInput?.value.trim() || "";
-  const station_id = stationInput?.value.trim() || "";
-  const level      = levelSelect?.value || "fixture";
-
-  if (!fixture_id) return toast("請輸入治具編號", "warning");
-  if (!model_id)   return toast("請輸入機種 ID", "warning");
-  if (!station_id) return toast("請選擇站點", "warning");
-
-  const use_count = Number(countInput?.value) || 1;
-  if (use_count <= 0) return toast("使用次數需大於 0", "warning");
-
-  const operator = (operatorInput?.value || "").trim() || window.currentUserName || "";
-  const used_at = usedAtInput?.value
-    ? new Date(usedAtInput.value).toISOString()
-    : new Date().toISOString();
-
-  const note = (noteInput?.value || "").trim() || null;
-
-  let serials = null;
-
-  if (level === "individual") {
-    serials = parseIndividualSerials(serialsInput?.value || "");
-    if (!serials.length) return toast("請輸入序號", "warning");
-  }
-
-  if (level === "batch") {
-    try {
-      serials = expandBatchSerials(batchStart?.value || "", batchEnd?.value || "");
-    } catch (err) {
-      console.error(err);
-      return toast(err.message, "error");
-    }
-    if (!serials.length) return toast("批量序號解析失敗", "error");
-  }
+  if (!window.currentCustomerId) return toast("尚未選擇客戶", "warning");
 
   const payload = {
-    record_level: level,
-    fixture_id,
-    model_id,
-    station_id,
-    use_count,
-    operator,
-    used_at,
-    note,
-    serials, // fixture 層級會是 null
+    fixture_id: fxInput?.value.trim(),
+    model_id: modelInput?.value.trim(),
+    station_id: stationInput?.value.trim(),
+    record_level: levelSelect?.value || "fixture",
+    use_count: Number(countInput?.value) || 1,
+    operator: (operatorInput?.value || "").trim() || window.currentUserName || "",
+    used_at: usedAtInput?.value
+      ? new Date(usedAtInput.value).toISOString()
+      : new Date().toISOString(),
+    note: (noteInput?.value || "").trim() || null,
   };
 
-  try {
-    await api("/usage", {
-      method: "POST",
-      body: payload,
-    });
+  if (!payload.fixture_id) return toast("請選擇治具", "warning");
+  if (!payload.model_id) return toast("請輸入機種 ID", "warning");
+  if (!payload.station_id) return toast("請選擇站點", "warning");
+  if (payload.use_count <= 0) return toast("使用次數需大於 0", "warning");
 
+  // 🔒 治具只能從清單選
+  if (!selectedFixtureId || selectedFixtureId !== payload.fixture_id) {
+    return toast("治具必須從清單中選擇", "warning");
+    }
+
+  if (payload.record_level === "individual") {
+    payload.serials = parseIndividualSerials(serialsInput?.value || "");
+    if (!payload.serials.length) return toast("請輸入序號", "warning");
+  }
+
+  if (payload.record_level === "batch") {
+    try {
+      payload.serials = expandBatchSerials(batchStart?.value || "", batchEnd?.value || "");
+    } catch (e) {
+      return toast(e.message, "error");
+    }
+  }
+
+  try {
+    await api("/usage", { method: "POST", body: payload });
     toast("使用紀錄新增成功");
     loadUsageLogs();
-
-    // 你現在是允許收起（不像 receipts/returns v4.x 禁止收起）
     toggleUsageAdd(false);
   } catch (err) {
     console.error(err);
     toast(err?.data?.detail || err?.message || "新增使用紀錄失敗", "error");
   }
 }
-
 window.submitUsageLog = submitUsageLog;
+
 
 /* ============================================================
  * 查詢使用紀錄
@@ -238,6 +331,27 @@ async function loadUsageLogs() {
   if (station) params.station_id = station;
   if (operator) params.operator = operator;
   if (model)   params.model_id = model;
+
+  const dateFrom = document
+  .getElementById("usageSearchDateFrom")
+  ?.value;
+
+const dateTo = document
+  .getElementById("usageSearchDateTo")
+  ?.value;
+
+if (dateFrom) {
+  // 轉成 ISO，後端會用 used_at >=
+  params.date_from = new Date(dateFrom).toISOString();
+}
+
+if (dateTo) {
+  // 轉成當天 23:59:59，避免漏掉整天
+  const end = new Date(dateTo);
+  end.setHours(23, 59, 59, 999);
+  params.date_to = end.toISOString();
+}
+
 
   try {
     const rows = await api("/usage", { params });
@@ -278,7 +392,7 @@ function renderUsageTable(rows) {
       "-";
 
     tr.innerHTML = `
-      <td class="py-2 pr-4">${fmtDateTime(r.used_at)}</td>
+      <td class="py-2 pr-4">${fmtDate(r.used_at)}</td>
       <td class="py-2 pr-4">${r.fixture_id ?? "-"}</td>
       <td class="py-2 pr-4">${serialText}</td>
       <td class="py-2 pr-4">${r.station_name ?? r.station_id ?? "-"}</td>
