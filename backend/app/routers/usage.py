@@ -252,9 +252,9 @@ def download_usage_template(
 
     # 範例 1：fixture-level
     ws.append([
-        "FX-0001",          # fixture_id
-        "MODEL-A",          # model_id
-        "STATION-01",       # station_id
+        "L-00062",          # fixture_id
+        "AWK-1137C",        # model_id
+        "T1_MAC",           # station_id
         "fixture",          # record_level
         "",                 # serial_number
         "",                 # serial_start
@@ -266,29 +266,29 @@ def download_usage_template(
 
     # 範例 2：individual serial
     ws.append([
-        "FX-0001",
-        "MODEL-A",
-        "STATION-01",
-        "individual",
-        "SN0001",
-        "",
-        "",
-        1,
-        "",
+        "L-00062",          # fixture_id
+        "AWK-1137C",        # model_id
+        "T1_MAC",           # station_id
+        "individual",       # record_level
+        "SN0001",           # serial_number
+        "",                 # serial_start
+        "",                 # serial_end
+        1,                  # use_count
+        "",                 # operator
         "範例：單一序號使用",
     ])
 
     # 範例 3：batch serial
     ws.append([
-        "FX-0001",
-        "MODEL-A",
-        "STATION-01",
-        "batch",
-        "",
-        "SN0001",
-        "SN0010",
-        1,
-        "",
+        "L-00062",          # fixture_id
+        "AWK-1137C",        # model_id
+        "T1_MAC",           # station_id
+        "batch",            # record_level
+        "",                 # serial_number
+        "SN0001",           # serial_start
+        "SN0010",           # serial_end
+        1,                  # use_count
+        "",                 # operator
         "範例：批量序號使用",
     ])
 

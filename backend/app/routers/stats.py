@@ -1,158 +1,80 @@
 """
 統計與儀表板 API (v4.x)
-符合 Event-based Material Transactions 模型
+
+設計原則：
+- Dashboard：Event-based（即時事件）
+- Stats Tab：State-based（DB View）
+- customer_id 一律由 Header Context 注入
 """
 
 from fastapi import APIRouter, Depends, Query
-from backend.app.dependencies import get_current_user, get_current_customer_id
-from backend.app.database import db
 from datetime import date
+from typing import Optional
+
+from backend.app.dependencies import (
+    get_current_user,
+    get_current_customer_id,
+)
+from backend.app.database import db
 
 router = APIRouter(
     prefix="/stats",
     tags=["統計資訊 Stats"]
 )
 
-# ============================================================
-# 1. 統計摘要 SUMMARY
-# ============================================================
 
-@router.get("/summary", summary="統計摘要")
-async def get_summary(
+# ============================================================
+# 治具壽命狀態（v4.x 核心 Stats API）
+# ============================================================
+@router.get(
+    "/fixture-lifespan",
+    summary="治具壽命狀態（依使用次數）"
+)
+async def get_fixture_lifespan(
+    fixture_id: Optional[str] = Query(default=None),
+    status: Optional[str] = Query(
+        default=None,
+        description="normal | warning | expired | no_cycle"
+    ),
+    limit: int = Query(default=200),
+
     customer_id: str = Depends(get_current_customer_id),
     user=Depends(get_current_user),
 ):
-
-    # --------------------------------------------------
-    # 總治具數
-    # --------------------------------------------------
-    total_fixtures = db.execute_query(
-        """
-        SELECT COUNT(*) AS cnt
-        FROM fixtures
-        WHERE customer_id = %s
-        """,
-        (customer_id,)
-    )[0]["cnt"]
-
-    # --------------------------------------------------
-    # 使用中（被部署）
-    # --------------------------------------------------
-    using_count = db.execute_query(
-        """
-        SELECT COUNT(DISTINCT fixture_id) AS cnt
-        FROM fixture_deployments
-        WHERE customer_id = %s
-        """,
-        (customer_id,)
-    )[0]["cnt"]
-
-    # --------------------------------------------------
-    # 報廢數
-    # --------------------------------------------------
-    scrap_count = db.execute_query(
-        """
-        SELECT COUNT(*) AS cnt
-        FROM fixtures
-        WHERE customer_id = %s
-          AND status = 'scrapped'
-        """,
-        (customer_id,)
-    )[0]["cnt"]
-
-    # --------------------------------------------------
-    # 收料 TOP 5（v4.x 正確算法）
-    # --------------------------------------------------
-    recent_receipts = db.execute_query(
-        """
+    sql = """
         SELECT
-            t.fixture_id,
-            SUM(
-                CASE
-                    WHEN t.record_type = 'datecode'
-                        THEN COALESCE(fd.quantity, 0)
-                    ELSE COALESCE(mi.cnt, 0)
-                END
-            ) AS count
-        FROM material_transactions t
-        LEFT JOIN (
-            SELECT transaction_id, COUNT(*) AS cnt
-            FROM material_transaction_items
-            GROUP BY transaction_id
-        ) mi ON mi.transaction_id = t.id
-        LEFT JOIN fixture_datecode_transactions fd
-               ON fd.transaction_id = t.id
-              AND fd.transaction_type = 'receipt'
-        WHERE t.customer_id = %s
-          AND t.transaction_type = 'receipt'
-        GROUP BY t.fixture_id
-        ORDER BY count DESC
-        LIMIT 5
-        """,
-        (customer_id,)
-    )
-
-    # --------------------------------------------------
-    # 退料 TOP 5（v4.x 正確算法）
-    # --------------------------------------------------
-    recent_returns = db.execute_query(
-        """
-        SELECT
-            t.fixture_id,
-            SUM(
-                CASE
-                    WHEN t.record_type = 'datecode'
-                        THEN COALESCE(fd.quantity, 0)
-                    ELSE COALESCE(mi.cnt, 0)
-                END
-            ) AS count
-        FROM material_transactions t
-        LEFT JOIN (
-            SELECT transaction_id, COUNT(*) AS cnt
-            FROM material_transaction_items
-            GROUP BY transaction_id
-        ) mi ON mi.transaction_id = t.id
-        LEFT JOIN fixture_datecode_transactions fd
-               ON fd.transaction_id = t.id
-              AND fd.transaction_type = 'return'
-        WHERE t.customer_id = %s
-          AND t.transaction_type = 'return'
-        GROUP BY t.fixture_id
-        ORDER BY count DESC
-        LIMIT 5
-        """,
-        (customer_id,)
-    )
-
-    return {
-        "total_fixtures": total_fixtures,
-        "in_stock_qty": max(total_fixtures - using_count - scrap_count, 0),
-        "using_count": using_count,
-        "scrap_count": scrap_count,
-        "recent_receipts": recent_receipts,
-        "recent_returns": recent_returns
-    }
-
-# ============================================================
-# 2. 治具狀態統計（資料庫 View）
-# ============================================================
-
-@router.get("/fixture-status", summary="治具狀態統計")
-async def get_fixture_status(
-    customer_id: str = Depends(get_current_customer_id),
-    user=Depends(get_current_user),
-):
-    return db.execute_query(
-        """
-        SELECT *
-        FROM view_fixture_status
+            customer_id,
+            fixture_id,
+            fixture_name,
+            fixture_status,
+            cycle_unit,
+            replacement_cycle,
+            total_uses,
+            usage_ratio,
+            remaining_uses,
+            lifespan_status
+        FROM view_fixture_lifespan_status
         WHERE customer_id = %s
-        """,
-        (customer_id,)
-    )
+    """
+    params = [customer_id]
+
+    if fixture_id:
+        sql += " AND fixture_id = %s"
+        params.append(fixture_id)
+
+    if status:
+        sql += " AND lifespan_status = %s"
+        params.append(status)
+
+    sql += " ORDER BY (usage_ratio IS NULL), usage_ratio DESC"
+    sql += " LIMIT %s"
+    params.append(limit)
+
+    return db.execute_query(sql, tuple(params))
+
 
 # ============================================================
-# 3. 最大開站數（資料庫 View）
+#最大開站數（View）
 # ============================================================
 
 @router.get("/max-stations", summary="最大開站數")
@@ -174,13 +96,14 @@ async def get_max_stations(
         (model_id,)
     )
 
+
 # ============================================================
-# 4. 序號統計（資料庫 View）
+# 序號狀態（View）
 # ============================================================
 
-@router.get("/serial-status", summary="序號統計")
+@router.get("/serial-status", summary="序號狀態統計")
 async def get_serial_status(
-    fixture_id: str = Query(None),
+    fixture_id: Optional[str] = Query(default=None),
     customer_id: str = Depends(get_current_customer_id),
     user=Depends(get_current_user),
 ):
@@ -197,92 +120,20 @@ async def get_serial_status(
 
     return db.execute_query(sql, tuple(params))
 
-# ============================================================
-# 5. 單治具使用統計
-# ============================================================
-
-@router.get("/fixture-usage", summary="單治具使用統計")
-async def get_fixture_usage(
-    fixture_id: str = Query(...),
-    customer_id: str = Depends(get_current_customer_id),
-    user=Depends(get_current_user),
-):
-
-    usage_count = db.execute_query(
-        """
-        SELECT COUNT(*) AS cnt
-        FROM usage_logs
-        WHERE customer_id = %s
-          AND fixture_id = %s
-        """,
-        (customer_id, fixture_id)
-    )[0]["cnt"]
-
-    replacement_count = db.execute_query(
-        """
-        SELECT COUNT(*) AS cnt
-        FROM replacement_logs
-        WHERE customer_id = %s
-          AND fixture_id = %s
-        """,
-        (customer_id, fixture_id)
-    )[0]["cnt"]
-
-    recent_usage = db.execute_query(
-        """
-        SELECT *
-        FROM usage_logs
-        WHERE customer_id = %s
-          AND fixture_id = %s
-        ORDER BY used_at DESC
-        LIMIT 5
-        """,
-        (customer_id, fixture_id)
-    )
-
-    return {
-        "usage_count": usage_count,
-        "replacement_count": replacement_count,
-        "recent_usage": recent_usage
-    }
 
 # ============================================================
-# 6. 整個機種治具需求總表
+# 6. 儀表板 Dashboard（Event-based，v4.x FINAL）
 # ============================================================
 
-@router.get("/model-requirements", summary="整個機種治具需求總表")
-async def get_model_requirements(
-    model_id: str = Query(...),
-    customer_id: str = Depends(get_current_customer_id),
-    user=Depends(get_current_user),
-):
-    return db.execute_query(
-        """
-        SELECT
-            fr.fixture_id,
-            f.fixture_name,
-            fr.required_qty,
-            fr.station_id
-        FROM fixture_requirements fr
-        JOIN fixtures f ON f.id = fr.fixture_id
-        WHERE fr.model_id = %s
-          AND fr.customer_id = %s
-        ORDER BY fr.station_id, fr.fixture_id
-        """,
-        (model_id, customer_id)
-    )
-
-
-
-@router.get("/dashboard")
-def get_dashboard_stats(
+@router.get("/dashboard", summary="儀表板資料")
+async def get_dashboard_stats(
     customer_id: str = Depends(get_current_customer_id),
     user=Depends(get_current_user),
 ):
     today = date.today()
 
     # --------------------------------------------------
-    # 1️⃣ 今日收料（v4.x 正確算法）
+    # 1️⃣ 今日收料（完整支援 batch / individual / datecode）
     # --------------------------------------------------
     today_in_items = db.execute_query(
         """
@@ -291,25 +142,39 @@ def get_dashboard_stats(
             SUM(
                 CASE
                     WHEN t.record_type = 'datecode'
-                        THEN COALESCE(i.quantity, 0)
-                    ELSE 1
+                        THEN COALESCE(fd.quantity, 0)
+
+                    WHEN t.record_type = 'batch'
+                        THEN COALESCE(mi.cnt, 0)
+
+                    WHEN t.record_type = 'individual'
+                        THEN 1
+
+                    ELSE 0
                 END
             ) AS qty
         FROM material_transactions t
-        LEFT JOIN material_transaction_items i
-            ON i.transaction_id = t.id
+        LEFT JOIN (
+            SELECT transaction_id, COUNT(*) AS cnt
+            FROM material_transaction_items
+            GROUP BY transaction_id
+        ) mi ON mi.transaction_id = t.id
+        LEFT JOIN fixture_datecode_transactions fd
+               ON fd.transaction_id = t.id
+              AND fd.transaction_type = 'receipt'
         WHERE t.customer_id = %s
           AND t.transaction_type = 'receipt'
-          AND DATE(t.transaction_date) = %s
+          AND t.transaction_date >= CURDATE()
+          AND t.transaction_date < CURDATE() + INTERVAL 1 DAY
         GROUP BY t.fixture_id
         """,
-        (customer_id, today)
+        (customer_id,)
     )
 
     today_in_total = sum((r.get("qty") or 0) for r in today_in_items)
 
     # --------------------------------------------------
-    # 2️⃣ 今日退料（v4.x 正確算法）
+    # 2️⃣ 今日退料（完整支援 batch / individual / datecode）
     # --------------------------------------------------
     today_out_items = db.execute_query(
         """
@@ -318,19 +183,33 @@ def get_dashboard_stats(
             SUM(
                 CASE
                     WHEN t.record_type = 'datecode'
-                        THEN COALESCE(i.quantity, 0)
-                    ELSE 1
+                        THEN COALESCE(fd.quantity, 0)
+
+                    WHEN t.record_type = 'batch'
+                        THEN COALESCE(mi.cnt, 0)
+
+                    WHEN t.record_type = 'individual'
+                        THEN 1
+
+                    ELSE 0
                 END
             ) AS qty
         FROM material_transactions t
-        LEFT JOIN material_transaction_items i
-            ON i.transaction_id = t.id
+        LEFT JOIN (
+            SELECT transaction_id, COUNT(*) AS cnt
+            FROM material_transaction_items
+            GROUP BY transaction_id
+        ) mi ON mi.transaction_id = t.id
+        LEFT JOIN fixture_datecode_transactions fd
+               ON fd.transaction_id = t.id
+              AND fd.transaction_type = 'return'
         WHERE t.customer_id = %s
           AND t.transaction_type = 'return'
-          AND DATE(t.transaction_date) = %s
+          AND t.transaction_date >= CURDATE()
+          AND t.transaction_date < CURDATE() + INTERVAL 1 DAY
         GROUP BY t.fixture_id
         """,
-        (customer_id, today)
+        (customer_id,)
     )
 
     today_out_total = sum((r.get("qty") or 0) for r in today_out_items)
@@ -354,39 +233,16 @@ def get_dashboard_stats(
         upcoming = []
 
     # --------------------------------------------------
-    # 4️⃣ 庫存概覽（穩定版）
+    # Response
     # --------------------------------------------------
-    try:
-        inventory = db.execute_query(
-            """
-            SELECT
-                f.id AS fixture_id,
-                f.fixture_name,
-                f.storage_location,
-                f.status,
-                f.replacement_cycle,
-                u.username AS owner_name
-            FROM fixtures f
-            LEFT JOIN owners o ON o.id = f.owner_id
-            LEFT JOIN users u ON u.id = o.primary_user_id
-            WHERE f.customer_id = %s
-            ORDER BY f.id
-            LIMIT 200
-            """,
-            (customer_id,)
-        )
-    except Exception:
-        inventory = []
-
     return {
         "today_in": {
             "total": today_in_total,
-            "items": today_in_items
+            "items": today_in_items,
         },
         "today_out": {
             "total": today_out_total,
-            "items": today_out_items
+            "items": today_out_items,
         },
         "upcoming_replacements": upcoming,
-        "inventory": inventory
     }

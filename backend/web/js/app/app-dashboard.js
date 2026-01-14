@@ -21,24 +21,17 @@ async function loadDashboard() {
     // 1️⃣ 今日收料
     // ===============================
     const todayIn = data?.today_in;
-
     const todayInTotal =
       typeof todayIn === "object" && !Array.isArray(todayIn)
         ? todayIn.total || 0
-        : Array.isArray(todayIn)
-          ? todayIn.length
-          : 0;
+        : 0;
 
     document.getElementById("todayIn").textContent = todayInTotal;
 
     const todayInList = document.getElementById("todayInList");
     todayInList.innerHTML = "";
 
-    const todayInItems =
-      todayIn?.items ??
-      (Array.isArray(todayIn) ? todayIn : []);
-
-    todayInItems.forEach(row => {
+    (todayIn?.items || []).forEach(row => {
       const div = document.createElement("div");
       div.className = "text-sm text-gray-700";
       div.textContent = `${row.fixture_id} +${row.qty}`;
@@ -49,24 +42,17 @@ async function loadDashboard() {
     // 2️⃣ 今日退料
     // ===============================
     const todayOut = data?.today_out;
-
     const todayOutTotal =
       typeof todayOut === "object" && !Array.isArray(todayOut)
         ? todayOut.total || 0
-        : Array.isArray(todayOut)
-          ? todayOut.length
-          : 0;
+        : 0;
 
     document.getElementById("todayOut").textContent = todayOutTotal;
 
     const todayOutList = document.getElementById("todayOutList");
     todayOutList.innerHTML = "";
 
-    const todayOutItems =
-      todayOut?.items ??
-      (Array.isArray(todayOut) ? todayOut : []);
-
-    todayOutItems.forEach(row => {
+    (todayOut?.items || []).forEach(row => {
       const div = document.createElement("div");
       div.className = "text-sm text-gray-700";
       div.textContent = `${row.fixture_id} -${row.qty}`;
@@ -81,7 +67,6 @@ async function loadDashboard() {
 
     (data?.upcoming_replacements || []).forEach(row => {
       const percent = Math.round((row.usage_ratio || 0) * 100);
-
       const color =
         percent >= 100 ? "text-red-600" :
         percent >= 90  ? "text-orange-600" :
@@ -97,9 +82,9 @@ async function loadDashboard() {
     });
 
     // ===============================
-    // 4️⃣ 庫存概覽
+    // 4️⃣ 庫存概覽（State-based）
     // ===============================
-    renderDashboardTable(data?.inventory || []);
+    loadDashboardInventory();
 
   } catch (err) {
     console.error("[dashboard] load failed", err);
@@ -107,33 +92,30 @@ async function loadDashboard() {
   }
 }
 
-/**
- * 渲染庫存表
- */
-let _dashboardInventoryCache = [];
 
 function renderDashboardTable(rows) {
-  _dashboardInventoryCache = rows;
-
   const tbody = document.getElementById("dashTable");
+  if (!tbody) return;
+
   tbody.innerHTML = "";
 
-  rows.forEach(row => {
+  rows.forEach(r => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td class="py-1 pr-4">${row.fixture_id}</td>
-      <td class="py-1 pr-4">${row.fixture_name}</td>
-      <td class="py-1 pr-4">${row.model || "-"}</td>
-      <td class="py-1 pr-4">${row.storage_location || "-"}</td>
-      <td class="py-1 pr-4">${row.status}</td>
+      <td class="py-1 pr-4">${r.fixture_id}</td>
+      <td class="py-1 pr-4">${r.fixture_name}</td>
+      <td class="py-1 pr-4">${r.model_id || "-"}</td>
+      <td class="py-1 pr-4">${r.storage_location || "-"}</td>
+      <td class="py-1 pr-4">${r.lifespan_status}</td>
       <td class="py-1 pr-4">
-        ${row.total_uses || 0}/${row.replacement_cycle || "-"}
+        ${r.total_uses || 0}/${r.replacement_cycle || "-"}
       </td>
-      <td class="py-1 pr-4">${row.primary_owner || "-"}</td>
+      <td class="py-1 pr-4">${r.primary_owner_name || "-"}</td>
     `;
     tbody.appendChild(tr);
   });
 }
+
 
 /**
  * Dashboard 搜尋（治具 / 機種）
@@ -158,4 +140,14 @@ function filterDashboard() {
 
   renderDashboardTable(filtered);
 }
+
+async function loadDashboardInventory() {
+  try {
+    const rows = await apiGetFixtureLifespan({ limit: 200 });
+    renderDashboardTable(rows || []);
+  } catch (err) {
+    console.error("[dashboard] inventory load failed", err);
+  }
+}
+
 

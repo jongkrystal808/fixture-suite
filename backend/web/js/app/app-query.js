@@ -203,55 +203,72 @@ async function openFixtureDetail(fixtureId) {
   }
 
   drawer.classList.remove("translate-x-full");
-
   window.__activeOverlayCloser = () => closeFixtureDetail();
 
   box.innerHTML = `<div class="p-4 text-gray-500">載入中...</div>`;
 
   try {
-    const data = await apiGetFixtureDetail(fixtureId);
-    const f = data.fixture;
+    // =====================================================
+    // 1️⃣ 治具壽命 / 狀態（核心）
+    // =====================================================
+    const lifespanRows = await apiGetFixtureLifespan({
+      fixture_id: fixtureId,
+      limit: 1,
+    });
 
+    const f = lifespanRows?.[0];
+    if (!f) {
+      throw new Error("No fixture lifespan data");
+    }
+
+    // =====================================================
+    // 2️⃣ 使用 / 更換紀錄（輔助）
+    // =====================================================
+    let usageData = null;
+    try {
+      usageData = await apiGetFixtureUsageStats(fixtureId);
+    } catch (e) {
+      usageData = null;
+    }
+
+    // =====================================================
+    // 3️⃣ Render
+    // =====================================================
     box.innerHTML = `
       <section class="space-y-4">
 
         <div>
           <h3 class="text-lg font-semibold">基本資料</h3>
           <div class="grid grid-cols-2 gap-2 text-sm mt-2">
-            <div><b>治具編號：</b>${f.id}</div>
+            <div><b>治具編號：</b>${f.fixture_id}</div>
             <div><b>名稱：</b>${f.fixture_name ?? "-"}</div>
-            <div><b>狀態：</b>${f.status ?? "-"}</div>
-            <div><b>負責人：</b>${f.owner_name ?? "-"}</div>
-            <div><b>儲位：</b>${f.storage_location ?? "-"}</div>
-          </div>
-        </div>
-
-        <div>
-          <h3 class="text-lg font-semibold">最近交易</h3>
-          <div class="text-sm space-y-1 mt-1">
-            <div><b>收料：</b>${formatTrans(data.last_receipt)}</div>
-            <div><b>退料：</b>${formatTrans(data.last_return)}</div>
+            <div><b>狀態：</b>${f.fixture_status ?? "-"}</div>
+            <div><b>壽命狀態：</b>${f.lifespan_status}</div>
+            <div><b>預期壽命：</b>${f.replacement_cycle ?? "-"} ${f.cycle_unit === "uses" ? "次" : "天"}</div>
+            <div><b>已使用：</b>${f.total_uses ?? 0}</div>
           </div>
         </div>
 
         <div>
           <h3 class="text-lg font-semibold">使用紀錄</h3>
-          ${renderUsageLogs(data.usage_logs)}
+          ${usageData ? renderUsageLogs(usageData.recent_usage) : "<div class='text-gray-400 text-sm'>無資料</div>"}
         </div>
 
         <div>
           <h3 class="text-lg font-semibold">更換紀錄</h3>
-          ${renderReplacementLogs(data.replacement_logs)}
+          ${usageData ? renderReplacementLogs(usageData.replacement_logs ?? []) : "<div class='text-gray-400 text-sm'>無資料</div>"}
         </div>
 
       </section>
     `;
   } catch (err) {
-    console.error(err);
+    console.error("openFixtureDetail failed:", err);
     box.innerHTML = `<div class="p-4 text-red-500">讀取資料失敗</div>`;
   }
 }
+
 window.openFixtureDetail = openFixtureDetail;
+
 
 /* ============================================================
  * 🟩 機種查詢 Models（v4.x：不帶 customer_id）

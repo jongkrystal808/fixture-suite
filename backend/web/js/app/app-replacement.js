@@ -1,199 +1,226 @@
 /**
- * 治具更換紀錄前端控制 (v4.x PATCHED)
- * ---------------------------------------------
- * v4.x 重點修正：
- * ✅ customer 由 header/context 決定 → 不再帶 customer_id（query/body）
- * ✅ 初始化改用 onCustomerReady（避免 DOMContentLoaded 時 customer 未就緒）
- * ✅ date_from / date_to 送 ISO（toISOString），並確保 date_to 含當日結束
- * ✅ render 表格欄位 colspan 修正（你其實有 9 欄）
- * ✅ delete / import API 呼叫不再傳 customer_id
+ * 更換記錄前端控制 (v4.x PATCHED, aligned with app-usage)
+ * -----------------------------------------------------------
+ * 對齊原則：
+ * - customer 由 header/context 決定
+ * - record_level：fixture / individual / batch（UI）→ fixture / serial（DB）
+ * - individual / batch 僅影響 serial_number 展開
+ * - replacement = event（不計數）
  */
+
+const repFxInput      = document.getElementById("replaceAddFixture");
+const repLevelSelect  = document.getElementById("replaceAddLevel");
+
+const repSerialsInput = document.getElementById("replaceAddSerials");
+const repBatchStart   = document.getElementById("replaceAddSerialStart");
+const repBatchEnd     = document.getElementById("replaceAddSerialEnd");
+
+const repOperatorInput= document.getElementById("replaceAddExecutor");
+const repDateInput    = document.getElementById("replaceAddDate");
+const repNoteInput    = document.getElementById("replaceAddNote");
+
+const repTableBody    = document.getElementById("replaceTable");
 
 let repPage = 1;
 const repPageSize = 20;
 
-/* ============================================================
- * v4.x：初始化（等 customer ready）
- * ============================================================ */
-onCustomerReady?.(() => {
-  loadReplacementLogs();
-});
 
-/* ============================================================
- * 查詢更換記錄
- * ============================================================ */
-async function loadReplacementLogs() {
-  if (!window.currentCustomerId) return;
+function fmtDate(v) {
+  if (!v) return "-";
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return String(v);
+  return d.toISOString().slice(0, 10);
+}
 
-  const fixtureId = document.getElementById("replaceSearchFixture")?.value.trim() || "";
-  const serial    = document.getElementById("replaceSearchSerial")?.value.trim() || "";
-  const executor  = document.getElementById("replaceSearchExecutor")?.value.trim() || "";
-  const reason    = document.getElementById("replaceSearchReason")?.value.trim() || "";
-  const dateFrom  = document.getElementById("replaceSearchFrom")?.value || "";
-  const dateTo    = document.getElementById("replaceSearchTo")?.value || "";
-
-  const params = {
-    skip: (repPage - 1) * repPageSize,
-    limit: repPageSize,
-  };
-
-  if (fixtureId) params.fixture_id = fixtureId;
-  if (serial)    params.serial_number = serial;
-  if (executor)  params.executor = executor;
-  if (reason)    params.reason = reason;
-
-  // ✅ date range：from 取當日 00:00；to 取當日 23:59:59.999
-  if (dateFrom) {
-    const d1 = new Date(dateFrom);
-    d1.setHours(0, 0, 0, 0);
-    params.date_from = d1.toISOString();
-  }
-  if (dateTo) {
-    const d2 = new Date(dateTo);
-    d2.setHours(23, 59, 59, 999);
-    params.date_to = d2.toISOString();
+// 🔵 預設：登入者 + 今天
+function initReplacementDefaults() {
+  if (repOperatorInput && !repOperatorInput.value) {
+    repOperatorInput.value =
+      window.currentUserName ||
+      window.currentUsername ||
+      window.currentUser?.username ||
+      "";
   }
 
-  try {
-    const result = await apiListReplacementLogs(params);
-    renderReplacementTable(result?.replacement_logs || []);
-    renderReplacementPagination(result?.total || 0);
-  } catch (err) {
-    console.error(err);
-    toast(err?.data?.detail || err?.message || "讀取更換紀錄失敗", "error");
+  if (repDateInput && !repDateInput.value) {
+    repDateInput.value = new Date().toISOString().slice(0, 10);
   }
 }
 
-/* ============================================================
- * 渲染表格
- * ============================================================ */
-function renderReplacementTable(rows) {
-  const tbody = document.getElementById("replaceTable");
-  if (!tbody) return;
 
-  tbody.innerHTML = "";
+function toggleReplacementSerialInputs() {
+  const mode = repLevelSelect?.value;
+
+  document
+    .getElementById("replaceSerialSingleField")
+    ?.classList.toggle("hidden", mode !== "individual");
+
+  document
+    .getElementById("replaceSerialBatchField")
+    ?.classList.toggle("hidden", mode !== "batch");
+}
+
+repLevelSelect?.addEventListener("change", toggleReplacementSerialInputs);
+toggleReplacementSerialInputs();
+
+
+
+async function submitReplacementLog() {
+  if (!window.currentCustomerId) {
+    return toast("尚未選擇客戶", "warning");
+  }
+
+  const fixtureId = repFxInput?.value.trim();
+  if (!fixtureId) {
+    return toast("請輸入治具 ID", "warning");
+  }
+
+  const uiLevel = repLevelSelect?.value || "fixture";
+
+  const payload = {
+    fixture_id: fixtureId,
+
+    // ⭐ DB 只吃 fixture / serial
+    record_level: uiLevel,
+
+    operator:
+      (repOperatorInput?.value || "").trim() ||
+      window.currentUserName ||
+      window.currentUsername ||
+      window.currentUser?.username ||
+      "",
+
+    // ⭐ 對齊 schema：occurred_at
+    occurred_at: repDateInput?.value || new Date().toISOString().slice(0, 10),
+
+    note: (repNoteInput?.value || "").trim() || null,
+  };
+
+  // -----------------------------
+  // individual
+  // -----------------------------
+  if (uiLevel === "individual") {
+    const serials = parseIndividualSerials(repSerialsInput?.value || "");
+    if (!serials.length) {
+      return toast("請輸入序號", "warning");
+    }
+    payload.serial_number = serials.join(",");
+  }
+
+  // -----------------------------
+  // batch
+  // -----------------------------
+  if (uiLevel === "batch") {
+    const start = repBatchStart?.value || "";
+    const end   = repBatchEnd?.value || "";
+
+    try {
+      expandBatchSerials(start, end); // 只驗證格式
+    } catch (e) {
+      return toast(e.message, "error");
+    }
+
+    // ⭐ event log：用描述字串即可
+        payload.serial_start = start;
+        payload.serial_end   = end;
+  }
+
+  // ⭐ 將 UI record_level 語意補進 note
+  payload.note = withReplacementLevelNote(uiLevel, payload.note);
+
+  try {
+    await api("/replacement", {
+      method: "POST",
+      body: payload,
+    });
+
+    toast("更換記錄新增成功");
+    toggleReplaceAdd(false);
+    loadReplacementLogs();
+  } catch (err) {
+    console.error(err);
+    toast(err?.data?.detail || err?.message || "新增更換記錄失敗", "error");
+  }
+}
+
+window.submitReplacementLog = submitReplacementLog;
+
+
+
+async function loadReplacementLogs() {
+  if (!window.currentCustomerId) return;
+
+  const fixture = document.getElementById("replaceSearchFixture")?.value.trim();
+  const serial  = document.getElementById("replaceSearchSerial")?.value.trim();
+  const operator= document.getElementById("replaceSearchExecutor")?.value.trim();
+
+  const params = {};
+  if (fixture)  params.fixture_id = fixture;
+  if (serial)   params.serial_number = serial;
+  if (operator) params.operator = operator;
+
+  const dateFrom = document.getElementById("replaceSearchFrom")?.value;
+  const dateTo   = document.getElementById("replaceSearchTo")?.value;
+
+  if (dateFrom) params.date_from = new Date(dateFrom).toISOString();
+  if (dateTo) {
+    const end = new Date(dateTo);
+    end.setHours(23, 59, 59, 999);
+    params.date_to = end.toISOString();
+  }
+
+  try {
+    const rows = await api("/replacement", { params });
+    renderReplacementTable(Array.isArray(rows) ? rows : []);
+  } catch (err) {
+    console.error(err);
+    toast("查詢更換記錄失敗", "error");
+  }
+}
+
+function renderReplacementTable(rows) {
+  if (!repTableBody) return;
+
+  repTableBody.innerHTML = "";
 
   if (!Array.isArray(rows) || rows.length === 0) {
-    tbody.innerHTML = `
+    repTableBody.innerHTML = `
       <tr>
-        <td colspan="9" class="text-center py-3 text-gray-400">沒有資料</td>
+        <td colspan="7" class="text-center text-gray-400 py-3">沒有資料</td>
       </tr>
     `;
     return;
   }
 
   rows.forEach((r) => {
-    const dateText =
-      r.replacement_date
-        ? String(r.replacement_date).slice(0, 10)
-        : "";
+    const tr = document.createElement("tr");
 
-    const serialText = r.serial_number ?? "-";
+    tr.innerHTML = `
+      <td class="py-2 pr-4">${fmtDate(r.occurred_at)}</td>
+      <td class="py-2 pr-4">${r.fixture_id ?? "-"}</td>
+      <td class="py-2 pr-4">${renderReplacementLevelBadge(r)}</td>
+      <td class="py-2 pr-4">${r.serial_number ?? "-"}</td>
+      <td class="py-2 pr-4">${r.note ?? "-"}</td>
+      <td class="py-2 pr-4">${r.operator ?? r.executor ?? "-"}</td>
+      <td class="py-2 pr-4">
+        <button class="btn btn-xs btn-error"
+          onclick="deleteReplacement(${JSON.stringify(r.id)})">
+          刪除
+        </button>
+      </td>
+    `;
 
-    const safeId = JSON.stringify(r.id);
-
-    tbody.insertAdjacentHTML(
-      "beforeend",
-      `
-      <tr>
-        <td class="py-2 pr-4">${dateText}</td>
-        <td class="py-2 pr-4">${r.fixture_id ?? "-"}</td>
-        <td class="py-2 pr-4">${serialText}</td>
-        <td class="py-2 pr-4">${r.reason ?? "-"}</td>
-        <td class="py-2 pr-4">${r.executor ?? "-"}</td>
-        <td class="py-2 pr-4">${r.note ?? "-"}</td>
-        <td class="py-2 pr-4">
-          <button class="btn btn-xs btn-error" onclick="deleteReplacementLog(${safeId})">
-            刪除
-          </button>
-        </td>
-      </tr>
-      `
-    );
+    repTableBody.appendChild(tr);
   });
 }
 
-/* ============================================================
- * 分頁
- * ============================================================ */
-function renderReplacementPagination(total) {
-  const box = document.getElementById("replacePagination");
-  if (!box) return;
-
-  const pages = Math.ceil((total || 0) / repPageSize) || 1;
-  box.innerHTML = "";
-
-  if (pages <= 1) return;
-
-  for (let p = 1; p <= pages; p++) {
-    const btn = document.createElement("button");
-    btn.className = `btn btn-sm ${p === repPage ? "btn-primary" : "btn-outline"}`;
-    btn.textContent = p;
-    btn.onclick = () => {
-      repPage = p;
-      loadReplacementLogs();
-    };
-    box.appendChild(btn);
-  }
-}
-
-/* ============================================================
- * 新增更換記錄
- * ============================================================ */
-async function submitReplacementLog() {
-  if (!window.currentCustomerId) return toast("尚未選擇客戶", "warning");
-
-  const fixtureId = document.getElementById("replaceAddFixture")?.value.trim() || "";
-  const serial    = document.getElementById("replaceAddSerials")?.value.trim() || "";
-  const level     = document.getElementById("replaceAddLevel")?.value || "fixture";
-  const date = document.getElementById("replaceAddDate")?.value || "";
-  const reason    = document.getElementById("replaceAddReason")?.value.trim() || "";
-  const executor  = document.getElementById("replaceAddExecutor")?.value.trim() || "";
-  const note      = document.getElementById("replaceAddNote")?.value.trim() || "";
-
-  if (!fixtureId) return toast("請輸入治具 ID", "warning");
-  if (!date) return toast("請輸入更換日期", "warning");
-
-  if (level === "serial" && !serial) {
-    return toast("請輸入序號（record_level = serial）", "warning");
-  }
-
-  const payload = {
-    fixture_id: fixtureId,
-    record_level: level,                // fixture / serial
-    serial_number: serial || null,
-    replacement_date: new Date(date).toISOString(),
-    reason: reason || null,
-    executor: executor || null,
-    note: note || null,
-  };
-
-  try {
-    await apiCreateReplacementLog(payload);
-    toast("新增成功");
-    toggleReplaceAdd(false);
-    repPage = 1;
-    loadReplacementLogs();
-  } catch (err) {
-    console.error(err);
-    toast(err?.data?.detail || err?.message || "新增更換紀錄失敗", "error");
-  }
-}
-
-window.submitReplacementLog = submitReplacementLog;
-
-/* ============================================================
- * 刪除
- * ============================================================ */
-async function deleteReplacementLog(id) {
+async function deleteReplacement(id) {
   if (!id) return;
-  if (!confirm("確定要刪除這筆更換紀錄？")) return;
-  if (!window.currentCustomerId) return toast("尚未選擇客戶", "warning");
+  if (!confirm("確定要刪除此更換記錄？")) return;
 
   try {
-    // v4.x：不帶 customer_id（header/context）
-    await apiDeleteReplacementLog(id);
-    toast("刪除成功");
+    await api(`/replacement/${id}`, { method: "DELETE" });
+    toast("已刪除");
     loadReplacementLogs();
   } catch (err) {
     console.error(err);
@@ -201,37 +228,252 @@ async function deleteReplacementLog(id) {
   }
 }
 
-window.deleteReplacementLog = deleteReplacementLog;
+window.loadReplacementLogs = loadReplacementLogs;
+window.deleteReplacement = deleteReplacement;
 
-/* ============================================================
- * 匯入 Excel
- * ============================================================ */
-async function handleReplacementImport(input) {
-  const file = input?.files?.[0];
-  if (!file) return;
 
-  if (!window.currentCustomerId) return toast("尚未選擇客戶", "warning");
+onUserReady?.(() => {
+  onCustomerReady?.(() => {
+    initReplacementDefaults();
+    loadReplacementLogs();
+  });
+});
 
+
+// ============================================================
+// Replacement - 將 record_level 語意補進 note（對齊 usage event 模型）
+// ============================================================
+function withReplacementLevelNote(recordLevel, note) {
+  const base = (note || "").trim();
+
+  if (recordLevel === "individual") {
+    return base ? `[individual] ${base}` : "[individual]";
+  }
+
+  if (recordLevel === "batch") {
+    return base ? `[batch] ${base}` : "[batch]";
+  }
+
+  return base || null;
+}
+
+
+
+// ============================================================
+// Replacement - Import Excel (xlsx)
+// ============================================================
+window.handleReplacementImport = async function (input) {
   try {
-    const res = await apiImportReplacementLogsXlsx(file); // v4.x：不帶 customer_id
-    toast(res?.message || "匯入成功");
-    repPage = 1;
+    if (!input || !input.files || input.files.length === 0) {
+      return;
+    }
+
+    if (!window.currentCustomerId) {
+      toast("請先選擇客戶", "warning");
+      input.value = "";
+      return;
+    }
+
+    const file = input.files[0];
+    if (!file.name.toLowerCase().endsWith(".xlsx")) {
+      toast("請選擇 xlsx 檔案", "warning");
+      input.value = "";
+      return;
+    }
+
+    // 🔑 正確取得 token（與 api() / usage 完全一致）
+    let token = null;
+    if (window.TokenManager?.getToken) {
+      token = window.TokenManager.getToken();
+    } else if (typeof window.getToken === "function") {
+      token = window.getToken();
+    }
+
+    if (!token) {
+      toast("尚未登入（無法取得 Token）", "error");
+      input.value = "";
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const res = await fetch("/api/v2/replacement/import", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "X-Customer-Id": window.currentCustomerId,
+      },
+      body: formData,
+    });
+
+    if (!res.ok) {
+      let msg = `匯入失敗 (${res.status})`;
+      try {
+        const data = await res.json();
+        if (data?.detail) msg = data.detail;
+      } catch (_) {}
+      throw new Error(msg);
+    }
+
+    const result = await res.json();
+
+    // ✅ 成功提示（格式完全對齊 usage）
+    toast(
+      `匯入完成：成功 ${result.success_count} 筆，失敗 ${result.error_count} 筆`,
+      "success"
+    );
+
+    // ⚠️ 若有錯誤，印到 console 方便 debug
+    if (Array.isArray(result.errors) && result.errors.length > 0) {
+      console.warn("Replacement import errors:", result.errors);
+    }
+
+    // 🔁 重新載入列表
     loadReplacementLogs();
   } catch (err) {
     console.error(err);
-    toast(err?.data?.detail || err?.message || "匯入失敗", "error");
+    toast(err.message || "匯入更換記錄失敗", "error");
   } finally {
+    // 重置 input，避免同檔案無法再次觸發 onchange
     input.value = "";
+  }
+};
+
+
+
+// ============================================================
+// Replacement - Download Import Template
+// ============================================================
+window.downloadReplaceTemplate = async function () {
+  try {
+    if (!window.currentCustomerId) {
+      toast("請先選擇客戶", "warning");
+      return;
+    }
+
+    let token = null;
+    if (window.TokenManager?.getToken) {
+      token = window.TokenManager.getToken();
+    } else if (typeof window.getToken === "function") {
+      token = window.getToken();
+    }
+
+    if (!token) {
+      toast("尚未登入（無法取得 Token）", "error");
+      return;
+    }
+
+    const res = await fetch("/api/v2/replacement/template", {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "X-Customer-Id": window.currentCustomerId,
+      },
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+
+    const blob = await res.blob();
+
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "replacement_import_template.xlsx";
+    document.body.appendChild(a);
+    a.click();
+
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  } catch (err) {
+    console.error(err);
+    toast("下載更換記錄範本失敗（請確認登入狀態）", "error");
+  }
+};
+
+
+/* ============================================================
+ * 🔵 更換記錄：新增表單顯示 / 隱藏（對齊 toggleUsageAdd）
+ * ============================================================ */
+function toggleReplaceAdd(show) {
+  const form = document.getElementById("replaceAddForm");
+  if (!form) return;
+
+  if (show) {
+    form.classList.remove("hidden");
+
+    // 🔧 開啟時初始化預設值
+    if (typeof initReplacementDefaults === "function") {
+      initReplacementDefaults();
+    }
+
+    // 🔧 同步一次層級顯示
+    if (typeof toggleReplacementSerialInputs === "function") {
+      toggleReplacementSerialInputs();
+    }
+  } else {
+    form.classList.add("hidden");
   }
 }
 
-window.handleReplacementImport = handleReplacementImport;
+window.toggleReplaceAdd = toggleReplaceAdd;
 
-/* ============================================================
- * 顯示 / 隱藏新增表單
- * ============================================================ */
-function toggleReplaceAdd(show) {
-  document.getElementById("replaceAddForm")?.classList.toggle("hidden", !show);
+
+function renderReplacementLevelBadge(r) {
+  if (r.record_level === "fixture") {
+    return `<span class="badge badge-info">治具</span>`;
+  }
+
+  if (r.note?.startsWith("[batch]")) {
+    return `<span class="badge badge-warning">批量</span>`;
+  }
+
+  return `<span class="badge badge-warning">序號</span>`;
 }
 
-window.toggleReplaceAdd = toggleReplaceAdd;
+
+/* ============================================================
+ * Replacement - 快速日期區間（today / yesterday / 7days）
+ * ============================================================ */
+function quickReplaceDateRange(type) {
+  const fromEl = document.getElementById("replaceSearchFrom");
+  const toEl   = document.getElementById("replaceSearchTo");
+  if (!fromEl || !toEl) return;
+
+  const today = new Date();
+  let from, to;
+
+  switch (type) {
+    case "today":
+      from = new Date(today);
+      to   = new Date(today);
+      break;
+
+    case "yesterday":
+      from = new Date(today);
+      from.setDate(from.getDate() - 1);
+      to = new Date(from);
+      break;
+
+    case "7days":
+      to = new Date(today);
+      from = new Date(today);
+      from.setDate(from.getDate() - 6); // 含今天共 7 天
+      break;
+
+    default:
+      return;
+  }
+
+  fromEl.value = from.toISOString().slice(0, 10);
+  toEl.value   = to.toISOString().slice(0, 10);
+
+  // 🔥 直接刷新列表
+  loadReplacementLogs();
+}
+
+window.quickReplaceDateRange = quickReplaceDateRange;
+
+

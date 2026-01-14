@@ -955,65 +955,6 @@
         </div>
       </div>
 
-      <!-- 治具壽命管理作法 -->
-      <div class="card p-5 space-y-4">
-        <h3 class="font-semibold text-lg">治具壽命管理作法(針對不耐用治具)</h3>
-
-        <div class="grid md:grid-cols-2 gap-4">
-          <!-- 1. 建立壽命比對機制 -->
-          <div class="border rounded-xl p-4 space-y-3">
-            <div class="flex items-center gap-2">
-              <div class="h-8 w-8 rounded-lg bg-blue-100 text-blue-700 grid place-items-center font-bold">1</div>
-              <h4 class="font-semibold">建立壽命比對機制</h4>
-            </div>
-            <ul class="text-sm text-gray-600 space-y-2 ml-10">
-              <li>• 每個治具設定預期壽命(次數或天數)</li>
-              <li>• 系統記錄實際使用次數</li>
-              <li>• 未達標自動標示「壽命未達預設值」</li>
-            </ul>
-          </div>
-
-          <!-- 2. 自動分類與標示 -->
-          <div class="border rounded-xl p-4 space-y-3">
-            <div class="flex items-center gap-2">
-              <div class="h-8 w-8 rounded-lg bg-green-100 text-green-700 grid place-items-center font-bold">2</div>
-              <h4 class="font-semibold">自動分類與標示</h4>
-            </div>
-            <ul class="text-sm text-gray-600 space-y-2 ml-10">
-              <li>• 系統自動歸類「不耐用治具」清單</li>
-              <li>• 顯示紅色警示</li>
-              <li>• 儀表板可統計比例</li>
-            </ul>
-          </div>
-
-          <!-- 3. 原因分析與回報 -->
-          <div class="border rounded-xl p-4 space-y-3">
-            <div class="flex items-center gap-2">
-              <div class="h-8 w-8 rounded-lg bg-amber-100 text-amber-700 grid place-items-center font-bold">3</div>
-              <h4 class="font-semibold">原因分析與回報</h4>
-            </div>
-            <ul class="text-sm text-gray-600 space-y-2 ml-10">
-              <li>• 報廢時填寫損壞原因、使用環境</li>
-              <li>• 可上傳照片</li>
-              <li>• 供工程部分析設計問題</li>
-            </ul>
-          </div>
-
-          <!-- 4. 系統提醒與學習回饋 -->
-          <div class="border rounded-xl p-4 space-y-3">
-            <div class="flex items-center gap-2">
-              <div class="h-8 w-8 rounded-lg bg-purple-100 text-purple-700 grid place-items-center font-bold">4</div>
-              <h4 class="font-semibold">系統提醒與學習回饋</h4>
-            </div>
-            <ul class="text-sm text-gray-600 space-y-2 ml-10">
-              <li>• 若同型號多次壽命不足</li>
-              <li>• 自動提醒檢討</li>
-              <li>• 持續優化治具設計</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-
       <!-- 不耐用治具清單 -->
       <div class="card p-5 space-y-4">
         <div class="flex items-center justify-between">
@@ -1036,32 +977,6 @@
             </thead>
             <tbody id="undurableTable"></tbody>
           </table>
-        </div>
-      </div>
-
-      <!-- 報廢原因登記表單 -->
-      <div class="card p-5 space-y-4">
-        <h3 class="font-semibold">報廢原因登記</h3>
-        <div class="grid md:grid-cols-6 gap-3">
-          <div class="field"><label class="label-s">治具編號</label><select id="scrapFixture" class="input"></select></div>
-          <div class="field"><label class="label-s">報廢日期</label><input id="scrapDate" type="date" class="input" /></div>
-          <div class="field"><label class="label-s">損壞原因</label>
-            <select id="scrapReason" class="input">
-              <option>正常磨損</option>
-              <option>材質問題</option>
-              <option>設計缺陷</option>
-              <option>操作不當</option>
-              <option>意外損壞</option>
-              <option>其他</option>
-            </select>
-          </div>
-          <div class="field"><label class="label-xs">使用環境</label><input id="scrapEnv" class="input" placeholder="如:高溫/潮濕" /></div>
-          <div class="field"><label class="label-xs">照片上傳</label><input id="scrapPhoto" type="file" accept="image/*" class="input text-xs" /></div>
-          <div class="flex items-end"><button class="btn btn-primary w-full" onclick="toast('已記錄報廢原因')">提交</button></div>
-        </div>
-        <div class="field">
-          <label class="label-xs">詳細說明</label>
-          <textarea id="scrapNote" class="input" rows="2" placeholder="請詳細描述損壞情況..."></textarea>
         </div>
       </div>
     </section>
@@ -1306,7 +1221,7 @@
 
             <label class="btn btn-ghost cursor-pointer">
               <input id="replaceXlsx" type="file" accept=".xlsx" class="hidden"
-                     onchange="handleReplaceImport(this)" />
+                     onchange="handleReplacementImport(this)" />
               匯入 Excel(.xlsx)
             </label>
 
@@ -1326,11 +1241,6 @@
               </div>
 
                 <div class="field">
-                    <label class="text-base font-semibold">原因</label>
-                    <input id="replaceAddReason" class="input" />
-                  </div>
-
-                <div class="field">
                 <label class="text-base font-semibold">操作人員 *</label>
                 <input id="replaceAddExecutor" class="input"  placeholder="預設登入者">
               </div>
@@ -1347,7 +1257,7 @@
 
                   <div class="field">
                     <label class="text-base font-semibold">更換層級 *</label>
-                    <select id="replaceAddLevel" class="input" onchange="toggleReplaceSerialField()">
+                    <select id="replaceAddLevel" class="input" onchange="toggleReplacementSerialInputs()">
                       <option value="fixture">治具Datecode</option>
                       <option value="individual">治具個別序號</option>
                       <option value="batch">治具批量序號</option>
@@ -1389,32 +1299,42 @@
             <div class="border-t border-gray-300 my-4"></div>
 
             <!-- 查詢區 -->
-          <div class="grid md:grid-cols-6 gap-3">
+          <div class="border rounded-2xl p-4 bg-white space-y-4">
+              <div class="flex flex-wrap items-end gap-3">
+                  <div class="flex items-center gap-2">
+                  <input id="replaceSearchFrom" type="date" class="input w-40" />
+                  <span class="text-gray-400">—</span>
+                  <input id="replaceSearchTo" type="date" class="input w-40" />
+                </div>
 
+                <!-- 快速日期 -->
+                <div class="flex gap-1">
+                  <button class="btn btn-xs btn-outline" onclick="quickReplaceDateRange('today')">今天</button>
+                  <button class="btn btn-xs btn-outline" onclick="quickReplaceDateRange('yesterday')">昨天</button>
+                  <button class="btn btn-xs btn-outline" onclick="quickReplaceDateRange('7days')">最近 7 天</button>
+
+                </div>
+
+              </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
             <div class="field">
               <input id="replaceSearchFixture" class="input" placeholder="治具 ID" />
             </div>
 
             <div class="field">
-              <input id="replaceSearchSerial" class="input" placeholder="SN..." />
+              <input id="replaceSearchSerial" class="input" placeholder="治具序號" />
             </div>
 
             <div class="field">
               <input id="replaceSearchExecutor" class="input" placeholder="員工工號" />
             </div>
 
-            <div class="field">
-              <input id="replaceSearchFrom" type="date" class="input" placeholder="日期起" />
-            </div>
-
-            <div class="field">
-              <input id="replaceSearchTo" type="date" class="input" placeholder="日期迄" />
-            </div>
-
             <div class="flex items-end">
               <button class="btn bg-gray-400 w-full" onclick="loadReplacementLogs()">查詢/刷新</button>
             </div>
 
+          </div>
           </div>
 
           <!-- 更換記錄表格 -->
@@ -1424,10 +1344,10 @@
               <tr>
                 <th class="py-2 pr-4">日期</th>
                 <th class="py-2 pr-4">治具</th>
+                <th class="py-2 pr-4">更換層級</th>
                 <th class="py-2 pr-4">序號</th>
-                <th class="py-2 pr-4">原因</th>
-                <th class="py-2 pr-4">執行人員</th>
                 <th class="py-2 pr-4">備註</th>
+                <th class="py-2 pr-4">操作人員</th>
                 <th class="py-2 pr-4">操作</th>
               </tr>
               </thead>

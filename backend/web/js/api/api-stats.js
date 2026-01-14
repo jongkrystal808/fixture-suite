@@ -3,20 +3,17 @@
  *
  * 對應 backend/app/routers/stats.py
  *
- * 原則：
- * - ❌ 不處理 customer_id
- * - ❌ 不自行拼 query string
- * - ❌ 不自行處理 token
- * - ✅ 一律透過 api-config.js
  */
 
 /* ============================================================
- * Dashboard Summary
- * GET /stats/summary
+ * 取得儀表板統計數據
+ * GET /stats/dashboard
  * ============================================================ */
-function apiGetStatsSummary() {
-  return api("/stats/summary");
+function apiGetDashboardStats() {
+  return api("/stats/dashboard");
 }
+
+window.apiGetDashboardStats = apiGetDashboardStats;
 
 /* ============================================================
  * 取得某機種最大可開站數
@@ -32,13 +29,6 @@ function apiGetMaxStations(modelId) {
   });
 }
 
-/* ============================================================
- * 取得治具狀態視圖
- * GET /stats/fixture-status
- * ============================================================ */
-function apiGetFixtureStatus() {
-  return api("/stats/fixture-status");
-}
 
 /* ============================================================
  * 取得單一治具使用 / 更換統計
@@ -68,13 +58,25 @@ function apiGetModelRequirements(modelId) {
   });
 }
 
+// ============================================================
+// Stats - Fixture Lifespan
+// ============================================================
+
+async function apiGetFixtureLifespan(params = {}) {
+  const q = new URLSearchParams(params).toString();
+  return api(`/stats/fixture-lifespan${q ? `?${q}` : ""}`);
+}
+
+window.apiGetFixtureLifespan = apiGetFixtureLifespan;
+
+
 /* ============================================================
  * Export to window
  * ============================================================ */
-window.apiGetStatsSummary = apiGetStatsSummary;
 window.apiGetMaxStations = apiGetMaxStations;
-window.apiGetFixtureStatus = apiGetFixtureStatus;
 window.apiGetFixtureUsageStats = apiGetFixtureUsageStats;
 window.apiGetModelRequirements = apiGetModelRequirements;
 
 console.log("✅ api-stats.js v4.x FINAL loaded");
+
+

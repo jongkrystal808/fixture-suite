@@ -1,112 +1,88 @@
 """
-治具更換記錄資料模型 (v4.0)
-Replacement Log Data Models
+治具更換事件資料模型 (v4.x FINAL)
+Replacement Event Models
 
 對應資料表: replacement_logs
 
-v4.0 新增：
-- record_level: fixture / serial
-- serial_number: 若 record_level = serial 必填
-- usage_before: 更換前此治具/序號的使用次數
-- usage_after: 更換後（初始化為 0）
+設計原則：
+- replacement = event（對齊 usage_logs）
+- 不維護 summary / 不記 usage_before / after
+- record_level 僅有 fixture / serial
+- individual / batch 語意寫入 note
 """
 
-from typing import Optional
+from typing import Optional, Literal
 from pydantic import BaseModel, Field
 from datetime import datetime
 
 
 # ============================================================
-# 基礎欄位 (與資料庫欄位對應)
+# 基礎欄位（對齊 replacement_logs）
 # ============================================================
 
 class ReplacementBase(BaseModel):
-    customer_id: str = Field(
-        ...,
-        max_length=50,
-        description="客戶 ID"
-    )
-
     fixture_id: str = Field(
         ...,
         max_length=50,
         description="治具 ID"
     )
 
-    # v4.0 新增：fixture / serial
-    record_level: str = Field(
+    record_level: Literal["fixture", "serial"] = Field(
         ...,
-        description="更換層級：fixture / serial",
+        description="事件層級（fixture / serial）",
         example="fixture"
     )
 
-    # record_level = serial 時需要
     serial_number: Optional[str] = Field(
         None,
         max_length=100,
-        description="序號（record_level = serial 時必填）"
+        description="序號描述（record_level = serial 時使用）"
     )
 
-    replacement_date: datetime = Field(
+    occurred_at: datetime = Field(
         ...,
-        description="更換日期"
+        description="事件發生時間（replacement event）"
     )
 
-    reason: Optional[str] = Field(
+    operator: Optional[str] = Field(
         None,
-        description="更換原因"
-    )
-
-    executor: Optional[str] = Field(
-        None,
-        max_length=50,
-        description="執行人員"
+        max_length=100,
+        description="操作人員（對齊 usage_logs.operator）"
     )
 
     note: Optional[str] = Field(
         None,
-        description="備註"
+        description="事件備註（可含 individual / batch 語意）"
     )
 
 
 # ============================================================
-# 建立記錄
+# 建立事件
 # ============================================================
 
 class ReplacementCreate(ReplacementBase):
     """
-    新增更換記錄
-    - SP 自動填入 usage_before / usage_after
+    新增更換事件（v4.x）
     """
     pass
 
 
 # ============================================================
-# 更新記錄 (只能修改說明性欄位)
+# 更新事件（僅允許修正描述性欄位）
 # ============================================================
 
 class ReplacementUpdate(BaseModel):
-    replacement_date: Optional[datetime] = None
-    reason: Optional[str] = None
-    executor: Optional[str] = None
+    occurred_at: Optional[datetime] = None
+    operator: Optional[str] = None
     note: Optional[str] = None
 
 
 # ============================================================
-# 回傳模型（含 id / usage_before / usage_after）
+# 回傳模型
 # ============================================================
 
 class ReplacementResponse(ReplacementBase):
-    id: int = Field(..., description="更換記錄 ID")
-
-    # v4.0 新增欄位
-    usage_before: Optional[int] = Field(
-        None, description="更換前使用次數"
-    )
-    usage_after: Optional[int] = Field(
-        None, description="更換後使用次數（通常為 0）"
-    )
-
+    id: int = Field(..., description="更換事件 ID")
     created_at: Optional[datetime] = None
 
     class Config:
@@ -114,11 +90,11 @@ class ReplacementResponse(ReplacementBase):
 
 
 # ============================================================
-# 進階回傳模型（JOIN fixture 取得治具名稱）
+# 進階回傳（JOIN fixtures）
 # ============================================================
 
 class ReplacementWithDetails(ReplacementResponse):
     fixture_name: Optional[str] = Field(
         None,
-        description="治具名稱 (JOIN fixtures 後取得)"
+        description="治具名稱（JOIN fixtures 後取得）"
     )
