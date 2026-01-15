@@ -1,90 +1,48 @@
 /**
- * 本地資料存儲與狀態管理
- * storage.js
+ * storage.js (v4.x FINAL)
+ * 本地狀態存儲（無 mock）
+ *
+ * ✔ 統一 token / customer
+ * ✔ 移除所有 mock 狀態
+ * ✔ 僅保留「登入態 / customer context」
  */
 
-// LocalStorage 鍵名
-const LS_KEY = 'fixtureApp.v6.3';
+// ==============================
+// LocalStorage 命名空間
+// ==============================
+const LS_KEY = 'fixtureApp.v4';
 
-// 其他通用狀態鍵（與 PRD 中的狀態一致）
+// ==============================
+// 統一 Storage Keys（單一真相）
+// ==============================
 const STORAGE_KEYS = {
-  AUTH_TOKEN: 'auth_token',
-  CURRENT_CUSTOMER: 'current_customer',
-  CUSTOMERS_LIST: 'customers_list',
+  AUTH_TOKEN: 'access_token',          // ⚠ 與 OAuth2 / Backend 對齊
+  CURRENT_CUSTOMER: 'current_customer_id',
   USER_INFO: 'user_info'
 };
 
-// 全局狀態變數
+// ==============================
+// 全域狀態（只保留真實狀態）
+// ==============================
 window.authUser = null;
-window.mockOwners = [];
-window.mockFixtures = [];
-window.mockLogs = [];
-window.mockReceipts = [];
-window.mockReturns = [];
-window.mockModels = [];
 
-/**
- * 儲存狀態到 localStorage
- */
-function saveState() {
-  try {
-    const state = {
-      mockOwners: window.mockOwners,
-      mockFixtures: window.mockFixtures,
-      mockLogs: window.mockLogs,
-      mockReceipts: window.mockReceipts,
-      mockReturns: window.mockReturns,
-      mockModels: window.mockModels,
-      authUser: window.authUser
-    };
-    localStorage.setItem(LS_KEY, JSON.stringify(state));
-  } catch (e) {
-    console.warn('saveState failed', e);
-  }
-}
-
-/**
- * 從 localStorage 載入狀態
- */
-function loadState() {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return;
-    
-    const state = JSON.parse(raw);
-    if (state.mockOwners) window.mockOwners = state.mockOwners;
-    if (state.mockFixtures) window.mockFixtures = state.mockFixtures;
-    if (state.mockLogs) window.mockLogs = state.mockLogs;
-    if (state.mockReceipts) window.mockReceipts = state.mockReceipts;
-    if (state.mockReturns) window.mockReturns = state.mockReturns;
-    if (state.mockModels) window.mockModels = state.mockModels;
-    if (state.authUser) window.authUser = state.authUser;
-  } catch (e) {
-    console.warn('loadState failed', e);
-  }
-}
-
-/**
- * 清除所有狀態
- */
+// ==============================
+// 清除所有狀態（登出 / token 失效用）
+// ==============================
 function clearState() {
   try {
-    localStorage.removeItem(LS_KEY);
-    window.mockOwners = [];
-    window.mockFixtures = [];
-    window.mockLogs = [];
-    window.mockReceipts = [];
-    window.mockReturns = [];
-    window.mockModels = [];
+    localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
+    localStorage.removeItem(STORAGE_KEYS.CURRENT_CUSTOMER);
+    localStorage.removeItem(STORAGE_KEYS.USER_INFO);
     window.authUser = null;
   } catch (e) {
-    console.warn('clearState failed', e);
+    console.warn('[storage] clearState failed', e);
   }
 }
 
-/**
- * CustomerState - 管理前端選擇的客戶
- */
+// ==============================
+// Customer Context 管理
+// ==============================
 const CustomerState = {
   getCurrentCustomer() {
     return localStorage.getItem(STORAGE_KEYS.CURRENT_CUSTOMER);
@@ -93,8 +51,10 @@ const CustomerState = {
   setCurrentCustomer(customerId) {
     if (!customerId) return;
     localStorage.setItem(STORAGE_KEYS.CURRENT_CUSTOMER, customerId);
+
+    // 通知整個 App（inventory / stats / query 都會用到）
     window.dispatchEvent(
-      new CustomEvent('customer-changed', {
+      new CustomEvent('customer:changed', {
         detail: { customerId }
       })
     );
@@ -102,27 +62,19 @@ const CustomerState = {
 
   clearCurrentCustomer() {
     localStorage.removeItem(STORAGE_KEYS.CURRENT_CUSTOMER);
-  },
-
-  getCachedCustomers() {
-    const cached = localStorage.getItem(STORAGE_KEYS.CUSTOMERS_LIST);
-    return cached ? JSON.parse(cached) : null;
-  },
-
-  cacheCustomers(customers) {
-    localStorage.setItem(STORAGE_KEYS.CUSTOMERS_LIST, JSON.stringify(customers));
   }
 };
 
-/**
- * Token 管理
- */
+// ==============================
+// Token 管理（OAuth2 / Bearer）
+// ==============================
 const TokenManager = {
   getToken() {
     return localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
   },
 
   setToken(token) {
+    if (!token) return;
     localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, token);
   },
 
@@ -131,27 +83,36 @@ const TokenManager = {
   }
 };
 
-// 安全的 saveState 包裝（容錯）
-const originalSaveState = saveState;
-window.saveState = function() {
+// ==============================
+// User Info（/auth/me 結果）
+// ==============================
+function setAuthUser(user) {
+  window.authUser = user;
   try {
-    return originalSaveState.apply(this, arguments);
+    localStorage.setItem(STORAGE_KEYS.USER_INFO, JSON.stringify(user));
   } catch (e) {
-    console.warn('saveState wrapper error', e);
+    console.warn('[storage] setAuthUser failed', e);
   }
-};
+}
 
-// 安全的 loadState 包裝（容錯）
-const originalLoadState = loadState;
-window.loadState = function() {
+function getAuthUser() {
+  if (window.authUser) return window.authUser;
   try {
-    return originalLoadState.apply(this, arguments);
-  } catch (e) {
-    console.warn('loadState wrapper error', e);
+    const raw = localStorage.getItem(STORAGE_KEYS.USER_INFO);
+    if (!raw) return null;
+    window.authUser = JSON.parse(raw);
+    return window.authUser;
+  } catch {
+    return null;
   }
-};
+}
 
-// 匯出函數
+// ==============================
+// Expose to window
+// ==============================
+window.STORAGE_KEYS = STORAGE_KEYS;
 window.clearState = clearState;
 window.CustomerState = CustomerState;
 window.TokenManager = TokenManager;
+window.setAuthUser = setAuthUser;
+window.getAuthUser = getAuthUser;

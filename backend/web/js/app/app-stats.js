@@ -9,6 +9,8 @@
  * - 不使用 summary / fixture-status
  * - 不在前端推估壽命
  */
+let lifespanPage = 1;
+const lifespanPageSize = 20;
 
 /* ============================================================
  * Entry：tab 切換時呼叫
@@ -23,18 +25,19 @@ window.loadStats = function () {
  * ============================================================ */
 async function loadFixtureStatsSummary() {
   try {
-    const rows = await apiGetFixtureLifespan();
+    const data = await apiGetFixtureLifespan();
+    const rows = data?.items || data || [];
+
+    const total = rows.length;
+    const normal  = rows.filter(r => r.lifespan_status === "normal").length;
+    const warning = rows.filter(r => r.lifespan_status === "warning").length;
+    const expired = rows.filter(r => r.lifespan_status === "expired").length;
+
 
     const elTotal  = document.getElementById("statTotalFixtures");
     const elActive = document.getElementById("statActiveFixtures");
     const elUnder  = document.getElementById("statUnderLifespan");
     const elNeed   = document.getElementById("statNeedReplacement");
-
-    const total = rows.length;
-
-    const normal  = rows.filter(r => r.lifespan_status === "normal").length;
-    const warning = rows.filter(r => r.lifespan_status === "warning").length;
-    const expired = rows.filter(r => r.lifespan_status === "expired").length;
 
     if (elTotal)  elTotal.innerText  = total;
     if (elActive) elActive.innerText = normal;
@@ -51,14 +54,46 @@ async function loadFixtureStatsSummary() {
  * 2) 不耐用治具清單（expired）
  * ============================================================ */
 async function loadUndurableFixtures() {
-  try {
-    const rows = await apiGetFixtureLifespan({ status: "expired" });
-    renderUndurableTable(rows || []);
+    try {
+    const data = await apiGetFixtureLifespan({
+      status: "expired",
+      skip: (lifespanPage - 1) * lifespanPageSize,
+      limit: lifespanPageSize,
+    });
+
+    // 相容：後端可能回 array 或 { items, total }
+    const rows = data?.items || data || [];
+    const total = data?.total ?? rows.length;
+    console.log("[undurable-pagination-check]", {
+      total,
+      rowsLength: rows.length,
+      page: lifespanPage,
+      pageSize: lifespanPageSize
+    });
+
+    renderUndurableTable(rows);
+
+
+
+    // 🔽 翻頁
+    renderPagination(
+      "undurablePagination",
+      total,
+      lifespanPage,
+      lifespanPageSize,
+      (p) => {
+        lifespanPage = p;
+        loadUndurableFixtures();
+      }
+    );
   } catch (err) {
     console.error("loadUndurableFixtures() failed:", err);
     renderUndurableTable([]);
   }
+
 }
+
+
 
 /* ============================================================
  * 3) 表格渲染

@@ -36,7 +36,7 @@ from backend.app.routers.receipts_import import router as receipts_import_router
 from backend.app.routers.returns_import import router as returns_import_router
 from backend.app.routers.fixtures_import import router as fixtures_import_router
 from backend.app.routers.machine_models_import import router as machine_models_import_router
-
+from backend.app.routers.inventory import router as inventory_router
 
 # 導入配置和資料庫
 from backend.config import settings
@@ -227,6 +227,8 @@ app.include_router(machine_models_router, prefix="/api/v2")    # 機種
 app.include_router(model_detail_router, prefix="/api/v2")    # 機種站點對應/治具需求
 
 app.include_router(machine_models_import_router, prefix="/api/v2")
+
+app.include_router(inventory_router, prefix="/api/v2")
 
 # ============================================================
 # 🧰 治具主資料（Fixture Master）

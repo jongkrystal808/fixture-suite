@@ -36,12 +36,32 @@ async def get_fixture_lifespan(
         default=None,
         description="normal | warning | expired | no_cycle"
     ),
-    limit: int = Query(default=200),
+    skip: int = Query(default=0),
+    limit: int = Query(default=20),
 
     customer_id: str = Depends(get_current_customer_id),
     user=Depends(get_current_user),
 ):
-    sql = """
+    base_sql = """
+        FROM view_fixture_lifespan_status
+        WHERE customer_id = %s
+    """
+    params = [customer_id]
+
+    if fixture_id:
+        base_sql += " AND fixture_id = %s"
+        params.append(fixture_id)
+
+    if status:
+        base_sql += " AND lifespan_status = %s"
+        params.append(status)
+
+    # 1️⃣ 先算 total（不加 LIMIT）
+    count_sql = "SELECT COUNT(*) AS cnt " + base_sql
+    total = db.execute_query(count_sql, tuple(params))[0]["cnt"]
+
+    # 2️⃣ 再取分頁資料
+    data_sql = """
         SELECT
             customer_id,
             fixture_id,
@@ -53,24 +73,18 @@ async def get_fixture_lifespan(
             usage_ratio,
             remaining_uses,
             lifespan_status
-        FROM view_fixture_lifespan_status
-        WHERE customer_id = %s
+    """ + base_sql + """
+        ORDER BY (usage_ratio IS NULL), usage_ratio DESC
+        LIMIT %s OFFSET %s
     """
-    params = [customer_id]
+    data_params = params + [limit, skip]
 
-    if fixture_id:
-        sql += " AND fixture_id = %s"
-        params.append(fixture_id)
+    rows = db.execute_query(data_sql, tuple(data_params))
 
-    if status:
-        sql += " AND lifespan_status = %s"
-        params.append(status)
-
-    sql += " ORDER BY (usage_ratio IS NULL), usage_ratio DESC"
-    sql += " LIMIT %s"
-    params.append(limit)
-
-    return db.execute_query(sql, tuple(params))
+    return {
+        "total": total,
+        "items": rows
+    }
 
 
 # ============================================================

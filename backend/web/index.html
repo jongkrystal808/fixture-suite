@@ -95,6 +95,7 @@
       <button data-tab="dashboard" class="tab tab-active">儀表板</button>
       <button data-tab="transactions"  class="tab">收料/退料登記</button>
       <button data-tab="query"    class="tab">治具/機種查詢</button>
+      <button data-tab="inventory" class="tab">治具庫存</button>
       <button data-tab="logs"     class="tab">使用/更換記錄</button>
       <button data-tab="stats"    class="tab">治具情況統計</button>
       <button data-tab="admin"    class="tab">後台管理</button>
@@ -892,43 +893,170 @@
           </div>
         </section>
 
-<!-- ============================================================ -->
-<!-- 🔵 新增 / 編輯治具需求 Modal（共用） -->
-<!-- ============================================================ -->
-<div id="requirementModal"
-     class="fixed inset-0 bg-black bg-opacity-40 hidden items-center justify-center z-50"
-     style="display:none;">
-  <div class="bg-white rounded-xl shadow-xl p-6 w-[400px] space-y-4">
+        <!-- ============================================================ -->
+        <!-- 🔵 新增 / 編輯治具需求 Modal（共用） -->
+        <!-- ============================================================ -->
+        <div id="requirementModal"
+             class="fixed inset-0 bg-black bg-opacity-40 hidden items-center justify-center z-50"
+             style="display:none;">
+          <div class="bg-white rounded-xl shadow-xl p-6 w-[400px] space-y-4">
 
-    <h3 id="reqModalTitle" class="text-lg font-semibold">新增治具需求</h3>
+            <h3 id="reqModalTitle" class="text-lg font-semibold">新增治具需求</h3>
 
-    <!-- 模式：create / edit -->
-    <input type="hidden" id="reqModalMode" />
-    <input type="hidden" id="reqModalReqId" />
+            <!-- 模式：create / edit -->
+            <input type="hidden" id="reqModalMode" />
+            <input type="hidden" id="reqModalReqId" />
 
-    <!-- create 才顯示 -->
-    <div id="reqModalFixtureBlock">
-      <label class="text-sm font-medium">治具編號</label>
-      <input id="reqModalFixtureId" class="input w-full" placeholder="例如：FIX-001" />
-    </div>
+            <!-- create 才顯示 -->
+            <div id="reqModalFixtureBlock">
+              <label class="text-sm font-medium">治具編號</label>
+              <input id="reqModalFixtureId" class="input w-full" placeholder="例如：FIX-001" />
+            </div>
 
-    <div>
-      <label class="text-sm font-medium">需求數量</label>
-      <input id="reqModalRequiredQty" type="number" class="input w-full" />
-    </div>
+            <div>
+              <label class="text-sm font-medium">需求數量</label>
+              <input id="reqModalRequiredQty" type="number" class="input w-full" />
+            </div>
 
-    <div>
-      <label class="text-sm font-medium">備註</label>
-      <textarea id="reqModalNote" class="input w-full" rows="2"></textarea>
-    </div>
+            <div>
+              <label class="text-sm font-medium">備註</label>
+              <textarea id="reqModalNote" class="input w-full" rows="2"></textarea>
+            </div>
 
-    <div class="flex justify-end gap-3">
-      <button class="btn btn-ghost" onclick="closeRequirementModal()">取消</button>
-      <button class="btn btn-primary" onclick="submitRequirementModal()">確認</button>
-    </div>
+            <div class="flex justify-end gap-3">
+              <button class="btn btn-ghost" onclick="closeRequirementModal()">取消</button>
+              <button class="btn btn-primary" onclick="submitRequirementModal()">確認</button>
+            </div>
 
-  </div>
-</div>
+          </div>
+        </div>
+
+
+
+
+      <!-- ====== 治具庫存 ====== -->
+        <section id="tab-inventory" class="tab-section hidden">
+          <h2 class="text-lg font-semibold mb-4">治具庫存</h2>
+
+          <!-- ===== 查詢框 ===== -->
+          <div class="mb-4 flex items-center gap-2">
+            <input
+              id="inventorySearchInput"
+              type="text"
+              class="input input-bordered w-full max-w-md"
+              placeholder="搜尋：治具-序號 或 治具-datecode（例：C-00002-SM003）"
+            />
+            <button
+              class="btn btn-primary"
+              onclick="searchInventory()"
+            >
+              查詢
+            </button>
+          </div>
+
+          <!-- ===== L1：庫存卡片區 ===== -->
+          <div
+            id="inventoryCardGrid"
+            class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+          >
+            <!-- cards rendered by JS -->
+          </div>
+        </section>
+
+        <!-- ===== Inventory Detail Drawer ===== -->
+        <div
+          id="inventoryDetailDrawer"
+          class="fixed inset-0 z-50 hidden"
+        >
+          <!-- overlay -->
+          <div
+            class="absolute inset-0 bg-black/30"
+            onclick="closeInventoryDrawer()"
+          ></div>
+
+          <!-- panel -->
+          <div
+            class="absolute right-0 top-0 h-full w-[70vw] max-w-[1200px] bg-white shadow-xl flex flex-col"
+          >
+            <!-- Header -->
+            <div class="flex items-start justify-between p-4 border-b">
+              <div>
+                <h3 id="inventoryDrawerTitle" class="text-lg font-semibold"></h3>
+                <p id="inventoryDrawerSubtitle" class="text-sm text-gray-500">
+                  治具庫存明細
+                </p>
+              </div>
+              <button class="btn btn-sm btn-ghost" onclick="closeInventoryDrawer()">
+                ✕
+              </button>
+            </div>
+
+            <!-- Body -->
+            <div class="flex-1 overflow-y-auto p-4 space-y-6">
+
+              <!-- ===== 序號 ===== -->
+              <section class="border rounded p-3">
+                <h4 class="font-medium mb-2">序號</h4>
+                <div class="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <div class="text-gray-500 mb-1">使用中</div>
+                    <div id="serialInUseList" class="text-blue-600 break-all">-</div>
+                  </div>
+                  <div>
+                    <div class="text-gray-500 mb-1">未使用</div>
+                    <div id="serialIdleList" class="break-all">-</div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- ===== Datecode ===== -->
+              <section class="border rounded p-3">
+                <h4 class="font-medium mb-2">Datecode</h4>
+                <div class="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <div class="text-gray-500 mb-1">使用中</div>
+                    <div id="datecodeInUse" class="break-all">-</div>
+                  </div>
+                  <div>
+                    <div class="text-gray-500 mb-1">未使用</div>
+                    <div id="datecodeIdle" class="break-all">-</div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- ===== 歷史 ===== -->
+              <section>
+                <h4 class="font-medium mb-3">收料 / 退料紀錄</h4>
+
+                <div class="overflow-x-auto">
+                  <table class="table table-sm inventory-history-table">
+                    <thead>
+                      <tr>
+                        <th>日期</th>
+                        <th>單號</th>
+                        <th>類型</th>
+                        <th>來源</th>
+                        <th>數量</th>
+                        <th>操作人員</th>
+                        <th>備註</th>
+                      </tr>
+                    </thead>
+                    <tbody id="inventoryHistoryBody">
+                      <tr>
+                        <td colspan="7" class="text-center text-gray-400">
+                          尚無資料
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+            </div>
+          </div>
+        </div>
+
+
 
 
 
@@ -977,6 +1105,7 @@
             </thead>
             <tbody id="undurableTable"></tbody>
           </table>
+          <div id="undurablePagination" class="flex justify-center mt-4"></div>
         </div>
       </div>
     </section>
@@ -989,7 +1118,6 @@
       <div class="flex gap-2">
         <button class="subtab subtab-active" data-logtab="usage">使用記錄</button>
         <button class="subtab" data-logtab="replacement">更換記錄</button>
-          <button class="subtab" data-logtab="logSummary">總記錄</button>
       </div>
 
       <!-- ========================================================= -->
@@ -1353,7 +1481,7 @@
               </thead>
               <tbody id="replaceTable"></tbody>
             </table>
-              <div id="replacePagination" class="flex mt-4 justify-center"></div>
+              <div id="replacementPagination" class="flex mt-4 justify-center"></div>
           </div>
 
         </div>
@@ -2300,87 +2428,14 @@
             <script src="/js/api/api-stats.js"></script>
             <script src="/js/app/app-stats.js"></script>
 
+            <script src="/js/api/api-inventory.js"></script>
+            <script src="/js/app/app-inventory.js"></script>
+
             <!-- ================================ -->
             <!-- 🏠 主控制（頁面切換/初始化）         -->
             <!-- ================================ -->
 
             <script src="/js/app/app-main.js"></script>
-
-        <script>
-        /**
-         * v4.x App Bootstrap Gate
-         * - 等 user ready
-         * - 再等 customer ready
-         * - 才正式啟動 app
-         */
-        document.addEventListener("DOMContentLoaded", () => {
-          if (typeof onCustomerReady === "function") {
-            onCustomerReady(() => {
-              console.log("[BOOT] customer ready, app start");
-              if (typeof appStart === "function") {
-                appStart();
-              }
-            });
-          }
-        });
-        </script>
-
-
-      <script>
-    /* ============================================================
-       🔵 使用記錄 / 更換記錄 TAB 切換控制 (v4.0)
-       ============================================================ */
-    document.addEventListener("DOMContentLoaded", () => {
-
-      const usageTab = document.getElementById("logtab-usage");
-      const replaceTab = document.getElementById("logtab-replacement");
-
-      const tabButtons = document.querySelectorAll(".subtab");
-
-      function switchLogTab(target) {
-        // ---- 1) subtab 樣式切換 ----
-        tabButtons.forEach(btn => {
-          if (btn.dataset.logtab === target) {
-            btn.classList.add("subtab-active");
-          } else {
-            btn.classList.remove("subtab-active");
-          }
-        });
-
-        // ---- 2) 區域顯示切換 ----
-        usageTab.classList.add("hidden");
-        replaceTab.classList.add("hidden");
-
-        if (target === "usage") {
-          usageTab.classList.remove("hidden");
-        } else if (target === "replacement") {
-          replaceTab.classList.remove("hidden");
-        }
-      }
-
-      // ---- 3) 事件註冊 ----
-      tabButtons.forEach(btn => {
-        btn.addEventListener("click", () => {
-          switchLogTab(btn.dataset.logtab);
-        });
-      });
-
-      // ---- 4) 預設顯示使用記錄 ----
-      switchLogTab("usage");
-    });
-    </script>
-    <script>
-            document.addEventListener("click", e => {
-          const box = document.getElementById("frFixtureSuggest");
-          const input = document.getElementById("frFixtureInput");
-          if (!box || !input) return;
-
-          if (!box.contains(e.target) && e.target !== input) {
-            box.classList.add("hidden");
-          }
-        });
-
-    </script>
 
   </body>
 </html>

@@ -321,3 +321,32 @@ table td {
   font-weight: 700;
 }
 
+/* ===============================
+ * Inventory Detail Modal 專用
+ * =============================== */
+dialog.inventory-modal {
+  width: 80vw;          /* 🔵 接近你畫的藍框 */
+  max-width: 1200px;    /* 防止超寬螢幕炸版 */
+  height: 90vh;         /* 幾乎滿高 */
+  max-height: 90vh;
+  padding: 0;
+}
+
+/* 內層內容控制 */
+dialog.inventory-modal .modal {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header 固定 */
+dialog.inventory-modal .modal-header {
+  flex-shrink: 0;
+}
+
+/* Body 可捲動 */
+dialog.inventory-modal .modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 0.5rem; /* 避免 scrollbar 壓字 */
+}

@@ -143,11 +143,13 @@ function filterDashboard() {
 
 async function loadDashboardInventory() {
   try {
-    const rows = await apiGetFixtureLifespan({ limit: 200 });
-    renderDashboardTable(rows || []);
+    const data = await apiGetFixtureLifespan({ limit: 200 });
+
+    // ⭐ 關鍵修正：相容新舊回傳格式
+    const rows = data?.items || data || [];
+
+    renderDashboardTable(rows);
   } catch (err) {
     console.error("[dashboard] inventory load failed", err);
   }
 }
-
-

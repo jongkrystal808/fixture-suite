@@ -31,20 +31,6 @@ function apiGetMaxStations(modelId) {
 
 
 /* ============================================================
- * 取得單一治具使用 / 更換統計
- * GET /stats/fixture-usage
- * ============================================================ */
-function apiGetFixtureUsageStats(fixtureId) {
-  if (!fixtureId) {
-    throw new Error("apiGetFixtureUsageStats: fixtureId is required");
-  }
-
-  return api("/stats/fixture-usage", {
-    params: { fixture_id: fixtureId },
-  });
-}
-
-/* ============================================================
  * 取得機種治具需求總表
  * GET /stats/model-requirements
  * ============================================================ */
@@ -74,7 +60,6 @@ window.apiGetFixtureLifespan = apiGetFixtureLifespan;
  * Export to window
  * ============================================================ */
 window.apiGetMaxStations = apiGetMaxStations;
-window.apiGetFixtureUsageStats = apiGetFixtureUsageStats;
 window.apiGetModelRequirements = apiGetModelRequirements;
 
 console.log("✅ api-stats.js v4.x FINAL loaded");

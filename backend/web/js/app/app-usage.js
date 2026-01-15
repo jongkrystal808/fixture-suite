@@ -9,6 +9,10 @@
  * 5) renderUsageTable：時間格式化、serial 欄位相容（serial_number / serials）
  * -----------------------------------------------------------
  */
+
+let usagePage = 1;
+const usagePageSize = 20;
+
 /* ============================================================
  * DOM 綁定
  * ============================================================ */
@@ -315,47 +319,58 @@ window.submitUsageLog = submitUsageLog;
 /* ============================================================
  * 查詢使用紀錄
  * ============================================================ */
-
-async function loadUsageLogs() {
+async function loadUsageLogs(page = 1) {
   if (!window.currentCustomerId) return;
 
-  const fixture = document.getElementById("usageSearchFixture")?.value.trim();
-  const serial  = document.getElementById("usageSearchSerial")?.value.trim();
-  const station = document.getElementById("usageSearchStation")?.value.trim();
+  usagePage = page;
+
+  const fixture  = document.getElementById("usageSearchFixture")?.value.trim();
+  const serial   = document.getElementById("usageSearchSerial")?.value.trim();
+  const station  = document.getElementById("usageSearchStation")?.value.trim();
   const operator = document.getElementById("usageSearchOperator")?.value.trim();
-  const model = document.getElementById("usageSearchModel")?.value.trim();
+  const model    = document.getElementById("usageSearchModel")?.value.trim();
 
-  const params = {};
-  if (fixture) params.fixture_id = fixture;
-  if (serial)  params.serial_number = serial;
-  if (station) params.station_id = station;
+  const params = {
+    skip: (usagePage - 1) * usagePageSize,
+    limit: usagePageSize,
+  };
+
+  if (fixture)  params.fixture_id = fixture;
+  if (serial)   params.serial_number = serial;
+  if (station)  params.station_id = station;
   if (operator) params.operator = operator;
-  if (model)   params.model_id = model;
+  if (model)    params.model_id = model;
 
-  const dateFrom = document
-  .getElementById("usageSearchDateFrom")
-  ?.value;
+  const dateFrom = document.getElementById("usageSearchDateFrom")?.value;
+  const dateTo   = document.getElementById("usageSearchDateTo")?.value;
 
-const dateTo = document
-  .getElementById("usageSearchDateTo")
-  ?.value;
+  if (dateFrom) {
+    params.date_from = new Date(dateFrom).toISOString();
+  }
 
-if (dateFrom) {
-  // 轉成 ISO，後端會用 used_at >=
-  params.date_from = new Date(dateFrom).toISOString();
-}
-
-if (dateTo) {
-  // 轉成當天 23:59:59，避免漏掉整天
-  const end = new Date(dateTo);
-  end.setHours(23, 59, 59, 999);
-  params.date_to = end.toISOString();
-}
-
+  if (dateTo) {
+    const end = new Date(dateTo);
+    end.setHours(23, 59, 59, 999);
+    params.date_to = end.toISOString();
+  }
 
   try {
     const rows = await api("/usage", { params });
-    renderUsageTable(Array.isArray(rows) ? rows : []);
+    const list = Array.isArray(rows) ? rows : [];
+
+    renderUsageTable(list);
+
+    // ⭐ 關鍵：畫分頁
+    renderPagination(
+      "usagePagination",
+      list.length < usagePageSize
+        ? (usagePage - 1) * usagePageSize + list.length
+        : usagePage * usagePageSize + 1,
+      usagePage,
+      usagePageSize,
+      p => loadUsageLogs(p)
+    );
+
   } catch (err) {
     console.error(err);
     toast("查詢使用紀錄失敗", "error");

@@ -10,6 +10,10 @@
  * - ✅ 一律透過 api-config.js
  */
 
+let replacementPage = 1;
+const replacementPageSize = 20;
+
+
 /* ============================================================
  * 查詢使用紀錄列表
  * GET /usage

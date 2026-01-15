@@ -1,18 +1,10 @@
 /**
- * 後台管理入口控制（Lazy-load + Cache 最終版 / v4.x FIX）
+ * 後台管理入口控制（v4.x 簡化版）
  * /js/app/app-admin.js
  */
 
-// Lazy-load 狀態（只記「頁面是否初始化過 UI」）
-window.__adminLoaded = window.__adminLoaded || {};
-
-// Admin data cache（依 customer 分開）
-// key: admin:{page}:{customerId}
-window.__adminCache = window.__adminCache || {};
-
-
 /* ============================================================
- * 顯示 Admin 子頁（含 lazy-load + cache）
+ * 顯示 Admin 子頁
  * ============================================================ */
 function showAdminPage(page) {
   // 🔒 admin only
@@ -60,46 +52,52 @@ function _showAdminPageInternal(page) {
     activeBtn.classList.add("btn-primary");
   }
 
-  // ----------------------------------------------------------
-  // 5️⃣ Lazy-load + Cache（v4.x customer-aware）
-  // ----------------------------------------------------------
+  // 5️⃣ 載入資料
   const customerId = window.currentCustomerId;
   if (!customerId) {
     console.warn("[admin] customer not ready, skip load:", page);
     return;
   }
 
-  const cacheKey = `admin:${page}:${customerId}`;
-
-  // 👉 cache 命中：不打 API
-  if (window.__adminCache[cacheKey]) {
-    console.log("[admin] cache hit:", cacheKey);
-    window.__adminLoaded[page] = true;
-    return;
-  }
-
-  console.log("[admin] load & cache:", cacheKey);
-
+  // 根據不同頁面載入對應資料
   switch (page) {
-    case "owners":
-      window.loadOwners?.();
-      break;
-
-    case "users":
-      window.loadUsers?.();
+    case "stations":
+      if (typeof window.loadStations === "function") {
+        window.loadStations();
+      }
       break;
 
     case "fixtures":
-      window.loadAdminFixtures?.();
+      if (typeof window.loadAdminFixtures === "function") {
+        window.loadAdminFixtures();
+      }
+      break;
+
+    case "models":
+      if (typeof window.loadModels === "function") {
+        window.loadModels();
+      }
+      break;
+
+    case "owners":
+      if (typeof window.loadOwners === "function") {
+        window.loadOwners();
+      }
+      break;
+
+    case "users":
+      if (typeof window.loadUsers === "function") {
+        window.loadUsers();
+      }
+      break;
+
+    case "systems":
+      // 系統設定頁面可能不需要載入資料
       break;
 
     default:
       console.warn("[admin] no loader defined for:", page);
-      return;
   }
-
-  window.__adminLoaded[page] = true;
-  window.__adminCache[cacheKey] = true;
 }
 
 

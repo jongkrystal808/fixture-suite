@@ -24,9 +24,12 @@ async function apiLogin(username, password) {
 
 async function apiGetMe() {
   return api("/auth/me", {
-    skipCustomerId: true   // /auth/me 不需要 customer_id
+    skipCustomerId: true,
+    skipAuth: false   // 🔒 強制帶 Authorization
   });
 }
+
+
 
 /* ============================================================
  * 導出

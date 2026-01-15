@@ -211,25 +211,47 @@ async function openFixtureDetail(fixtureId) {
     // =====================================================
     // 1️⃣ 治具壽命 / 狀態（核心）
     // =====================================================
-    const lifespanRows = await apiGetFixtureLifespan({
+    const lifespanResp = await apiGetFixtureLifespan({
       fixture_id: fixtureId,
       limit: 1,
     });
 
-    const f = lifespanRows?.[0];
+    // ⭐ 關鍵：先 normalize
+    const lifespanRows = lifespanResp?.items || lifespanResp || [];
+
+    const f = lifespanRows[0];
     if (!f) {
       throw new Error("No fixture lifespan data");
     }
 
     // =====================================================
-    // 2️⃣ 使用 / 更換紀錄（輔助）
+    // 2️⃣ 使用 / 更換紀錄（event-based）
     // =====================================================
-    let usageData = null;
+    let usageLogs = [];
+    let replacementLogs = [];
+
     try {
-      usageData = await apiGetFixtureUsageStats(fixtureId);
+      const usageResp = await apiListUsageLogs({
+        fixtureId: fixtureId,   // ⭐ 一定要是 fixtureId
+        page: 1,
+        pageSize: 5,
+      });
+      usageLogs = Array.isArray(usageResp) ? usageResp : [];
     } catch (e) {
-      usageData = null;
+      usageLogs = [];
     }
+
+    try {
+      const replResp = await apiListReplacementLogs({
+        fixture_id: fixtureId,
+        skip: 0,
+        limit: 5,
+      });
+      replacementLogs = Array.isArray(replResp) ? replResp : [];
+    } catch (e) {
+      replacementLogs = [];
+    }
+
 
     // =====================================================
     // 3️⃣ Render
@@ -251,13 +273,14 @@ async function openFixtureDetail(fixtureId) {
 
         <div>
           <h3 class="text-lg font-semibold">使用紀錄</h3>
-          ${usageData ? renderUsageLogs(usageData.recent_usage) : "<div class='text-gray-400 text-sm'>無資料</div>"}
+          ${renderUsageLogs(usageLogs, f)}
         </div>
-
+        
         <div>
           <h3 class="text-lg font-semibold">更換紀錄</h3>
-          ${usageData ? renderReplacementLogs(usageData.replacement_logs ?? []) : "<div class='text-gray-400 text-sm'>無資料</div>"}
+          ${renderReplacementLogs(replacementLogs)}
         </div>
+
 
       </section>
     `;
@@ -388,24 +411,42 @@ window.switchQueryType = switchQueryType;
 /* ============================================================
  * Drawer：使用紀錄 / 更換紀錄（供 Fixture Drawer 使用）
  * ============================================================ */
-function renderUsageLogs(logs) {
-  if (!logs || !Array.isArray(logs) || logs.length === 0) {
+function renderUsageLogs(logs, fixtureInfo) {
+  if (!logs || !logs.length) {
     return "<p class='text-gray-500'>無使用紀錄</p>";
   }
 
+  const cycle = fixtureInfo?.replacement_cycle || 0;
+
   return `
     <div class="space-y-3">
-      ${logs.map(log => `
-        <div class="border rounded-xl p-3 text-sm bg-gray-50">
-          <div><b>日期：</b>${log.used_at ?? "-"}</div>
-          <div><b>站點：</b>${log.station_id ?? "-"}</div>
-          <div><b>操作人員：</b>${log.operator ?? "-"}</div>
-          ${log.note ? `<div><b>備註：</b>${log.note}</div>` : ""}
-        </div>
-      `).join("")}
+      ${logs.map(log => {
+        const usedDate = log.used_at
+          ? new Date(log.used_at).toLocaleDateString("zh-TW")
+          : "-";
+
+        const useCount = log.use_count ?? 0;
+
+        // 壽命消耗比例（單筆）
+        const ratio =
+          cycle > 0
+            ? `${Math.round((useCount / cycle) * 100)}%`
+            : "-";
+
+        return `
+          <div class="border rounded-xl p-3 text-sm bg-gray-50 space-y-1">
+            <div><b>日期：</b>${usedDate}</div>
+            <div><b>站點：</b>${log.station_id ?? "-"}</div>
+            <div><b>操作人員：</b>${log.operator ?? "-"}</div>
+            <div><b>使用次數：</b>${useCount}</div>
+            <div><b>壽命消耗：</b>${ratio}</div>
+          </div>
+        `;
+      }).join("")}
     </div>
   `;
 }
+
 window.renderUsageLogs = renderUsageLogs;
 
 function renderReplacementLogs(logs) {

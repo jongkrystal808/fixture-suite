@@ -57,11 +57,16 @@ async function doLogin() {
   try {
     const res = await apiLogin(username, password);
     if (res?.access_token) {
-      localStorage.setItem("auth_token", res.access_token);
+      localStorage.setItem("access_token", res.access_token);
     }
 
-    await loadCurrentUser();
+    // 先關 modal，避免 UI race
     closeLogin();
+
+    // 再載入 user
+    await loadCurrentUser();
+
+
   } catch (err) {
     const status = err.status;
     const detail = err.data?.detail || "";
@@ -78,7 +83,7 @@ async function doLogin() {
  * Logout
  * ============================================================ */
 function doLogout() {
-  localStorage.removeItem("auth_token");
+  localStorage.removeItem("access_token");
   localStorage.removeItem("current_customer_id");
 
   window.currentUser = null;
@@ -92,7 +97,7 @@ function doLogout() {
  * Load current user (CORE)
  * ============================================================ */
 async function loadCurrentUser() {
-  const token = localStorage.getItem("auth_token");
+  const token = localStorage.getItem("access_token");
   const display = document.getElementById("currentUserDisplay");
   const btnLogin = document.getElementById("btnLogin");
   const btnLogout = document.getElementById("btnLogout");
@@ -123,7 +128,7 @@ async function loadCurrentUser() {
 
   } catch (err) {
     console.warn("[auth] token expired");
-    localStorage.removeItem("auth_token");
+    localStorage.removeItem("access_token");
     window.currentUser = null;
     window.__userReady = false;
     showLoginModal();

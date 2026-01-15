@@ -209,7 +209,7 @@ async def view_transaction_serials(
 
 
 # ============================================================
-# ★ 單一序號完整履歷
+# ★ 單一序號完整履歷（v4.x 標準）
 # ============================================================
 @router.get(
     "/fixtures/{fixture_id}/serials/{serial_number}/history",
@@ -224,12 +224,11 @@ async def get_serial_history(
     serial = serial_number.strip()
 
     # --------------------------------------------------
-    # 1️⃣ 序號基本資訊（來源改由 receipt 交易帶）
+    # 1️⃣ 序號基本狀態（summary 為主，event 為輔）
     # --------------------------------------------------
-    serial_info = db.execute_query(
+    serial_info = db.execute_one(
         """
         SELECT
-            fs.id,
             fs.serial_number,
             fs.fixture_id,
             fs.status,
@@ -238,13 +237,11 @@ async def get_serial_history(
             fs.created_at,
             fs.updated_at,
 
-            -- ⭐ 來源一律來自收料交易
-            mt.source_type
-
+            -- 來源交易型態（receipt / return / adjustment）
+            mt.transaction_type AS source_type
         FROM fixture_serials fs
         LEFT JOIN material_transactions mt
           ON mt.id = fs.receipt_transaction_id
-
         WHERE fs.customer_id   = %s
           AND fs.fixture_id    = %s
           AND fs.serial_number = %s
@@ -253,10 +250,10 @@ async def get_serial_history(
     )
 
     if not serial_info:
-        raise HTTPException(404, "Serial not found")
+        raise HTTPException(status_code=404, detail="Serial not found")
 
     # --------------------------------------------------
-    # 2️⃣ 收 / 退料交易紀錄
+    # 2️⃣ 收 / 退料交易紀錄（event）
     # --------------------------------------------------
     transactions = db.execute_query(
         """
@@ -264,22 +261,21 @@ async def get_serial_history(
             t.transaction_date,
             t.transaction_type,
             t.order_no,
-            t.fixture_id,
             t.operator,
             t.note
         FROM material_transactions t
         JOIN material_transaction_items i
           ON t.id = i.transaction_id
-        WHERE i.serial_number = %s
+        WHERE t.customer_id   = %s
           AND i.fixture_id    = %s
-          AND t.customer_id  = %s
+          AND i.serial_number = %s
         ORDER BY t.transaction_date DESC, t.id DESC
         """,
-        (serial, fixture_id, customer_id)
+        (customer_id, fixture_id, serial)
     )
 
     # --------------------------------------------------
-    # 3️⃣ 使用紀錄
+    # 3️⃣ 使用紀錄（usage_logs，serial-level only）
     # --------------------------------------------------
     usages = db.execute_query(
         """
@@ -291,41 +287,40 @@ async def get_serial_history(
             operator,
             note
         FROM usage_logs
-        WHERE serial_number = %s
+        WHERE customer_id   = %s
           AND fixture_id    = %s
-          AND customer_id   = %s
+          AND record_level  = 'serial'
+          AND serial_number = %s
         ORDER BY used_at DESC
         """,
-        (serial, fixture_id, customer_id)
+        (customer_id, fixture_id, serial)
     )
 
     # --------------------------------------------------
-    # 4️⃣ 更換紀錄
+    # 4️⃣ 更換紀錄（replacement_logs，純事件）
     # --------------------------------------------------
     replacements = db.execute_query(
         """
         SELECT
-            created_at,
-            usage_before,
-            usage_after,
-            auto_predicted_life,
-            auto_predicted_replace_at
+            occurred_at,
+            operator,
+            note
         FROM replacement_logs
-        WHERE serial_number = %s
+        WHERE customer_id   = %s
           AND fixture_id    = %s
-          AND customer_id   = %s
-        ORDER BY created_at DESC
+          AND record_level  = 'serial'
+          AND serial_number = %s
+        ORDER BY occurred_at DESC
         """,
-        (serial, fixture_id, customer_id)
+        (customer_id, fixture_id, serial)
     )
 
     return {
-        "serial": serial_info[0],
+        "serial": serial_info,
         "transactions": transactions,
         "usages": usages,
         "replacements": replacements
     }
-
 
 
 

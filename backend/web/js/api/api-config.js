@@ -5,9 +5,6 @@
  * ✔ 自動處理 query / body
  * ✔ 統一錯誤結構
  *
- * ❌ 不處理 customer_id
- * ❌ 不注入 X-Customer-Id
- * ❌ 不允許前端影響 customer scope
  */
 
 window.API_BASE = window.API_BASE || "";
@@ -21,7 +18,7 @@ function apiURL(path) {
 }
 
 function getToken() {
-  return localStorage.getItem("auth_token");
+  return localStorage.getItem("access_token");
 }
 
 /* ============================================================
@@ -29,7 +26,12 @@ function getToken() {
  * ============================================================ */
 function api(path, options = {}) {
   const token = getToken();
-
+    console.log('[api debug]', {
+    path,
+    token,
+    skipAuth: options.skipAuth,
+    willAttachAuth: !options.skipAuth && !!token
+  });
   // ----------------------------------------
   // 1️⃣ URL + Query Params
   // ----------------------------------------
@@ -94,8 +96,8 @@ function api(path, options = {}) {
   const fetchOptions = {
     ...options,
     method,
-    headers,
     body,
+    headers,
   };
 
   // ----------------------------------------

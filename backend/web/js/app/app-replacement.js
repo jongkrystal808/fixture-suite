@@ -147,22 +147,33 @@ window.submitReplacementLog = submitReplacementLog;
 
 
 
-async function loadReplacementLogs() {
+async function loadReplacementLogs(page = 1) {
   if (!window.currentCustomerId) return;
 
-  const fixture = document.getElementById("replaceSearchFixture")?.value.trim();
-  const serial  = document.getElementById("replaceSearchSerial")?.value.trim();
-  const operator= document.getElementById("replaceSearchExecutor")?.value.trim();
+  repPage = page;
 
-  const params = {};
+  const fixture  = document.getElementById("replaceSearchFixture")?.value.trim();
+  const serial   = document.getElementById("replaceSearchSerial")?.value.trim();
+  const executor = document.getElementById("replaceSearchExecutor")?.value.trim();
+  const reason   = document.getElementById("replaceSearchReason")?.value.trim();
+
+  const params = {
+    skip: (repPage - 1) * repPageSize,
+    limit: repPageSize,
+  };
+
   if (fixture)  params.fixture_id = fixture;
   if (serial)   params.serial_number = serial;
-  if (operator) params.operator = operator;
+  if (executor) params.executor = executor;
+  if (reason)   params.reason = reason;
 
   const dateFrom = document.getElementById("replaceSearchFrom")?.value;
   const dateTo   = document.getElementById("replaceSearchTo")?.value;
 
-  if (dateFrom) params.date_from = new Date(dateFrom).toISOString();
+  if (dateFrom) {
+    params.date_from = new Date(dateFrom).toISOString();
+  }
+
   if (dateTo) {
     const end = new Date(dateTo);
     end.setHours(23, 59, 59, 999);
@@ -171,12 +182,29 @@ async function loadReplacementLogs() {
 
   try {
     const rows = await api("/replacement", { params });
-    renderReplacementTable(Array.isArray(rows) ? rows : []);
+    const list = Array.isArray(rows) ? rows : [];
+
+    renderReplacementTable(list);
+
+    // ⭐ 分頁
+    renderPagination(
+      "replacementPagination",
+      list.length < repPageSize
+          ? (repPage - 1) * repPageSize + list.length
+          : repPage * repPageSize + 1,
+        repPage,
+        repPageSize,
+p => loadReplacementLogs(p)
+    );
+
   } catch (err) {
     console.error(err);
     toast("查詢更換記錄失敗", "error");
   }
 }
+
+window.loadReplacementLogs = loadReplacementLogs;
+
 
 function renderReplacementTable(rows) {
   if (!repTableBody) return;
