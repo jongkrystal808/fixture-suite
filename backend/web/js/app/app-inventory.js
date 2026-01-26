@@ -294,47 +294,67 @@ function closeInventoryDrawer() {
 }
 
 
-async function searchInventory() {
-  console.log("🔥 NEW searchInventory LOADED");
-
-  const input = qs("inventorySearchInput");
-  const val = input.value.trim();
-
-  // 必須至少有兩個 "-"（C-00002-SM003）
-  const parts = val.split("-");
-  if (parts.length < 3) {
-    alert(
-      "請輸入完整格式：\n" +
-      "治具編號-序號 或 治具編號-datecode\n\n" +
-      "例如：C-00002-SM003"
+function highlightSearchResult(result) {
+  // -----------------------------
+  // serial 命中
+  // -----------------------------
+  if (result.type === "serial") {
+    qs("serialInUseList").insertAdjacentHTML(
+      "afterbegin",
+      `<div class="text-xs text-red-600 mb-1">
+        🔍 命中序號：${result.data.serial_number}
+      </div>`
     );
-    return;
   }
 
-  // 只切最後一段
-  const idx = val.lastIndexOf("-");
-  const fixtureId = val.slice(0, idx);
-  const keyword = val.slice(idx + 1);
+  // -----------------------------
+  // datecode 命中
+  // -----------------------------
+  if (result.type === "datecode") {
+    qs("datecodeInUse").insertAdjacentHTML(
+      "afterbegin",
+      `<div class="text-xs text-red-600 mb-1">
+        🔍 命中 Datecode：${result.data.datecode}
+      </div>`
+    );
+  }
 
-  try {
-    const res = await apiInventorySearch({
-      fixture_id: fixtureId,
-      keyword
-    });
+  // -----------------------------
+  // fixture-only 命中
+  // -----------------------------
+  if (result.type === "fixture") {
+    qs("inventoryDrawerTitle").insertAdjacentHTML(
+      "beforeend",
+      `<span class="ml-2 text-xs text-blue-600">
+        （整體治具搜尋）
+      </span>`
+    );
+  }
 
-    if (!res.found) {
-      alert(res.message || "查無資料");
-      return;
-    }
-
-    await openInventoryDetail(fixtureId);
-    highlightSearchResult(res);
-
-  } catch (err) {
-    console.error("[inventory] search failed", err);
-    alert("搜尋失敗，請稍後再試");
+  // -----------------------------
+  // 歷史紀錄（覆蓋）
+  // -----------------------------
+  if (Array.isArray(result.history)) {
+    qs("inventoryHistoryBody").innerHTML = result.history.length
+      ? result.history.map(row => `
+          <tr class="bg-yellow-50">
+            <td>${row.date || "-"}</td>
+            <td>${row.order_no || "-"}</td>
+            <td>${row.record_type || "-"}</td>
+            <td>${row.source_type || "-"}</td>
+            <td>${row.quantity || "-"}</td>
+            <td>${row.operator || "-"}</td>
+            <td>${row.note || "-"}</td>
+          </tr>
+        `).join("")
+      : `<tr>
+           <td colspan="7" class="text-center text-gray-400">
+             無相關歷史紀錄
+           </td>
+         </tr>`;
   }
 }
+
 
 
 function highlightSearchResult(result) {

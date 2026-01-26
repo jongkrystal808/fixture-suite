@@ -16,10 +16,6 @@ window.__activeOverlayCloser = null;
       sectionId: "tab-query",
       title: "治具 / 機種查詢"
     },
-    inventory: {
-      sectionId: "tab-inventory",
-      title: "治具庫存"
-    },
     logs: {
       sectionId: "tab-logs",
       title: "使用 / 更換記錄"
@@ -110,17 +106,6 @@ window.__activeOverlayCloser = null;
 
         case "transactions":
         case "query":
-        case "inventory":
-            if (!loadedFlags.inventory) {
-              loadedFlags.inventory = true;
-
-              if (typeof window.initInventoryPage === "function") {
-                window.initInventoryPage();
-              } else {
-                console.warn("[inventory] initInventoryPage not found");
-              }
-            }
-            break;
         case "logs":
         case "stats":
         case "admin":
@@ -462,32 +447,36 @@ window.__activeOverlayCloser = null;
     });
 
     // (5) Query 子分頁
-    window.switchQueryType = function() {
+   window.switchQueryType = function(type) {
       const select = document.getElementById("queryType");
       if (!select) return;
 
-      const type = select.value;
+      if (!type) type = select.value;
+      else select.value = type;
 
       const hashMap = {
         "fixture": "query/fixtures",
         "model": "query/model"
       };
-
       if (hashMap[type]) {
         setHash(hashMap[type]);
       }
 
-      const fixtureTab = document.getElementById("qtab-fixtures");
-      const modelTab = document.getElementById("qtab-models");
+      const fixtureTab = document.getElementById("fixtureQueryArea");
+      const modelTab = document.getElementById("modelQueryArea");
 
       if (fixtureTab) fixtureTab.classList.toggle("hidden", type !== "fixture");
       if (modelTab) modelTab.classList.toggle("hidden", type !== "model");
+
+      // 資料載入（只在切到時）
+      if (type === "fixture" && typeof window.loadFixturesQuery === "function") {
+        window.loadFixturesQuery();
+      }
+      if (type === "model" && typeof window.loadModelsQuery === "function") {
+        window.loadModelsQuery();
+      }
     };
 
-    const queryTypeSelect = document.getElementById("queryType");
-    if (queryTypeSelect) {
-      queryTypeSelect.addEventListener("change", window.switchQueryType);
-    }
 
     // (6) Logs 子分頁
     window.switchLogTab = function(target) {

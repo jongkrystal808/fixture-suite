@@ -510,7 +510,7 @@ async function fxExportFixturesXlsx() {
     const res = await fetch(apiURL("/fixtures/export"), {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
+        Authorization: `Bearer ${localStorage.getItem("access_token")}`,
         "X-Customer-Id": window.currentCustomerId,
       },
     });
@@ -553,7 +553,7 @@ async function fxDownloadFixturesTemplate() {
     const res = await fetch(apiURL("/fixtures/template"), {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
+        Authorization: `Bearer ${localStorage.getItem("access_token")}`,
         "X-Customer-Id": window.currentCustomerId,
       },
     });

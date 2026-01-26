@@ -4,7 +4,7 @@
  */
 
 async function exportCsv(urlPath, filename) {
-  const token = localStorage.getItem("auth_token");
+  const token = localStorage.getItem("access_token");
   const customerId = window.currentCustomerId || localStorage.getItem("current_customer_id");
   const headers = token ? { Authorization: `Bearer ${token}` } : {};
 

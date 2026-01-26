@@ -350,3 +350,14 @@ dialog.inventory-modal .modal-body {
   overflow-y: auto;
   padding-right: 0.5rem; /* 避免 scrollbar 壓字 */
 }
+
+.fd-tab {
+  padding: 6px 12px;
+  font-size: 0.875rem;
+  border-radius: 9999px;
+  background: #f3f4f6;
+}
+.fd-tab-active {
+  background: #111827;
+  color: white;
+}

@@ -98,7 +98,7 @@ function renderReturnTable(rows) {
   if (!Array.isArray(rows) || rows.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="9" class="text-center py-2 text-gray-400">
+        <td colspan="8" class="text-center py-2 text-gray-400">
           沒有資料
         </td>
       </tr>
@@ -107,24 +107,17 @@ function renderReturnTable(rows) {
   }
 
   rows.forEach((r) => {
-    // v4.x：退料顯示重點應該是「數量/日期碼」，不是再秀一次 record_type/datecode 欄位
-    let qtyText = "-";
-    if (r.record_type === "datecode") {
-      qtyText = `${r.datecode || "-"}（${r.quantity || 0} 件）`;
-    } else {
-      qtyText = `共 ${r.quantity || 0} 件`;
-    }
-
-    const id = r.id ?? r.return_id ?? null; // 兼容
     const tr = document.createElement("tr");
 
     tr.innerHTML = `
-      <td class="py-2 pr-4">${fmtDate(r.created_at)}</td>
+      <td class="py-2 pr-4">${fmtDate(r.transaction_date)}</td>
       <td class="py-2 pr-4">${r.fixture_id || "-"}</td>
       <td class="py-2 pr-4">${r.order_no || "-"}</td>
       <td class="py-2 pr-4">${labelRecordType(r.record_type)}</td>
       <td class="py-2 pr-4">${labelSourceType(r.source_type)}</td>
-      <td class="py-2 pr-4"><div class="serial-cell">${qtyText}</div></td>
+      <td class="py-2 pr-4">
+        ${r.display_quantity_text || "-"}
+      </td>
       <td class="py-2 pr-4">${r.operator || "-"}</td>
       <td class="py-2 pr-4">${r.note || "-"}</td>
     `;
@@ -132,6 +125,7 @@ function renderReturnTable(rows) {
     tbody.appendChild(tr);
   });
 }
+
 
 
 /* ============================================================

@@ -151,17 +151,12 @@ function renderReceiptTable(rows) {
   }
 
   rows.forEach(r => {
-    // ===== 數量顯示 =====
-    let quantityText = "-";
-    if (r.record_type === "datecode") {
-      quantityText = `${r.datecode || "-"} (${r.quantity || 0} 件)`;
-    } else {
-      quantityText = `${r.quantity || 0} 件`;
-    }
+    // ⭐ v4.x：後端已經算好
+    const quantityText = r.display_quantity_text || "-";
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td class="py-2 pr-4">${fmtDate(r.created_at)}</td>
+      <td class="py-2 pr-4">${fmtDate(r.transaction_date)}</td>
       <td class="py-2 pr-4">${r.fixture_id || "-"}</td>
       <td class="py-2 pr-4">${r.order_no || "-"}</td>
       <td class="py-2 pr-4">${labelRecordType(r.record_type)}</td>
@@ -173,8 +168,6 @@ function renderReceiptTable(rows) {
     tbody.appendChild(tr);
   });
 }
-
-
 
 
 /* ============================================================

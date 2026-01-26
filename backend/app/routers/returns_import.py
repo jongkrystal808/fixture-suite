@@ -145,16 +145,9 @@ async def import_returns(
                 #   record_type, source_type, serials_csv, datecode, quantity
                 # )
                 # -------------------------
-                cursor.execute(
-                    """
-                    CALL sp_material_return_v4(
-                        %s, %s, %s, %s, %s, %s,
-                        %s, %s,
-                        %s,
-                        %s, %s
-                    )
-                    """,
-                    (
+                out = db.call_sp_with_out(
+                    "sp_material_return_v4",
+                    [
                         customer_id,
                         fixture_id,
                         order_no,
@@ -166,13 +159,12 @@ async def import_returns(
                         serials_csv,
                         datecode,
                         quantity,
-                    ),
+                    ],
+                    ["o_transaction_id", "o_message"],
                 )
 
-                # SP 回傳 SELECT transaction_id, message
-                result = cursor.fetchone()
-                if not result or result.get("transaction_id") is None:
-                    raise ValueError((result or {}).get("message") or "退料失敗")
+                if not out.get("o_transaction_id"):
+                    raise ValueError(out.get("o_message") or "退料失敗")
 
                 total_created += 1
 

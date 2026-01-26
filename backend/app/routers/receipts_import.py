@@ -137,36 +137,26 @@ async def import_receipts(
                 # -------------------------
                 # 4️⃣ CALL SP（⚠️ 完全對齊 SP 定義順序）
                 # -------------------------
-                cursor.execute(
-                    """
-                    CALL sp_material_receipt_v4(
-                        %s, %s, %s,
-                        %s, %s, %s,
-                        %s, %s,
-                        %s, %s, %s
-                    )
-                    """,
-                    (
-                        customer_id,    # 1 p_customer_id
-                        fixture_id,     # 2 p_fixture_id
-                        order_no,       # 3 p_order_no
-                        operator,       # 4 p_operator
-                        note,           # 5 p_note
-                        created_by,     # 6 p_created_by
-                        record_type,    # 7 p_record_type
-                        source_type,    # 8 p_source_type
-                        serials_csv,    # 9 p_serials_csv
-                        datecode,       # 10 p_datecode
-                        quantity,       # 11 p_quantity
-                    ),
+                out = db.call_sp_with_out(
+                    "sp_material_receipt_v4",
+                    [
+                        customer_id,
+                        fixture_id,
+                        order_no,
+                        operator,
+                        note,
+                        created_by,
+                        record_type,
+                        source_type,
+                        serials_csv,
+                        datecode,
+                        quantity,
+                    ],
+                    ["o_transaction_id", "o_message"],
                 )
 
-                # --------------------------------------------------
-                # 5️⃣ 讀取 SP 回傳結果（SELECT）
-                # --------------------------------------------------
-                result = cursor.fetchone()
-                if not result or not result.get("transaction_id"):
-                    raise ValueError(result.get("message") if result else "收料失敗")
+                if not out or not out.get("o_transaction_id"):
+                    raise ValueError(out.get("o_message") or "收料失敗")
 
                 total_created += 1
 

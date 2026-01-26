@@ -14,8 +14,9 @@ router = APIRouter(
 )
 
 
+
 # ============================================================
-# ★ 收退料總檢視（v4.x FINAL）
+# ★ 收退料總檢視（v4.x FINAL｜VIEW 版）
 # ============================================================
 
 @router.get("/view-all", summary="收退料總檢視（收料 + 退料）")
@@ -32,36 +33,36 @@ async def view_all_transactions(
     customer_id: str = Depends(get_current_customer_id),
     user=Depends(get_current_user)
 ):
-
-    where = ["t.customer_id = %s"]
+    where = ["customer_id = %s"]
     params = [customer_id]
 
     if fixture_id:
-        where.append("t.fixture_id LIKE %s")
+        where.append("fixture_id LIKE %s")
         params.append(f"%{fixture_id}%")
 
     if operator:
-        where.append("t.operator LIKE %s")
+        where.append("operator LIKE %s")
         params.append(f"%{operator}%")
 
     if transaction_type in ("receipt", "return"):
-        where.append("t.transaction_type = %s")
+        where.append("transaction_type = %s")
         params.append(transaction_type)
 
     if date_from:
-        where.append("t.transaction_date >= %s")
+        where.append("transaction_date >= %s")
         params.append(date_from)
 
     if date_to:
-        where.append("t.transaction_date <= %s")
+        where.append("transaction_date <= %s")
         params.append(date_to)
 
+    # 🔍 serial 查詢（仍然需要 EXISTS）
     if serial:
         where.append("""
             EXISTS (
                 SELECT 1
                 FROM material_transaction_items i
-                WHERE i.transaction_id = t.id
+                WHERE i.transaction_id = transaction_id
                   AND i.serial_number LIKE %s
             )
         """)
@@ -71,49 +72,20 @@ async def view_all_transactions(
 
     sql = f"""
         SELECT
-            t.id,
-            t.transaction_date,
-            t.transaction_type,
-            t.fixture_id,
-
-            -- ✅ 單號（永遠只來自 material_transactions）
-            t.order_no,
-
-            -- ✅ Datecode（只在 record_type = datecode）
-            CASE
-                WHEN t.record_type = 'datecode'
-                    THEN (
-                        SELECT d.datecode
-                        FROM fixture_datecode_transactions d
-                        WHERE d.transaction_id = t.id
-                        LIMIT 1
-                    )
-                ELSE NULL
-            END AS datecode,
-
-            t.record_type,
-            t.source_type,
-            t.operator,
-            t.note,
-
-            -- ✅ v4.x 正確數量算法
-            CASE
-                WHEN t.record_type = 'datecode'
-                    THEN (
-                        SELECT SUM(i.quantity)
-                        FROM material_transaction_items i
-                        WHERE i.transaction_id = t.id
-                    )
-                ELSE (
-                        SELECT COUNT(*)
-                        FROM material_transaction_items i
-                        WHERE i.transaction_id = t.id
-                )
-            END AS quantity
-
-        FROM material_transactions t
+            transaction_id AS id,
+            transaction_date,
+            transaction_type,
+            fixture_id,
+            order_no,
+            record_type,
+            source_type,
+            operator,
+            note,
+            display_quantity,
+            display_quantity_text
+        FROM v_material_transactions_event
         WHERE {where_sql}
-        ORDER BY t.transaction_date DESC, t.id DESC
+        ORDER BY transaction_date DESC, transaction_id DESC
         LIMIT %s OFFSET %s
     """
 
@@ -122,7 +94,7 @@ async def view_all_transactions(
     total = db.execute_query(
         f"""
         SELECT COUNT(*) AS total
-        FROM material_transactions t
+        FROM v_material_transactions_event
         WHERE {where_sql}
         """,
         tuple(params)
@@ -133,17 +105,18 @@ async def view_all_transactions(
         "rows": rows
     }
 
-
 # ============================================================
 # ★ 序號檢視（收 / 退）
 # ============================================================
-
-@router.get("/serials", summary="序號交易列表")
+@router.get("/serials", summary="序號交易列表（收 / 退）")
 async def view_transaction_serials(
     fixture_id: Optional[str] = Query(None),
     serial: Optional[str] = Query(None),
     operator: Optional[str] = Query(None),
-    transaction_type: Optional[str] = Query(None),
+    order_no: Optional[str] = Query(None),
+    transaction_type: Optional[str] = Query(None),  # receipt | return
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
 
     skip: int = Query(0),
     limit: int = Query(100),
@@ -158,16 +131,28 @@ async def view_transaction_serials(
     params = [customer_id]
 
     if fixture_id:
-        where.append("t.fixture_id = %s")
-        params.append(fixture_id)
+        where.append("t.fixture_id LIKE %s")
+        params.append(f"%{fixture_id}%")
 
     if operator:
         where.append("t.operator LIKE %s")
         params.append(f"%{operator}%")
 
-    if transaction_type:
+    if order_no:
+        where.append("t.order_no LIKE %s")
+        params.append(f"%{order_no}%")
+
+    if transaction_type in ("receipt", "return"):
         where.append("t.transaction_type = %s")
         params.append(transaction_type)
+
+    if date_from:
+        where.append("t.transaction_date >= %s")
+        params.append(date_from)
+
+    if date_to:
+        where.append("t.transaction_date <= %s")
+        params.append(date_to)
 
     if serial:
         where.append("i.serial_number LIKE %s")
@@ -196,7 +181,7 @@ async def view_transaction_serials(
 
     total = db.execute_query(
         f"""
-        SELECT COUNT(*) AS total
+        SELECT COUNT(i.id) AS total
         FROM material_transactions t
         JOIN material_transaction_items i
           ON t.id = i.transaction_id
@@ -205,7 +190,10 @@ async def view_transaction_serials(
         tuple(params)
     )[0]["total"]
 
-    return {"rows": rows, "total": total}
+    return {
+        "rows": rows,
+        "total": total
+    }
 
 
 # ============================================================

@@ -641,7 +641,7 @@ function downloadBlob(blob, filename) {
  * ============================================================ */
 
 async function mmExportModelsXlsx() {
-  const token = localStorage.getItem("auth_token");
+  const token = localStorage.getItem("access_token");
 
   if (!window.currentCustomerId) {
     return toast("尚未選擇客戶", "warning");
@@ -681,7 +681,7 @@ async function mmExportModelsXlsx() {
 window.mmExportModelsXlsx = mmExportModelsXlsx;
 
 async function mmDownloadModelsTemplate() {
-  const token = localStorage.getItem("auth_token");
+  const token = localStorage.getItem("access_token");
 
   if (!window.currentCustomerId) {
     return toast("尚未選擇客戶", "warning");
@@ -731,7 +731,7 @@ async function mmImportModels(file) {
     return toast("僅支援 .xlsx Excel 檔案", "warning");
   }
 
-  const token = localStorage.getItem("auth_token");
+  const token = localStorage.getItem("access_token");
 
   if (!window.currentCustomerId) {
     return toast("尚未選擇客戶", "warning");

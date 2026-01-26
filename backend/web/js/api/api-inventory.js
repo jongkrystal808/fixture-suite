@@ -1,74 +1,31 @@
-/**
- * api-inventory.js
- * Inventory related APIs (FINAL)
- *
- * ✔ Serial inventory
- * ✔ Datecode inventory
- * ✔ Inventory history (receipt / return / batch / datecode)
- *
- * ❌ 不處理 auth
- * ❌ 不處理 customer
- * ❌ 不存在 L3 / audit
- */
-
 /* ============================================================
  * Serial Inventory
  * ============================================================ */
-
-/**
- * 取得序號庫存
- *
- * - 不帶參數：全庫存（L1 summary 暫用）
- * - 帶 fixture_id：指定治具（L2 明細）
- */
 function apiInventorySerial(params = {}) {
-  return api("/inventory/serial", {
-    params
-  });
+  const qs = new URLSearchParams(params).toString();
+  return api(`/inventory/serial?${qs}`);
 }
 
 /* ============================================================
  * Datecode Inventory
  * ============================================================ */
-
-/**
- * 取得 Datecode 庫存（L2）
- * - fixture_id 必填
- */
 function apiInventoryDatecode(params = {}) {
-  return api("/inventory/datecode", {
-    params
-  });
+  const qs = new URLSearchParams(params).toString();
+  return api(`/inventory/datecode?${qs}`);
 }
 
 /* ============================================================
  * Inventory History
  * ============================================================ */
-
-/**
- * 取得庫存異動歷史（整合）
- * - serial / batch / datecode
- * - receipt / return
- */
 function apiInventoryHistory(params = {}) {
-  return api("/inventory/history", {
-    params
-  });
+  const qs = new URLSearchParams(params).toString();
+  return api(`/inventory/history?${qs}`);
 }
 
-async function apiInventorySearch({ fixture_id, keyword }) {
-  return api("/inventory/search", {
-    params: {
-      fixture_id,
-      keyword
-    }
-  });
+function apiInventorySearch({ fixture_id, keyword }) {
+  const qs = new URLSearchParams({ fixture_id, keyword }).toString();
+  return api(`/inventory/search?${qs}`);
 }
-
-
-/* ============================================================
- * Exports (Global)
- * ============================================================ */
 
 window.apiInventorySerial = apiInventorySerial;
 window.apiInventoryDatecode = apiInventoryDatecode;

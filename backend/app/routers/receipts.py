@@ -38,9 +38,8 @@ def ensure_fixture_exists(fixture_id: str, customer_id: str):
             detail=f"治具 {fixture_id} 不存在或不屬於此客戶"
         )
 
-
 # ============================================================
-# 查詢收料紀錄
+# 查詢收料紀錄（v4.x FINAL｜VIEW）
 # GET /receipts
 # ============================================================
 
@@ -58,42 +57,43 @@ def list_receipts(
     customer_id: str = Depends(get_current_customer_id),
 ):
     where = [
-        "t.transaction_type = 'receipt'",
-        "t.customer_id = %s",
+        "transaction_type = 'receipt'",
+        "customer_id = %s",
     ]
     params = [customer_id]
 
     if fixture_id:
-        where.append("t.fixture_id LIKE %s")
+        where.append("fixture_id LIKE %s")
         params.append(f"%{fixture_id}%")
 
     if order_no:
-        where.append("t.order_no LIKE %s")
+        where.append("order_no LIKE %s")
         params.append(f"%{order_no}%")
 
     if operator:
-        where.append("t.operator LIKE %s")
+        where.append("operator LIKE %s")
         params.append(f"%{operator}%")
 
     if record_type:
-        where.append("t.record_type = %s")
+        where.append("record_type = %s")
         params.append(record_type)
 
     if date_from:
-        where.append("t.created_at >= %s")
+        where.append("transaction_date >= %s")
         params.append(date_from)
 
     if date_to:
-        where.append("t.created_at <= %s")
+        where.append("transaction_date <= %s")
         params.append(date_to)
 
+    # 🔍 serial 查詢（仍需 EXISTS）
     if serial:
         where.append("""
-            t.record_type IN ('batch','individual')
+            record_type IN ('batch','individual')
             AND EXISTS (
                 SELECT 1
                 FROM material_transaction_items i
-                WHERE i.transaction_id = t.id
+                WHERE i.transaction_id = transaction_id
                   AND i.serial_number LIKE %s
             )
         """)
@@ -103,34 +103,20 @@ def list_receipts(
 
     sql = f"""
         SELECT
-    t.id,
-    t.record_type,
-    t.fixture_id,
-    t.order_no,
-    t.operator,
-    t.note,
-    t.source_type,
-    t.created_at,
-    t.quantity,
-
-    /* ⭐ 只在 datecode 時抓 datecode */
-    CASE
-          WHEN t.record_type = 'datecode' THEN (
-            SELECT fdt.datecode
-            FROM fixture_datecode_transactions fdt
-            WHERE fdt.transaction_id = t.id
-              AND fdt.transaction_type = 'receipt'
-            ORDER BY fdt.id ASC
-            LIMIT 1
-          )
-          ELSE NULL
-        END AS datecode
-    
-    FROM material_transactions t
-    WHERE {where_sql}
-    ORDER BY t.created_at DESC, t.id DESC
-    LIMIT %s OFFSET %s
-
+            transaction_id AS id,
+            transaction_date,
+            record_type,
+            fixture_id,
+            order_no,
+            source_type,
+            operator,
+            note,
+            display_quantity,
+            display_quantity_text
+        FROM v_material_transactions_query
+        WHERE {where_sql}
+        ORDER BY transaction_date DESC, transaction_id DESC
+        LIMIT %s OFFSET %s
     """
 
     rows = db.execute_query(sql, tuple(params + [limit, skip]))
@@ -138,7 +124,7 @@ def list_receipts(
     total = db.execute_query(
         f"""
         SELECT COUNT(*) AS cnt
-        FROM material_transactions t
+        FROM v_material_transactions_query
         WHERE {where_sql}
         """,
         tuple(params),
@@ -148,7 +134,6 @@ def list_receipts(
         "total": total,
         "receipts": rows,
     }
-
 
 # ============================================================
 # 取得單筆收料

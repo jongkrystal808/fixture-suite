@@ -41,20 +41,9 @@ function renderViewAllTable(rows) {
       typeHtml = `<span class="tx-return">退料</span>`;
     }
 
-    // -----------------------------
-    // 數量 / Datecode 顯示（v4.x 正確語意）
-    // -----------------------------
-    let qtyText = "-";
-    const qty = Math.abs(Number(r.quantity) || 0);
 
-    if (r.record_type === "datecode") {
-      // ✅ v4.x：Datecode 來自後端 r.datecode
-      const datecode = r.datecode || "-";
-      qtyText = `${datecode}（${qty} 件）`;
-    } else {
-      // batch / individual
-      qtyText = `${qty} 件`;
-    }
+    const qtyText = r.display_quantity_text || "-";
+
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
@@ -111,8 +100,13 @@ window.showTab = showTab;
 
 
 async function exportTransactionsXlsx({ type }) {
-  const token = localStorage.getItem("auth_token");
+  const token = localStorage.getItem("access_token");
   const customerId = window.currentCustomerId;
+    console.group("[EXPORT AUTH CHECK]");
+    console.log("access_token =", token);
+    console.log("window.currentCustomerId =", customerId);
+    console.log("localStorage keys =", Object.keys(localStorage));
+    console.groupEnd();
 
   if (!token || !customerId) {
     toast("尚未登入或未選擇客戶", "error");
@@ -135,6 +129,16 @@ async function exportTransactionsXlsx({ type }) {
   if (exportType) params.set("export_type", exportType);
 
   const url = `${API_PREFIX}/transactions/summary/export?${params.toString()}`;
+    console.group("[EXPORT DEBUG]");
+console.log("type =", type);
+console.log("fixtureId =", fixtureId);
+console.log("datecode =", datecode);
+console.log("operator =", operator);
+console.log("FINAL QUERY =", params.toString());
+console.log("FINAL URL =", url);
+console.log("customerId =", customerId);
+console.log("token exists =", !!token);
+console.groupEnd();
 
   try {
     const res = await fetch(url, {
@@ -264,3 +268,16 @@ function loadTransactionViewAll(page = 1) {
 }
 
 window.loadTransactionViewAll = loadTransactionViewAll;
+
+// ============================================================
+// Customer Context Refresh Handler
+// ============================================================
+if (window.registerCustomerRefreshHandler) {
+  window.registerCustomerRefreshHandler(
+    "tab-transactions",
+    () => {
+      console.log("[transactions] customer changed, reload view-all");
+      loadTransactionViewAll(1);
+    }
+  );
+}

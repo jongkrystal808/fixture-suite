@@ -194,6 +194,8 @@ function closeFixtureDetail() {
 window.closeFixtureDetail = closeFixtureDetail;
 
 async function openFixtureDetail(fixtureId) {
+  console.log("🚀 openFixtureDetail fixtureId =", fixtureId);
+
   const drawer = document.getElementById("fixtureDetailDrawer");
   const box = document.getElementById("fixtureDetailContent");
 
@@ -252,38 +254,220 @@ async function openFixtureDetail(fixtureId) {
       replacementLogs = [];
     }
 
+    // =====================================================
+    // 2. 庫存（Inventory - 同一層完整顯示）
+    // =====================================================
+    let serials = [];
+    let datecodes = [];
+    let invHistory = [];
+
+    try {
+      const serialResp = await apiInventorySerial({ fixture_id: fixtureId });
+      serials = serialResp?.items || serialResp || [];
+
+    } catch (e) {
+      serials = [];
+    }
+
+    try {
+      const dcResp = await apiInventoryDatecode({ fixture_id: fixtureId });
+        datecodes = dcResp?.items || dcResp || [];
+
+    } catch (e) {
+      datecodes = [];
+    }
+
+    try {
+      const histResp = await apiInventoryHistory({ fixture_id: fixtureId });
+    invHistory = histResp?.items || histResp || [];
+    } catch (e) {
+      invHistory = [];
+    }
+
+    const inUseSerials = serials.filter(s =>
+      ["deployed", "in_use"].includes(s.status)
+    );
+
+    const freeSerials = serials.filter(s =>
+      s.status === "in_stock"
+    );
+
+
+    const datecodeAvailable = datecodes.filter(d => d.in_stock_qty > 0);
+
+    const totalDatecodeQty = datecodeAvailable.reduce(
+      (sum, d) => sum + (d.in_stock_qty || 0),
+      0
+    );
+
+    // =====================================================
+    // Inventory Summary（語意修正）
+    // =====================================================
+    const serialCount = serials.length;
+
+    // ✅ 真正的「所有治具數」
+    const totalFixtureCount = serialCount + totalDatecodeQty;
+
+
+
 
     // =====================================================
     // 3️⃣ Render
     // =====================================================
     box.innerHTML = `
-      <section class="space-y-4">
-
-        <div>
-          <h3 class="text-lg font-semibold">基本資料</h3>
-          <div class="grid grid-cols-2 gap-2 text-sm mt-2">
-            <div><b>治具編號：</b>${f.fixture_id}</div>
-            <div><b>名稱：</b>${f.fixture_name ?? "-"}</div>
-            <div><b>狀態：</b>${f.fixture_status ?? "-"}</div>
-            <div><b>壽命狀態：</b>${f.lifespan_status}</div>
-            <div><b>預期壽命：</b>${f.replacement_cycle ?? "-"} ${f.cycle_unit === "uses" ? "次" : "天"}</div>
-            <div><b>已使用：</b>${f.total_uses ?? 0}</div>
-          </div>
-        </div>
-
-        <div>
-          <h3 class="text-lg font-semibold">使用紀錄</h3>
-          ${renderUsageLogs(usageLogs, f)}
-        </div>
+      <!-- Tabs -->
+      <div class="flex gap-2 border-b mb-4">
+        <button class="fd-tab fd-tab-active" data-tab="inventory"
+                onclick="switchFixtureDetailTab('inventory')">庫存檢視</button>
+        <button class="fd-tab" data-tab="usage"
+                onclick="switchFixtureDetailTab('usage')">使用記錄</button>
+        <button class="fd-tab" data-tab="replacement"
+                onclick="switchFixtureDetailTab('replacement')">更換記錄</button>
+        <button class="fd-tab" data-tab="basic"
+                onclick="switchFixtureDetailTab('basic')">基本資料</button>
+      </div>
+    
+      
+      <!-- 庫存檢視 -->
+        <section id="fd-tab-inventory" class="space-y-6 text-sm">
         
-        <div>
-          <h3 class="text-lg font-semibold">更換紀錄</h3>
-          ${renderReplacementLogs(replacementLogs)}
+          <!-- ===== Summary ===== -->
+          <div class="border rounded-xl p-4 bg-gray-50 space-y-1">
+            <div>共有治具：<b>${totalFixtureCount}</b> 個</div>
+            <div>
+              現用序號：
+              <b>
+                  ${inUseSerials.length
+                    ? inUseSerials.map(s => s.serial_number).join(", ")
+                    : "-"
+                  }
+                </b>
+
+            </div>
+            <div>
+              可用序號：
+              <b>
+              ${freeSerials.length
+                ? freeSerials.map(s => s.serial_number).join(", ")
+                : "-"
+              }
+            </b>
+
+            </div>
+            <div>
+              Datecode 可用：
+              <b>${datecodeAvailable.length}</b> 種
+              （共 ${totalDatecodeQty} 件）
+            </div>
+          </div>
+        
+          <!-- ===== Serial Inventory ===== -->
+          <div>
+            <h4 class="font-semibold mb-2">序號庫存</h4>
+        
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <div class="text-gray-500 mb-1">現用序號</div>
+                <div class="text-xs break-all">
+                  ${renderSerialList(inUseSerials.map(s => s.serial_number), 10) || "-"}
+                </div>
+              </div>
+        
+              <div>
+                <div class="text-gray-500 mb-1">可用序號</div>
+                <div class="text-xs break-all">
+                  ${renderSerialList(freeSerials.map(s => s.serial_number), 10) || "-"}
+                </div>
+              </div>
+            </div>
+          </div>
+        
+          <!-- ===== Datecode Inventory ===== -->
+          <div>
+            <h4 class="font-semibold mb-2">Datecode 庫存</h4>
+        
+            <table class="min-w-full text-xs">
+              <thead class="text-gray-500">
+                <tr>
+                  <th class="py-1 pr-3 text-left">Datecode</th>
+                  <th class="py-1 pr-3 text-right">可用數量</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${datecodeAvailable.map(d => `
+                  <tr>
+                    <td class="py-1">${d.datecode}</td>
+                    <td class="py-1 text-right">${d.in_stock_qty}</td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          </div>
+        
+          <!-- ===== Receipt / Return History ===== -->
+          <div>
+            <h4 class="font-semibold mb-2">收料 / 退料記錄</h4>
+            <div class="flex gap-2 mb-2">
+              <button class="btn btn-xs" onclick="filterInventoryHistory('all')">全部</button>
+              <button class="btn btn-xs" onclick="filterInventoryHistory('receipt')">只看收料</button>
+              <button class="btn btn-xs" onclick="filterInventoryHistory('return')">只看退料</button>
+            </div>
+
+            <table id="fd-inv-history" class="min-w-full text-xs">
+              <thead class="text-gray-500">
+                <tr>
+                  <th class="py-1 pr-3 text-left">類型</th>
+                  <th class="py-1 pr-3 text-left">日期</th>
+                  <th class="py-1 pr-3 text-left">數量</th>
+                  <th class="py-1 pr-3 text-left">單號</th>
+                  <th class="py-1 pr-3 text-left">內容</th>
+                </tr>
+              </thead>
+              <tbody>
+              ${invHistory.map(r => `
+                <tr class="border-t" data-type="${r.transaction_type}">
+                  <td class="py-1 pr-3">${r.transaction_type === "receipt" ? "收料" : "退料"}</td>
+                  <td class="py-1 pr-3">${r.date}</td>
+                  <td class="py-1 pr-3 text-left tabular-nums">
+                    ${Number.isFinite(Number(r.quantity))
+                      ? Math.abs(Number(r.quantity))
+                      : "-"
+                    }
+                  </td>
+                  <td class="py-1 pr-3">${r.order_no || "-"}</td>
+                  <td class="py-1 pr-3">${r.content || r.note || "-"}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+            </table>
+          </div>
+        
+        </section>
+
+    
+      <!-- 使用記錄 -->
+      <section id="fd-tab-usage" class="hidden space-y-3">
+        ${renderUsageLogs(usageLogs, f)}
+      </section>
+    
+      <!-- 更換記錄 -->
+      <section id="fd-tab-replacement" class="hidden space-y-3">
+        ${renderReplacementLogs(replacementLogs)}
+      </section>
+    
+      <!-- 基本資料（最後） -->
+      <section id="fd-tab-basic" class="hidden space-y-3">
+        <div class="grid grid-cols-2 gap-2 text-sm">
+          <div><b>治具編號：</b>${f.fixture_id}</div>
+          <div><b>名稱：</b>${f.fixture_name ?? "-"}</div>
+          <div><b>狀態：</b>${f.fixture_status ?? "-"}</div>
+          <div><b>壽命狀態：</b>${f.lifespan_status}</div>
+          <div><b>預期壽命：</b>${f.replacement_cycle ?? "-"} ${f.cycle_unit === "uses" ? "次" : "天"}</div>
+          <div><b>已使用：</b>${f.total_uses ?? 0}</div>
         </div>
-
-
       </section>
     `;
+
   } catch (err) {
     console.error("openFixtureDetail failed:", err);
     box.innerHTML = `<div class="p-4 text-red-500">讀取資料失敗</div>`;
@@ -691,3 +875,62 @@ function initRequirementFilter(fixtures, stations) {
     container.innerHTML = filtered.map(f => renderRequirementCard(f)).join("");
   };
 }
+
+// ============================================================
+// Inventory helpers (Drawer only)
+// ============================================================
+
+function renderSerialList(serials, limit = 10) {
+  if (serials.length <= limit) {
+    return serials.join(", ");
+  }
+
+  const head = serials.slice(0, limit).join(", ");
+  const rest = serials.slice(limit).join(", ");
+
+  const id = "serial-expand-" + Math.random().toString(36).slice(2);
+
+  return `
+    <span>${head}</span>
+    <span id="${id}" class="hidden">, ${rest}</span>
+    <button class="ml-1 text-blue-600 text-xs"
+            onclick="
+              const el=document.getElementById('${id}');
+              el.classList.toggle('hidden');
+              this.innerText = el.classList.contains('hidden') ? '展開' : '收合';
+            ">
+      展開
+    </button>
+  `;
+}
+
+function filterInventoryHistory(type) {
+  document.querySelectorAll("#fd-inv-history tbody tr").forEach(tr => {
+    if (type === "all") {
+      tr.classList.remove("hidden");
+      return;
+    }
+    tr.classList.toggle("hidden", tr.dataset.type !== type);
+  });
+}
+
+/* ============================================================
+ * Fixture Detail Drawer - Tab Switch
+ * ============================================================ */
+
+function switchFixtureDetailTab(tab) {
+  // 切換 tab 樣式
+  document.querySelectorAll(".fd-tab").forEach(btn => {
+    btn.classList.toggle("fd-tab-active", btn.dataset.tab === tab);
+  });
+
+  // 切換內容區
+  ["inventory", "usage", "replacement", "basic"].forEach(name => {
+    const el = document.getElementById(`fd-tab-${name}`);
+    if (!el) return;
+    el.classList.toggle("hidden", name !== tab);
+  });
+}
+
+// 掛到 window，確保 inline onclick 找得到
+window.switchFixtureDetailTab = switchFixtureDetailTab;

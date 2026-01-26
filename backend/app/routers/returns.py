@@ -39,7 +39,7 @@ def ensure_fixture_exists(fixture_id: str, customer_id: str):
 
 
 # ============================================================
-# 查詢退料紀錄
+# 查詢退料紀錄（v4.x FINAL｜VIEW）
 # GET /returns
 # ============================================================
 
@@ -57,42 +57,43 @@ def list_returns(
     customer_id: str = Depends(get_current_customer_id),
 ):
     where = [
-        "t.transaction_type = 'return'",
-        "t.customer_id = %s",
+        "transaction_type = 'return'",
+        "customer_id = %s",
     ]
     params = [customer_id]
 
     if fixture_id:
-        where.append("t.fixture_id LIKE %s")
+        where.append("fixture_id LIKE %s")
         params.append(f"%{fixture_id}%")
 
     if order_no:
-        where.append("t.order_no LIKE %s")
+        where.append("order_no LIKE %s")
         params.append(f"%{order_no}%")
 
     if operator:
-        where.append("t.operator LIKE %s")
+        where.append("operator LIKE %s")
         params.append(f"%{operator}%")
 
     if record_type:
-        where.append("t.record_type = %s")
+        where.append("record_type = %s")
         params.append(record_type)
 
     if date_from:
-        where.append("t.created_at >= %s")
+        where.append("transaction_date >= %s")
         params.append(date_from)
 
     if date_to:
-        where.append("t.created_at <= %s")
+        where.append("transaction_date <= %s")
         params.append(date_to)
 
+    # 🔍 序號查詢（batch / individual）
     if serial:
         where.append("""
-            t.record_type IN ('batch','individual')
+            record_type IN ('batch','individual')
             AND EXISTS (
                 SELECT 1
                 FROM material_transaction_items i
-                WHERE i.transaction_id = t.id
+                WHERE i.transaction_id = transaction_id
                   AND i.serial_number LIKE %s
             )
         """)
@@ -102,32 +103,19 @@ def list_returns(
 
     sql = f"""
         SELECT
-            t.id,
-            t.record_type,
-            t.fixture_id,
-            t.order_no,
-            t.operator,
-            t.note,
-            t.source_type,
-            t.created_at,
-            t.quantity,
-
-            /* ⭐ 僅 datecode 時補 datecode */
-            CASE
-              WHEN t.record_type = 'datecode' THEN (
-                SELECT fdt.datecode
-                FROM fixture_datecode_transactions fdt
-                WHERE fdt.transaction_id = t.id
-                  AND fdt.transaction_type = 'return'
-                ORDER BY fdt.id ASC
-                LIMIT 1
-              )
-              ELSE NULL
-            END AS datecode
-
-        FROM material_transactions t
+            transaction_id AS id,
+            transaction_date,
+            record_type,
+            fixture_id,
+            order_no,
+            source_type,
+            operator,
+            note,
+            display_quantity,
+            display_quantity_text
+        FROM v_material_transactions_query
         WHERE {where_sql}
-        ORDER BY t.created_at DESC, t.id DESC
+        ORDER BY transaction_date DESC, transaction_id DESC
         LIMIT %s OFFSET %s
     """
 
@@ -136,7 +124,7 @@ def list_returns(
     total = db.execute_query(
         f"""
         SELECT COUNT(*) AS cnt
-        FROM material_transactions t
+        FROM v_material_transactions_query
         WHERE {where_sql}
         """,
         tuple(params),
@@ -146,6 +134,7 @@ def list_returns(
         "total": total,
         "returns": rows,
     }
+
 
 
 # ============================================================

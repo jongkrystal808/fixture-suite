@@ -146,52 +146,34 @@ def list_inventory_history(
 
     sql = """
           SELECT 
-            mt.transaction_type AS action,
-            mt.record_type      AS record_type,
-            mt.transaction_date AS date,
-            mt.order_no,
-            mt.source_type,
-            mt.fixture_id,
+              mt.id,
+              mt.transaction_type,                 -- receipt / return
+              mt.record_type,                      -- individual / batch / datecode
+              mt.transaction_date AS date,
+              mt.order_no,
+              mt.quantity,                         -- ✅ 正確的「數量」
+              mt.note,
             
-            agg.datecode,
-            agg.quantity,
-            agg.serials,
-        
-            CASE
-                WHEN agg.serial_start IS NOT NULL
-                 AND agg.serial_end IS NOT NULL
-                 AND agg.serial_start <> agg.serial_end
-                THEN CONCAT(agg.serial_start, '-', agg.serial_end)
+              -- 依 record_type 組合顯示內容
+              CASE
+                WHEN mt.record_type IN ('individual','batch')
+                  THEN GROUP_CONCAT(mti.serial_number ORDER BY mti.serial_number SEPARATOR ', ')
+                WHEN mt.record_type = 'datecode'
+                  THEN CONCAT('Datecode: ', MAX(mti.datecode))
                 ELSE NULL
-            END AS serial_range,
-        
-            mt.operator,
-            mt.note
-        
-        FROM material_transactions mt
-        
-        LEFT JOIN (
-            SELECT
-                transaction_id,
-                MAX(datecode) AS datecode,
-                SUM(quantity) AS quantity,
-                GROUP_CONCAT(
-                    serial_number
-                    ORDER BY serial_number
-                    SEPARATOR ', '
-                ) AS serials,
-                MIN(serial_number) AS serial_start,
-                MAX(serial_number) AS serial_end
-            FROM material_transaction_items
-            GROUP BY transaction_id
-        ) agg
-          ON agg.transaction_id = mt.id
-        
-        WHERE mt.customer_id = %s
-          AND mt.fixture_id = %s
-        
-        ORDER BY mt.transaction_date DESC, mt.id DESC
-        LIMIT %s OFFSET %s
+              END AS content
+            
+            FROM material_transactions mt
+            LEFT JOIN material_transaction_items mti
+              ON mti.transaction_id = mt.id
+            
+            WHERE mt.customer_id = %s
+              AND mt.fixture_id = %s
+            
+            GROUP BY mt.id
+            
+            ORDER BY mt.transaction_date DESC, mt.id DESC
+            LIMIT %s OFFSET %s
           """
 
     rows = db.execute_query(
