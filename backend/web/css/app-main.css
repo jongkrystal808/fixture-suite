@@ -361,3 +361,61 @@ dialog.inventory-modal .modal-body {
   background: #111827;
   color: white;
 }
+
+
+/* ===== Import Result Modal ===== */
+#importResultModal.hidden {
+  display: none;
+}
+
+.import-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 999;
+}
+
+.import-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 600px;
+  max-width: 90%;
+  max-height: 80vh;
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+}
+
+.import-modal h3 {
+  margin: 0 0 12px;
+}
+
+.import-modal-summary {
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+.import-modal-errors {
+  flex: 1;
+  overflow-y: auto;
+  background: #f8f8f8;
+  padding: 10px;
+  border-radius: 4px;
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+
+.import-modal-actions {
+  text-align: right;
+  margin-top: 12px;
+}
+
+.import-modal-actions button {
+  padding: 6px 16px;
+  font-size: 14px;
+}

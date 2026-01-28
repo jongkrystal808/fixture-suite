@@ -15,6 +15,23 @@
   <link rel="stylesheet" href="/css/app-main.css">
 </head>
 
+<!-- =========================
+     Import Result Modal
+========================= -->
+<div id="importResultModal" class="hidden">
+  <div class="import-modal-backdrop"></div>
+  <div class="import-modal">
+    <h3 id="importModalTitle">匯入結果</h3>
+
+    <div class="import-modal-summary" id="importModalSummary"></div>
+
+    <pre class="import-modal-errors" id="importModalErrors"></pre>
+
+    <div class="import-modal-actions">
+      <button type="button" onclick="closeImportResultModal()">確認</button>
+    </div>
+  </div>
+</div>
 
 <body class="bg-gray-50 text-gray-900">
         <!-- 登入介面 -->

@@ -152,7 +152,7 @@ function renderReceiptTable(rows) {
 
   rows.forEach(r => {
     // ⭐ v4.x：後端已經算好
-    const quantityText = r.display_quantity_text || "-";
+    const quantityText = r.quantity ?? "-";
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
@@ -319,17 +319,37 @@ async function handleReceiptImport(input) {
     toast("正在匯入...");
     const result = await apiImportReceiptsXlsx(file);
 
-    toast(`匯入成功，共 ${result?.count || 0} 筆`);
+    const successCount = result?.count || 0;
+    const errors = Array.isArray(result?.errors) ? result.errors : [];
+    const failedCount = errors.length;
+
+    // 🔴 重點：不再用 toast 顯示結果，改用強制閱讀彈窗
+    showImportResultModal({
+      success: successCount,
+      failed: failedCount,
+      errors,
+    });
+
     receiptsPage = 1;
     loadReceipts();
+
   } catch (err) {
     console.error("匯入失敗:", err);
-    toast(`匯入失敗：${err?.message || ""}`, "error");
+
+    // 只有系統級錯誤才會進這裡
+    showImportResultModal({
+      success: 0,
+      failed: 1,
+      errors: [err?.message || "系統錯誤，請查看後端 log"],
+    });
+
   } finally {
     input.value = "";
   }
 }
+
 window.handleReceiptImport = handleReceiptImport;
+
 
 /* ============================================================
  * 新增表單顯示切換（v4.x）
@@ -439,3 +459,50 @@ function downloadReceiptTemplate() {
   XLSX.writeFile(wb, "receipt_template.xlsx");
 }
 window.downloadReceiptTemplate = downloadReceiptTemplate;
+
+
+function showImportResultModal({ success, failed, errors }) {
+  let modal = document.getElementById("importResultModal");
+
+  // -----------------------------
+  // 第一次：建立 Modal
+  // -----------------------------
+  if (!modal) {
+    modal = document.createElement("div");
+    modal.id = "importResultModal";
+    modal.innerHTML = `
+      <div class="import-modal-backdrop"></div>
+      <div class="import-modal-box">
+        <h3>匯入結果</h3>
+        <div class="import-modal-summary"></div>
+        <pre class="import-modal-errors"></pre>
+        <div class="import-modal-actions">
+          <button type="button" onclick="closeImportResultModal()">確認</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  }
+
+  // -----------------------------
+  // ⚠️ 重點：從 modal 內找元素
+  // -----------------------------
+  const summaryEl = modal.querySelector(".import-modal-summary");
+  const errorsEl  = modal.querySelector(".import-modal-errors");
+
+  summaryEl.textContent = `成功 ${success} 筆，失敗 ${failed} 筆`;
+
+  if (errors && errors.length > 0) {
+    errorsEl.textContent = errors.join("\n");
+    errorsEl.style.display = "block";
+  } else {
+    errorsEl.style.display = "none";
+  }
+
+  modal.style.display = "block";
+}
+
+function closeImportResultModal() {
+  const modal = document.getElementById("importResultModal");
+  if (modal) modal.style.display = "none";
+}

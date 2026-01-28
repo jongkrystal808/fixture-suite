@@ -1,14 +1,17 @@
 """
-收料 Receipts Router (v4.x FINAL)
+收料 Receipts Router（v6 FINAL）
 - SP-first 架構
 - customer 由 X-Customer-Id 決定
-- quantity = 當次收料數量（方案 A）
+- 僅呼叫 sp_material_receipt_v6
+- 不假設 SP result set
+- validate-first，不留下失敗交易
 """
 
 from fastapi import APIRouter, Depends, HTTPException
 from typing import Optional
-from datetime import datetime
+from datetime import date
 import io
+import pymysql
 
 from backend.app.database import db
 from backend.app.dependencies import (
@@ -21,7 +24,6 @@ from openpyxl import Workbook
 from fastapi.responses import StreamingResponse
 
 router = APIRouter(prefix="/receipts", tags=["收料 Receipts"])
-
 
 # ============================================================
 # Helper
@@ -39,7 +41,7 @@ def ensure_fixture_exists(fixture_id: str, customer_id: str):
         )
 
 # ============================================================
-# 查詢收料紀錄（v4.x FINAL｜VIEW）
+# 查詢收料紀錄（v6｜VIEW）
 # GET /receipts
 # ============================================================
 
@@ -86,7 +88,6 @@ def list_receipts(
         where.append("transaction_date <= %s")
         params.append(date_to)
 
-    # 🔍 serial 查詢（仍需 EXISTS）
     if serial:
         where.append("""
             record_type IN ('batch','individual')
@@ -109,10 +110,9 @@ def list_receipts(
             fixture_id,
             order_no,
             source_type,
+            quantity,
             operator,
-            note,
-            display_quantity,
-            display_quantity_text
+            note
         FROM v_material_transactions_query
         WHERE {where_sql}
         ORDER BY transaction_date DESC, transaction_id DESC
@@ -135,6 +135,7 @@ def list_receipts(
         "receipts": rows,
     }
 
+
 # ============================================================
 # 取得單筆收料
 # GET /receipts/{id}
@@ -147,18 +148,9 @@ def get_receipt(
 ):
     rows = db.execute_query(
         """
-        SELECT
-            id,
-            record_type,
-            fixture_id,
-            order_no,
-            operator,
-            note,
-            source_type,
-            created_at,
-            quantity
-        FROM material_transactions
-        WHERE id=%s
+        SELECT *
+        FROM v_material_transactions_query
+        WHERE transaction_id=%s
           AND customer_id=%s
           AND transaction_type='receipt'
         """,
@@ -171,8 +163,9 @@ def get_receipt(
     return rows[0]
 
 
+
 # ============================================================
-# 新增收料（SP）
+# 新增收料（v6 SP）
 # POST /receipts
 # ============================================================
 
@@ -199,12 +192,15 @@ def create_receipt(
         if not data.serials:
             raise HTTPException(400, "序號模式必須提供 serials")
         serials_csv = ",".join(data.serials)
+        quantity = len(data.serials)
 
     elif record_type == "datecode":
         if not data.datecode or data.quantity is None:
             raise HTTPException(400, "datecode 模式需提供 datecode 與 quantity")
         datecode = data.datecode
         quantity = data.quantity
+        if quantity <= 0:
+            raise HTTPException(400, "quantity 必須 > 0")
 
     else:
         raise HTTPException(400, f"不支援的 record_type: {record_type}")
@@ -212,16 +208,9 @@ def create_receipt(
     ensure_fixture_exists(fixture_id, customer_id)
 
     try:
-        rows = db.execute_query(
-            """
-            CALL sp_material_receipt_v4(
-                %s, %s, %s, %s, %s, %s,
-                %s, %s,
-                %s,
-                %s, %s
-            )
-            """,
-            (
+        out = db.call_sp_with_out(
+            "sp_material_receipt_v6",
+            [
                 customer_id,
                 fixture_id,
                 order_no,
@@ -233,23 +222,26 @@ def create_receipt(
                 serials_csv,
                 datecode,
                 quantity,
-            ),
+            ],
+            ["o_transaction_id", "o_message"],
         )
+
+        if not out or not out.get("o_transaction_id"):
+            raise HTTPException(
+                status_code=400,
+                detail=out.get("o_message") if out else "收料失敗"
+            )
+
     except Exception as e:
-        print("🔥 SP EXECUTE ERROR:", repr(e))
-        raise HTTPException(
-            status_code=500,
-            detail=f"SP EXECUTE ERROR: {e}"
-        )
+        msg = str(e)
+        if isinstance(e, pymysql.MySQLError) and e.args and len(e.args) >= 2:
+            msg = e.args[1]
+        raise HTTPException(status_code=400, detail=msg)
 
-    if not rows or rows[0]["transaction_id"] is None:
-        raise HTTPException(
-            status_code=400,
-            detail=rows[0]["message"] if rows else "收料失敗"
-        )
-
-    return rows[0]
-
+    return {
+        "transaction_id": out["o_transaction_id"],
+        "message": out.get("o_message") or "收料成功"
+    }
 
 
 # ============================================================
@@ -264,9 +256,9 @@ def export_receipt_xlsx(
 ):
     rows = db.execute_query(
         """
-        SELECT id, record_type, fixture_id
-        FROM material_transactions
-        WHERE id=%s
+        SELECT record_type, fixture_id
+        FROM v_material_transactions_query
+        WHERE transaction_id=%s
           AND customer_id=%s
           AND transaction_type='receipt'
         """,
@@ -329,3 +321,5 @@ def export_receipt_xlsx(
             "Content-Disposition": f'attachment; filename="receipt_{receipt_id}.xlsx"'
         },
     )
+
+

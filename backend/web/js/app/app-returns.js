@@ -107,6 +107,8 @@ function renderReturnTable(rows) {
   }
 
   rows.forEach((r) => {
+      console.log("🔴 return row =", r);
+
     const tr = document.createElement("tr");
 
     tr.innerHTML = `
@@ -115,9 +117,7 @@ function renderReturnTable(rows) {
       <td class="py-2 pr-4">${r.order_no || "-"}</td>
       <td class="py-2 pr-4">${labelRecordType(r.record_type)}</td>
       <td class="py-2 pr-4">${labelSourceType(r.source_type)}</td>
-      <td class="py-2 pr-4">
-        ${r.display_quantity_text || "-"}
-      </td>
+      <td class="py-2 pr-4">${r.quantity ?? "-"}</td>
       <td class="py-2 pr-4">${r.operator || "-"}</td>
       <td class="py-2 pr-4">${r.note || "-"}</td>
     `;
@@ -260,8 +260,10 @@ async function submitReturn() {
 }
 window.submitReturn = submitReturn;
 
+
+
 /* ============================================================
- * 匯入 Excel（v4.x）
+ * 退料 Excel 匯入
  * ============================================================ */
 async function handleReturnImport(input) {
   const file = input.files?.[0];
@@ -276,17 +278,37 @@ async function handleReturnImport(input) {
     toast("正在匯入...");
     const result = await apiImportReturnsXlsx(file);
 
-    toast(`匯入成功，共 ${result?.count || 0} 筆`);
-    returnsPage = 1;
-    loadReturns();
+    const successCount = result?.count || 0;
+    const errors = Array.isArray(result?.errors) ? result.errors : [];
+    const failedCount = errors.length;
+
+    // ✅ 與收料完全一致的結果彈窗
+    showImportResultModal({
+      success: successCount,
+      failed: failedCount,
+      errors,
+    });
+
+    returnsPage = 1;   // 若你有分頁
+    loadReturns?.();   // 若你有 reload function
+
   } catch (err) {
-    console.error("匯入失敗:", err);
-    toast(`匯入失敗：${err?.message || ""}`, "error");
+    console.error("退料匯入失敗:", err);
+
+    // 只有系統級錯誤才會進來
+    showImportResultModal({
+      success: 0,
+      failed: 1,
+      errors: [err?.message || "系統錯誤，請查看後端 log"],
+    });
+
   } finally {
     input.value = "";
   }
 }
+
 window.handleReturnImport = handleReturnImport;
+
 
 /* ============================================================
  * 新增表單顯示切換（v4.x）

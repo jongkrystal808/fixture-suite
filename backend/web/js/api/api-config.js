@@ -119,13 +119,27 @@ function api(path, options = {}) {
       console.error(`❌ API ERROR: ${path}`, res.status, data);
       console.error("❌ API ERROR DATA:", JSON.stringify(data, null, 2));
 
-      const err = new Error(
-        `API ${path} failed: ${res.status} ${data?.detail || res.statusText || ""}`
-      );
+      let message = `API ${path} failed: ${res.status}`;
+
+      // ✅ Excel 匯入：後端回傳 errors[]
+      if (Array.isArray(data?.errors) && data.errors.length > 0) {
+        message = data.errors.join("\n");
+      }
+      // 一般 API：使用 detail
+      else if (data?.detail) {
+        message = data.detail;
+      }
+      // fallback
+      else if (typeof data === "string") {
+        message = data;
+      }
+
+      const err = new Error(message);
       err.status = res.status;
       err.data = data;
       throw err;
     }
+
 
     return data;
   });

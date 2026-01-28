@@ -66,7 +66,6 @@ async def get_fixture_lifespan(
             customer_id,
             fixture_id,
             fixture_name,
-            fixture_status,
             cycle_unit,
             replacement_cycle,
             total_uses,

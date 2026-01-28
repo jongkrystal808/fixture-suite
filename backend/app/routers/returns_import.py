@@ -1,9 +1,9 @@
 """
-退料 Excel 匯入 Router（v4.x FINAL）
-- SP-first
+退料 Excel 匯入 Router（v6 OUT 版）
+- 以 sp_material_return_v6 為唯一準則
+- 11 IN + 2 OUT
 - 支援 batch / individual / datecode
-- ✅ 對齊 sp_material_return_v4（11 個 IN 參數）
-- ✅ SP 回傳：SELECT transaction_id, message
+- validate-first，不留下失敗交易
 """
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
@@ -35,7 +35,6 @@ def ensure_fixture_exists(fixture_id: str, customer_id: str):
 
 def normalize_source_type(val: str) -> str:
     v = (val or "").strip().lower()
-    # 允許中英文（跟收料一致的容錯）
     if v in ("self_purchased", "自購"):
         return "self_purchased"
     if v in ("customer_supplied", "客供", "customer supplied"):
@@ -44,7 +43,7 @@ def normalize_source_type(val: str) -> str:
 
 
 # ============================================================
-# Excel 匯入
+# Excel 匯入（退料 v6）
 # ============================================================
 
 @router.post("/import", summary="退料 Excel 匯入")
@@ -79,103 +78,93 @@ async def import_returns(
     errors: list[str] = []
 
     # --------------------------------------------------
-    # 3️⃣ DB 操作（逐行 try/except，單列失敗不影響其他列）
+    # 3️⃣ 逐列處理（validate-first）
     # --------------------------------------------------
-    conn = db.get_conn()
-    try:
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
+    for idx, row in df.iterrows():
+        row_no = idx + 2  # Excel 實際行號
+        try:
+            fixture_id = str(row.get("fixture_id", "")).strip()
+            record_type = str(row.get("record_type", "")).strip().lower()
+            source_type = normalize_source_type(
+                str(row.get("source_type", "")).strip()
+            )
 
-        for idx, row in df.iterrows():
-            row_no = idx + 2  # Excel 實際行號（含標題列）
-            try:
-                # -------------------------
-                # 基本欄位
-                # -------------------------
-                fixture_id = str(row.get("fixture_id", "")).strip()
-                record_type = str(row.get("record_type", "")).strip().lower()
-                source_type = normalize_source_type(str(row.get("source_type", "")))
+            if not fixture_id:
+                raise ValueError("fixture_id 不可為空")
 
-                if not fixture_id:
-                    raise ValueError("fixture_id 不可為空")
+            if record_type not in ("batch", "individual", "datecode"):
+                raise ValueError("record_type 不合法")
 
-                if record_type not in ("batch", "individual", "datecode"):
-                    raise ValueError("record_type 不合法")
+            ensure_fixture_exists(fixture_id, customer_id)
 
-                if source_type not in ("self_purchased", "customer_supplied"):
-                    raise ValueError("source_type 不合法")
+            order_no = str(row.get("order_no", "")).strip() or None
+            note = str(row.get("note", "")).strip() or None
 
-                # 檢查治具存在
-                ensure_fixture_exists(fixture_id, customer_id)
+            serials_csv = None
+            datecode = None
+            quantity = None
 
-                order_no = str(row.get("order_no", "")).strip() or None
-                note = str(row.get("note", "")).strip() or None
+            # -------------------------
+            # record_type 分流（與 SP 驗證邏輯一致）
+            # -------------------------
+            if record_type in ("batch", "individual"):
+                raw = str(row.get("serials", "") or "").strip()
+                serials = [s.strip() for s in raw.split(",") if s.strip()]
+                if not serials:
+                    raise ValueError("serials 無效")
 
-                serials_csv = None
-                datecode = None
-                quantity = None
+                serials_csv = ",".join(serials)
+                quantity = len(serials)   # 對齊 v_qty 計算語意
 
-                # -------------------------
-                # record_type 分流
-                # -------------------------
-                if record_type in ("batch", "individual"):
-                    raw = str(row.get("serials", "") or "").strip()
-                    serials = [s.strip() for s in raw.split(",") if s.strip()]
-                    if not serials:
-                        raise ValueError("serials 無效")
-                    serials_csv = ",".join(serials)
+            else:  # datecode
+                datecode = str(row.get("datecode", "")).strip()
+                q = row.get("quantity")
 
-                else:  # datecode
-                    datecode = str(row.get("datecode", "")).strip()
-                    q = row.get("quantity")
+                if not datecode:
+                    raise ValueError("datecode 不可為空")
 
-                    if not datecode:
-                        raise ValueError("datecode 不可為空")
+                if q is None or pd.isna(q):
+                    raise ValueError("quantity 不可為空")
 
-                    if q is None or pd.isna(q):
-                        raise ValueError("quantity 不可為空")
+                quantity = int(q)
+                if quantity <= 0:
+                    raise ValueError("quantity 必須 > 0")
 
-                    quantity = int(q)
-                    if quantity <= 0:
-                        raise ValueError("quantity 必須 > 0")
+            # -------------------------
+            # 4️⃣ CALL sp_material_return_v6（OUT 參數）
+            # 參數順序【必須】完全一致
+            # -------------------------
+            out = db.call_sp_with_out(
+                "sp_material_return_v6",
+                [
+                    customer_id,        # p_customer_id
+                    fixture_id,         # p_fixture_id
+                    order_no,           # p_order_no
+                    operator,           # p_operator
+                    note,               # p_note
+                    created_by,         # p_created_by
+                    record_type,        # p_record_type
+                    source_type,        # p_source_type
+                    serials_csv,        # p_serials_csv
+                    datecode,           # p_datecode
+                    quantity,           # p_quantity
+                ],
+                ["o_transaction_id", "o_message"],
+            )
 
-                # -------------------------
-                # 4️⃣ CALL SP（✅ 對齊 returns.py 的 create_return）
-                # sp_material_return_v4(
-                #   customer_id, fixture_id, order_no, operator, note, created_by,
-                #   record_type, source_type, serials_csv, datecode, quantity
-                # )
-                # -------------------------
-                out = db.call_sp_with_out(
-                    "sp_material_return_v4",
-                    [
-                        customer_id,
-                        fixture_id,
-                        order_no,
-                        operator,
-                        note,
-                        created_by,
-                        record_type,
-                        source_type,
-                        serials_csv,
-                        datecode,
-                        quantity,
-                    ],
-                    ["o_transaction_id", "o_message"],
+            if not out or not out.get("o_transaction_id"):
+                raise ValueError(
+                    out.get("o_message") if out else "退料失敗"
                 )
 
-                if not out.get("o_transaction_id"):
-                    raise ValueError(out.get("o_message") or "退料失敗")
+            total_created += 1
 
-                total_created += 1
+        except Exception as e:
+            errors.append(f"第 {row_no} 行：{e}")
 
-            except Exception as e:
-                errors.append(f"第 {row_no} 行：{e}")
-
-        conn.commit()
-
-    finally:
-        conn.close()
-
+    # --------------------------------------------------
+    # 5️⃣ 回傳結果
+    # --------------------------------------------------
     return {
         "count": total_created,
         "errors": errors,
