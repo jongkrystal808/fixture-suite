@@ -5,6 +5,12 @@
 // ============================================================
 // 全域變數
 // ============================================================
+const VIEW_ALL_QUERY_SCHEMA = {
+  va_page: 1,
+  va_mode: 'all',      // all / serial / datecode
+};
+
+
 let viewAllPage = 1;
 const viewPageSize = 20;
 let viewAllPager = null;
@@ -12,21 +18,24 @@ let viewAllPager = null;
 
 // 總檢視的查詢模式：all / serial / datecode
 let viewAllMode = 'all';
+let isViewAllInitializing = false;
+
 
 document.addEventListener("DOMContentLoaded", () => {
   viewAllPager = createPagination({
     getPage: () => viewAllPage,
     setPage: v => viewAllPage = v,
     getPageSize: () => viewPageSize,
-    onPageChange: () => {
-      loadTransactionViewAll(viewAllPage);
-    },
+    onPageChange: () => loadTransactionViewAll(viewAllPage),
     els: {
       pageNow: document.getElementById("viewAllPageNow"),
       pageMax: document.getElementById("viewAllPageMax"),
     }
   });
+
+  initTransactionViewAll();
 });
+
 
 
 // ============================================================
@@ -179,10 +188,14 @@ function switchViewAllMode(mode) {
   }
 
 
-  // 重置分頁並清空表格
-  viewAllPage = 1;
-  const tbody = document.getElementById('viewAllTableBody');
-  if (tbody) tbody.innerHTML = '';
+  // 重置分頁：僅在「使用者切換模式」時才做；初始化還原狀態時不要動
+    if (!isViewAllInitializing) {
+      viewAllPage = 1;
+    }
+
+    const tbody = document.getElementById('viewAllTableBody');
+    if (tbody) tbody.innerHTML = '';
+
 }
 
 window.switchViewAllMode = switchViewAllMode;
@@ -198,6 +211,13 @@ async function loadTransactionViewAll(page = 1) {
     }
 
     viewAllPage = page;
+    if (typeof writeQueryState === 'function') {
+      writeQueryState({
+        va_page: viewAllPage,
+        va_mode: viewAllMode,
+      });
+    }
+
 
     const params = {
       skip: (page - 1) * viewPageSize,
@@ -621,16 +641,15 @@ if (window.registerCustomerRefreshHandler) {
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter') return;
 
-  // 只在「交易總檢視」可見時觸發
   const viewAllTab = document.getElementById('ttab-view-all');
   if (!viewAllTab || viewAllTab.classList.contains('hidden')) return;
 
-  // 防止 textarea / button 誤觸
   const tag = e.target?.tagName;
   if (tag === 'TEXTAREA' || tag === 'BUTTON') return;
 
   loadTransactionViewAll(1);
 });
+
 
 
 function clearViewAllFilters() {
@@ -698,6 +717,28 @@ function clearViewAllFilters() {
   // 不自動查詢（避免誤觸）
 }
 window.clearViewAllFilters = clearViewAllFilters;
+
+function initTransactionViewAll() {
+  if (typeof readQueryState !== 'function') return;
+
+  isViewAllInitializing = true;
+
+  const q = readQueryState(VIEW_ALL_QUERY_SCHEMA);
+
+  viewAllPage = Math.max(1, q.va_page || 1);
+  viewAllMode = q.va_mode || 'all';
+
+  // 套用 mode（會處理 UI 顯示），但不應該把 page 改回 1
+  switchViewAllMode(viewAllMode);
+
+  isViewAllInitializing = false;
+
+  loadTransactionViewAll(viewAllPage);
+}
+
+
+window.initTransactionViewAll = initTransactionViewAll;
+
 
 
 // ============================================================

@@ -9,11 +9,12 @@
  * ✔ 與 inventoryTab HTML 完全對齊
  */
 
-let invPage = 1;
-let invPageSize = 10;
-let invTotal = 0;
+const INV_QUERY_SCHEMA = {
+  inv_keyword: "",
+  inv_page: 1,
+  inv_page_size: 10,
+};
 
-let inventoryPager = null;
 
 
 /* ============================================================
@@ -52,43 +53,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 /* ============================================================
- * URL Query Helpers（Bookmark / Share）
- * ============================================================ */
-
-function getInvQueryFromURL() {
-  const params = new URLSearchParams(window.location.search);
-
-  return {
-    keyword: params.get("inv_keyword") || "",
-    page: Number(params.get("inv_page") || 1),
-    pageSize: Number(params.get("inv_page_size") || 10),
-  };
-}
-
-function syncInvQueryToURL() {
-  const params = new URLSearchParams();
-
-  if (qs("invSearchKeyword")?.value) {
-    params.set("inv_keyword", qs("invSearchKeyword").value.trim());
-  }
-
-  if (invPage > 1) {
-    params.set("inv_page", invPage);
-  }
-
-  if (invPageSize !== 10) {
-    params.set("inv_page_size", invPageSize);
-  }
-
-  const newURL =
-    window.location.pathname +
-    (params.toString() ? `?${params.toString()}` : "");
-
-  // 不 reload、可回上一頁
-  window.history.replaceState({}, "", newURL);
-}
-
-/* ============================================================
  * Inventory Overview（含查詢 + 分頁）
  * ============================================================ */
 
@@ -98,8 +62,12 @@ async function loadInventoryOverview(page = 1) {
   invPageSize = Number(qs("invPageSize")?.value || 10);
   const keyword = qs("invSearchKeyword")?.value.trim() || "";
 
-  // 🔗 同步到 URL（bookmark 用）
-  syncInvQueryToURL();
+  writeQueryState({
+      inv_keyword: keyword,
+      inv_page: invPage,
+      inv_page_size: invPageSize,
+    });
+
 
   const tbody = qs("inventoryTableBody");
   if (!tbody) return;
@@ -310,26 +278,100 @@ async function toggleInventoryInlineDetail(fixtureId, btn) {
     }
 
 
+    function renderInlineHistory(items) {
+      if (!items.length) {
+        return `<div class="text-gray-500">近期異動：無</div>`;
+      }
+
+      return `
+        <div>
+          <div class="font-semibold mb-2">收料 / 退料記錄</div>
+    
+          <div class="flex gap-2 mb-2">
+            <button class="btn btn-xs" onclick="filterInvHistory('all')">全部</button>
+            <button class="btn btn-xs" onclick="filterInvHistory('receipt')">只看收料</button>
+            <button class="btn btn-xs" onclick="filterInvHistory('return')">只看退料</button>
+          </div>
+    
+          <table class="w-full text-xs border-t">
+            <thead class="text-gray-500">
+              <tr>
+                <th class="py-1 text-left">類型</th>
+                <th class="py-1 text-left">日期</th>
+                <th class="py-1 text-left">數量</th>
+                <th class="py-1 text-left">單號</th>
+                <th class="py-1 text-left">內容</th>
+              </tr>
+            </thead>
+            <tbody id="invHistoryBody">
+              ${items.map(h => `
+                <tr class="border-t inv-history-row ${h.transaction_type}">
+                  <td class="py-1 ${h.transaction_type === "return" ? "text-red-600" : ""}">
+                    ${h.transaction_type === "return" ? "退料" : "收料"}
+                  </td>
+                  <td class="py-1">
+                    ${getHistoryDate(h)}
+                  </td>
+                  <td class="py-1">
+                    ${h.quantity ?? 0}
+                  </td>
+                  <td class="py-1">
+                    ${h.order_no || "-"}
+                  </td>
+                  <td class="py-1">
+                    ${h.note || "-"}
+                  </td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+
+
+
 /* ============================================================
  * Init
  * ============================================================ */
 
 function initInventoryPage() {
-  const q = getInvQueryFromURL();
+  const q = readQueryState(INV_QUERY_SCHEMA);
 
-  // 還原查詢條件
   if (qs("invSearchKeyword")) {
-    qs("invSearchKeyword").value = q.keyword;
+    qs("invSearchKeyword").value = q.inv_keyword;
   }
 
   if (qs("invPageSize")) {
-    qs("invPageSize").value = q.pageSize;
+    qs("invPageSize").value = q.inv_page_size;
   }
 
-  invPage = q.page;
-  invPageSize = q.pageSize;
+  invPage = q.inv_page;
+  invPageSize = q.inv_page_size;
 
   loadInventoryOverview(invPage);
+}
+
+
+function filterInvHistory(type) {
+  document.querySelectorAll(".inv-history-row").forEach(tr => {
+    if (type === "all") {
+      tr.style.display = "";
+    } else {
+      tr.style.display = tr.classList.contains(type) ? "" : "none";
+    }
+  });
+}
+
+
+function getHistoryDate(h) {
+  return (
+    h.transaction_date ||
+    h.date ||
+    h.created_at ||
+    "-"
+  );
 }
 
 

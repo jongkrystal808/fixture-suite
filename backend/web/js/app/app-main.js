@@ -287,7 +287,7 @@ window.__activeOverlayCloser = null;
       const tabs = [
           "ttab-register",
           "ttab-view-all",
-          "inventoryTab"   // ← 新增
+          "inventoryTab"
         ];
       const buttons = document.querySelectorAll("[data-ttab]");
 
@@ -303,7 +303,17 @@ window.__activeOverlayCloser = null;
 
       // 更新按鈕樣式
       buttons.forEach(btn => {
-        if (btn.dataset.ttab === tabId.replace("ttab-", "")) {
+        // 處理 inventoryTab 的特殊情況
+        const btnValue = btn.dataset.ttab;
+        let isMatch = false;
+
+        if (tabId === "inventoryTab" && btnValue === "inventory") {
+          isMatch = true;
+        } else if (tabId.startsWith("ttab-") && btnValue === tabId.replace("ttab-", "")) {
+          isMatch = true;
+        }
+
+        if (isMatch) {
           btn.classList.add("subtab-active");
         } else {
           btn.classList.remove("subtab-active");
@@ -323,6 +333,9 @@ window.__activeOverlayCloser = null;
       // 載入資料
       if (tabId === "ttab-view-all" && typeof window.loadTransactionViewAll === "function") {
         window.loadTransactionViewAll(1);
+      }
+      if (tabId === "inventoryTab" && typeof window.loadInventory === "function") {
+        window.loadInventory();
       }
     };
 
@@ -354,7 +367,8 @@ window.__activeOverlayCloser = null;
         if (initialTab === "transactions") {
           const ttabMap = {
             "register": "ttab-register",
-            "view-all": "ttab-view-all"
+            "view-all": "ttab-view-all",
+            "inventory": "inventoryTab"
           };
           const targetSubTab = initialSubTab || "register";
           const ttabValue = ttabMap[targetSubTab];
