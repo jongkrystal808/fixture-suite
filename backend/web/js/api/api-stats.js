@@ -62,6 +62,3 @@ window.apiGetFixtureLifespan = apiGetFixtureLifespan;
 window.apiGetMaxStations = apiGetMaxStations;
 window.apiGetModelRequirements = apiGetModelRequirements;
 
-console.log("✅ api-stats.js v4.x FINAL loaded");
-
-

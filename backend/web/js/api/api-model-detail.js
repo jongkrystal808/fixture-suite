@@ -169,5 +169,3 @@ window.apiUpdateRequirement = apiUpdateRequirement;
 window.apiDeleteRequirement = apiDeleteRequirement;
 
 window.apiGetModelDetail = apiGetModelDetail;
-
-console.log("✅ api-model-detail.js v4.x FINAL loaded");

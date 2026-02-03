@@ -60,9 +60,45 @@ async def download_models_template(
     ws = wb.active
     ws.title = "models"
 
-    ws.append(["id", "model_name", "note"])
-    ws.append(["AWK-1137C", "AWK-1137C", "備註示例"])
-    ws.append(["EDS-108S", "EDS-108S", ""])
+    # ⭐ 向下相容 + 可擴充欄位
+    ws.append([
+        "id",
+        "model_name",
+        "note",
+        "station_id",
+        "fixture_id",
+        "required_qty",
+    ])
+
+    # ── 範例 1：只匯入機種（✔ 合法）
+    ws.append([
+        "AWK-1137C",
+        "AWK-1137C",
+        "只建立機種",
+        "",
+        "",
+        "",
+    ])
+
+    # ── 範例 2：機種 + 站點 + 治具需求（✔ 合法）
+    ws.append([
+        "EDS-108S",
+        "EDS-108S",
+        "含站點與治具需求",
+        "ST01",
+        "FX-001",
+        2,
+    ])
+
+    # ── 範例 3：此站點不需要該治具（✔ 合法）
+    ws.append([
+        "EDS-108S",
+        "EDS-108S",
+        "",
+        "ST02",
+        "FX-002",
+        0,
+    ])
 
     bio = BytesIO()
     wb.save(bio)
@@ -71,8 +107,13 @@ async def download_models_template(
     return StreamingResponse(
         bio,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": 'attachment; filename="models_import_template.xlsx"'}
+        headers={
+            "Content-Disposition":
+            'attachment; filename="models_import_template.xlsx"'
+        }
     )
+
+
 
 
 # ============================================================

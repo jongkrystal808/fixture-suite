@@ -6,7 +6,7 @@
  * ✔ 新增 / 編輯 / 刪除
  * ✔ 對應 fixtureModal（index.html）
  * ✔ skip / limit（customer 由 context/header 決定）
- * ✔ owner / status 篩選
+ * ✔ owner 篩選
  */
 
 
@@ -25,6 +25,21 @@ window.apiGetOwnersSimple = apiGetOwnersSimple;
  * ============================================================ */
 
 let fxPage = 1;
+let fxPager = null;
+
+document.addEventListener("DOMContentLoaded", () => {
+  fxPager = createPagination({
+    getPage: () => fxPage,
+    setPage: v => fxPage = v,
+    getPageSize: () => Number(fxPageSizeSelect?.value || 10),
+    onPageChange: () => loadFixtureList(),
+    els: {
+      count: fxCount,
+      pageNow: fxPageNow,
+      pageMax: fxPageMax,
+    }
+  });
+});
 
 
 /* ============================================================
@@ -53,7 +68,6 @@ const fxPageMax = document.getElementById("fxPageMax");
 
 /* 查詢欄位 */
 const fxSearchInput = document.getElementById("fxSearch");
-const fxStatusFilter = document.getElementById("fxStatusFilter");
 const fxOwnerFilter = document.getElementById("fxOwnerFilter");
 const fxPageSizeSelect = document.getElementById("fxPageSize");
 
@@ -114,7 +128,6 @@ async function loadFixtureList() {
 
   const search = fxSearchInput?.value.trim() ?? "";
   const owner = fxOwnerFilter?.value || "";
-  const status = fxStatusFilter?.value || "";
   const pageSize = Number(fxPageSizeSelect?.value || 10);
 
   const params = {
@@ -124,12 +137,15 @@ async function loadFixtureList() {
 
   if (search) params.search = search;
   if (owner) params.owner_id = owner;
-  if (status) params.status_filter = status;
 
   const data = await apiListFixtures(params);
 
   renderFixtureTable(data.fixtures);
-  renderFixturePagination(data.total);
+  if (fxPager) {
+      fxPager.render(data.total);
+    }
+
+
 }
 
 
@@ -160,7 +176,6 @@ function renderFixtureTable(rows) {
     const totalQty     = qtyPurchased + qtySupplied;
 
     const storage = f.storage_location ?? "-";
-    const status  = f.status ?? "-";
     const owner   = f.owner_name ?? "-";
     const note    = f.note ?? "-";
 
@@ -198,17 +213,6 @@ function renderFixtureTable(rows) {
 
         <td class="py-2 pr-4 text-center">${storage}</td>
 
-        <td class="py-2 pr-4 text-center">
-          <span class="pill ${
-            status === "normal"   ? "pill-green" :
-            status === "scrapped" ? "pill-red"   :
-            status === "returned" ? "pill-gray"  :
-            "pill-gray"
-          }">
-            ${status}
-          </span>
-        </td>
-
         <td class="py-2 pr-4 text-center">${cycleText}</td>
         <td class="py-2 pr-4 text-center">${owner}</td>
 
@@ -233,35 +237,6 @@ function renderFixtureTable(rows) {
 
     fxTable.appendChild(tr);
   });
-}
-
-
-/* ============================================================
- * 分頁
- * ============================================================ */
-
-function renderFixturePagination(total) {
-  const pageSize = Number(fxPageSizeSelect?.value || 10);
-  const max = Math.ceil(total / pageSize) || 1;
-
-  fxCount.textContent = total;
-  fxPageMax.textContent = max;
-  fxPageNow.textContent = fxPage;
-
-  if (fxPage > max) {
-    fxPage = max;
-  }
-}
-
-function goFixturePage(action) {
-  const max = Number(fxPageMax.textContent);
-
-  if (action === "first") fxPage = 1;
-  if (action === "prev" && fxPage > 1) fxPage--;
-  if (action === "next" && fxPage < max) fxPage++;
-  if (action === "last") fxPage = max;
-
-  loadFixtureList();
 }
 
 
@@ -300,7 +275,6 @@ async function loadFixtureDetailToForm(id) {
     document.getElementById("fmStorage").value = data.storage_location || "";
     document.getElementById("fmCycle").value = data.replacement_cycle ?? 0;
     document.getElementById("fmCycleUnit").value = data.cycle_unit || "none";
-    document.getElementById("fmStatus").value = data.status || "normal";
     document.getElementById("fmOwnerId").value = data.owner_id || "";
     document.getElementById("fmNote").value = data.note || "";
   } catch (err) {
@@ -338,18 +312,14 @@ async function submitFixtureForm(e) {
     return toast("治具編號為必填", "warning");
   }
 
-  const rawStatus = document.getElementById("fmStatus").value;
-  const mappedStatus = mapStatusToBackend(rawStatus);
 
   const payload = {
       id: fixture_id, // 只有 create 時會用
       fixture_name: document.getElementById("fmFixtureName").value.trim(),
       fixture_type: document.getElementById("fmFixtureType").value.trim(),
-      serial_number: document.getElementById("fmSerialNumber").value.trim(),
       storage_location: document.getElementById("fmStorage").value.trim(),
       replacement_cycle: Number(document.getElementById("fmCycle").value),
       cycle_unit: document.getElementById("fmCycleUnit").value,
-      status: mappedStatus,
       owner_id: Number(document.getElementById("fmOwnerId").value) || null,
       note: document.getElementById("fmNote").value.trim(),
     };
@@ -422,11 +392,6 @@ fxSearchInput?.addEventListener("keydown", e => {
   }
 });
 
-fxStatusFilter?.addEventListener("change", () => {
-  fxPage = 1;
-  loadFixtureList();
-});
-
 fxOwnerFilter?.addEventListener("change", () => {
   fxPage = 1;
   loadFixtureList();
@@ -448,7 +413,6 @@ window.mmOpenModelModal = mmOpenModelModal;
 async function exportFixtures() {
   const params = {
     search: document.getElementById("fixtureSearch")?.value,
-    status: document.getElementById("fixtureStatus")?.value,
     owner_id: document.getElementById("fixtureOwner")?.value,
   };
 
@@ -587,36 +551,125 @@ window.fxDownloadFixturesTemplate = fxDownloadFixturesTemplate;
  * v4.x 標準：匯入 Excel
  * ============================================================ */
 
+/* ============================================================
+ * v4.x 標準：匯入 Excel（Fixtures）
+ * - 使用 Import Result Modal 顯示結果
+ * - 成功 / 失敗格式統一
+ * - customer 由 context/header 決定
+ * ============================================================ */
+
+/* ============================================================
+ * v4.x 標準：匯入 Excel（Fixtures）
+ * - 成功：顯示「N 行成功」
+ * - 失敗：逐行顯示錯誤原因
+ * ============================================================ */
+
 async function fxImportFixtures(file) {
   if (!file) return;
 
   if (!file.name.toLowerCase().endsWith(".xlsx")) {
-    return toast("僅支援 .xlsx Excel 檔案", "warning");
+    toast("僅支援 .xlsx Excel 檔案", "warning");
+    return;
   }
 
   if (!window.currentCustomerId) {
-    return toast("尚未選擇客戶", "warning");
+    toast("尚未選擇客戶", "warning");
+    return;
   }
 
   const fd = new FormData();
   fd.append("file", file);
 
   try {
-    await api("/fixtures/import", {
+    const res = await fetch(apiURL("/fixtures/import"), {
       method: "POST",
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+        "X-Customer-Id": window.currentCustomerId,
+      },
       body: fd,
-      rawBody: true,
     });
 
-    toast("匯入完成");
-    loadFixtureList();
+    const data = await res.json();
+
+    // ❌ 真正失敗（HTTP != 200）
+    if (!res.ok) {
+      throw { detail: data };
+    }
+
+
+    // ===== v4.x fixtures import 正確結構 =====
+    const fixtures = data.fixtures || {};
+    const imported = fixtures.imported || 0;
+    const skipped = fixtures.skipped || 0;
+    const successRows = fixtures.success_rows || [];
+    const skippedRows = fixtures.skipped_rows || [];
+    const errors = Array.isArray(res.errors) ? res.errors : [];
+
+    // ===== 狀態 1：成功 =====
+    if (imported > 0) {
+      openImportResultModal({
+        title: "✅ 治具匯入完成",
+        summary: `
+          <div class="space-y-1">
+            <div>成功：${imported} 行成功匯入</div>
+            ${
+              skipped > 0
+                ? `<div>略過：${skipped} 行（第 ${skippedRows.join("、")} 行）</div>`
+                : ""
+            }
+            ${
+              successRows.length
+                ? `<div class="text-gray-500">成功行號：第 ${successRows.join("、")} 行</div>`
+                : ""
+            }
+          </div>
+        `,
+        errors: ""
+      });
+
+      loadFixtureList();
+      return;
+    }
+
+    // ===== 狀態 2：無有效資料（warning）=====
+    openImportResultModal({
+      title: "⚠️ 沒有匯入任何治具資料",
+      summary: `
+        <div class="space-y-1">
+          <div>未匯入任何有效治具資料</div>
+          ${
+            skipped > 0
+              ? `<div>略過：${skipped} 行（第 ${skippedRows.join("、")} 行）</div>`
+              : ""
+          }
+          ${
+            res.warning
+              ? `<div class="text-gray-500">${res.warning}</div>`
+              : ""
+          }
+        </div>
+      `,
+      errors: ""
+    });
+
   } catch (err) {
     console.error(err);
-    toast(err.message || "匯入治具失敗", "error");
+
+    const detail = err?.detail || {};
+    const errors = Array.isArray(detail.errors) ? detail.errors : [];
+
+    openImportResultModal({
+      title: "❌ 治具匯入失敗",
+      summary: `
+        <div>失敗：共 ${errors.length} 行錯誤，資料已全部回復</div>
+      `,
+      errors: errors.join("\n")
+    });
   }
 }
 
-window.fxImportFixtures = fxImportFixtures;
+
 
 function fxImportFixturesXlsx(file) {
   if (!file) return;
@@ -626,16 +679,19 @@ window.fxImportFixturesXlsx = fxImportFixturesXlsx;
 
 
 /* ============================================================
- * Status mapping（前端 → 後端 enum）
+ * Import Result Modal（共用）
  * ============================================================ */
 
-function mapStatusToBackend(status) {
-  const map = {
-    normal: "normal",
-    repair: "repair",
-    scrap: "scrap",
-    inactive: "inactive",
-  };
+function openImportResultModal({ title, summary, errors }) {
+  document.getElementById("importModalTitle").innerText = title || "匯入結果";
+  document.getElementById("importModalSummary").innerHTML = summary || "";
+  document.getElementById("importModalErrors").innerText = errors || "";
 
-  return map[status] || "normal";
+  document.getElementById("importResultModal").classList.remove("hidden");
 }
+
+function closeImportResultModal() {
+  document.getElementById("importResultModal").classList.add("hidden");
+}
+
+window.closeImportResultModal = closeImportResultModal;

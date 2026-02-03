@@ -97,4 +97,3 @@ window.apiCreateReceipt = apiCreateReceipt;
 window.apiImportReceiptsXlsx = apiImportReceiptsXlsx;
 window.apiExportReceiptXlsx = apiExportReceiptXlsx;
 
-console.log("✅ api-receipts.js v4.x FINAL loaded");

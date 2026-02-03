@@ -287,3 +287,113 @@ async function copySerialOutput() {
   }
 }
 window.copySerialOutput = copySerialOutput;
+
+
+// ============================================================
+// 序號履歷 Drawer
+// ============================================================
+async function apiGetSerialHistory(fixtureId, serial) {
+  return api(`/transactions/fixtures/${encodeURIComponent(fixtureId)}/serials/${encodeURIComponent(serial)}/history`);
+}
+
+async function openSerialDetail(fixtureId, serial) {
+  if (!fixtureId || !serial || serial === "-" || serial === "null") {
+    return;
+  }
+
+  try {
+    const data = await apiGetSerialHistory(fixtureId, serial);
+    renderSerialDetailDrawer(data);
+    openSerialDetailDrawer();
+  } catch (e) {
+    console.error(e);
+    toast("載入序號履歷失敗", "error");
+  }
+}
+
+function openSerialDetailDrawer() {
+  document.getElementById("serialDetailOverlay")?.classList.remove("hidden");
+  document.getElementById("serialDetailDrawer")?.classList.remove("translate-x-full");
+
+  // 登記 ESC 關閉
+  window.__activeOverlayCloser = () => closeSerialDetailDrawer();
+}
+
+function closeSerialDetailDrawer() {
+  document.getElementById("serialDetailOverlay")?.classList.add("hidden");
+  document.getElementById("serialDetailDrawer")?.classList.add("translate-x-full");
+
+  if (window.__activeOverlayCloser === closeSerialDetailDrawer) {
+    window.__activeOverlayCloser = null;
+  }
+}
+
+function renderSerialDetailDrawer(data) {
+  const s = data?.serial || {};
+
+  document.getElementById("serialDetailTitle").textContent = s.serial_number || "-";
+  document.getElementById("sdFixture").textContent = s.fixture_id || "-";
+  document.getElementById("sdStatus").textContent = s.status || "-";
+  document.getElementById("sdSource").textContent = s.source_type || "-";
+  document.getElementById("sdTotalUses").textContent = s.total_uses ?? "-";
+
+  // 收 / 退料記錄
+  const txBody = document.getElementById("sdTransactions");
+  if (txBody) {
+    txBody.innerHTML = "";
+    (data?.transactions || []).forEach((r) => {
+      const orderNo = r.order_no || "-";
+      txBody.innerHTML += `
+        <tr>
+          <td class="py-2 pr-4">${r.transaction_date ? new Date(r.transaction_date).toLocaleString() : "-"}</td>
+          <td class="py-2 pr-4">${r.transaction_type || "-"}</td>
+          <td class="py-2 pr-4">${orderNo}</td>
+          <td class="py-2 pr-4">${r.operator || "-"}</td>
+        </tr>
+      `;
+    });
+  }
+
+  // 使用紀錄
+  const usageBody = document.getElementById("sdUsages");
+  if (usageBody) {
+    usageBody.innerHTML = "";
+    (data?.usages || []).forEach((u) => {
+      usageBody.innerHTML += `
+        <tr>
+          <td class="py-2 pr-4">${u.used_at ? new Date(u.used_at).toLocaleString() : "-"}</td>
+          <td class="py-2 pr-4">${u.model_id || "-"}</td>
+          <td class="py-2 pr-4">${u.station_id || "-"}</td>
+          <td class="py-2 pr-4">${u.use_count ?? "-"}</td>
+        </tr>
+      `;
+    });
+  }
+
+  // 更換紀錄
+  const repBody = document.getElementById("sdReplacements");
+  if (repBody) {
+    repBody.innerHTML = "";
+    (data?.replacements || []).forEach((r) => {
+      repBody.innerHTML += `
+        <tr>
+          <td class="py-2 pr-4">${r.created_at ? new Date(r.created_at).toLocaleString() : "-"}</td>
+          <td class="py-2 pr-4">${r.usage_before ?? "-"}</td>
+          <td class="py-2 pr-4">${r.usage_after ?? "-"}</td>
+        </tr>
+      `;
+    });
+  }
+}
+
+// 點遮罩關閉
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById("serialDetailOverlay")?.addEventListener("click", (e) => {
+    if (e.target?.id === "serialDetailOverlay") {
+      closeSerialDetailDrawer();
+    }
+  });
+});
+
+window.openSerialDetail = openSerialDetail;
+window.closeSerialDetailDrawer = closeSerialDetailDrawer;

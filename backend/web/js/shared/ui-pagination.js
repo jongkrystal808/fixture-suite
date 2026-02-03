@@ -1,42 +1,67 @@
-/**
- * ui-pagination.js
- * Smart Pagination v2（共用）
+/* ============================================================
+ * UI Pagination Controller (v4.x)
+ * ============================================================
+ *
+ * 用法：
+ * const pager = createPagination({
+ *   getPage: () => fxPage,
+ *   setPage: v => fxPage = v,
+ *   getPageSize: () => Number(fxPageSizeSelect.value),
+ *   onPageChange: () => loadFixtureList(),
+ *   els: {
+ *     count: fxCount,
+ *     pageNow: fxPageNow,
+ *     pageMax: fxPageMax,
+ *   }
+ * })
+ *
+ * pager.render(total)
+ * pager.go('next')
  */
 
-function renderPagination(containerId, total, page, pageSize, onPageChange) {
-  const totalPages = Math.ceil(total / pageSize);
-  const box = document.getElementById(containerId);
-  box.innerHTML = "";
-  if (totalPages <= 1) return;
+function createPagination(options) {
+  const {
+    getPage,
+    setPage,
+    getPageSize,
+    onPageChange,
+    els,
+  } = options;
 
-  function btn(p, label = null, disabled = false, active = false) {
-    const b = document.createElement("button");
-    b.textContent = label || p;
-    b.className = "btn btn-sm mx-1 " + (active ? "btn-primary" : "btn-outline");
+  if (!getPage || !setPage || !getPageSize || !onPageChange) {
+    throw new Error("[pagination] missing required options");
+  }
 
-    if (disabled) {
-      b.disabled = true;
-      b.classList.add("opacity-50", "cursor-not-allowed");
-    } else {
-      b.onclick = () => onPageChange(p);
+  function render(total) {
+    const pageSize = Number(getPageSize()) || 10;
+    const max = Math.max(1, Math.ceil(total / pageSize));
+
+    if (els?.count)   els.count.textContent = total;
+    if (els?.pageMax) els.pageMax.textContent = max;
+
+    let page = getPage();
+    if (page > max) {
+      page = max;
+      setPage(page);
     }
 
-    return b;
+    if (els?.pageNow) els.pageNow.textContent = page;
   }
 
-  // 上一頁
-  box.appendChild(btn(page - 1, "‹", page === 1));
+  function go(action) {
+    const max = Number(els?.pageMax?.textContent || 1);
+    let page = getPage();
 
-  let start = Math.max(1, page - 2);
-  let end = Math.min(totalPages, start + 4);
-  if (end - start < 4) start = Math.max(1, end - 4);
+    if (action === "first") page = 1;
+    if (action === "prev" && page > 1) page--;
+    if (action === "next" && page < max) page++;
+    if (action === "last") page = max;
 
-  for (let p = start; p <= end; p++) {
-    box.appendChild(btn(p, String(p), false, p === page));
+    setPage(page);
+    onPageChange();
   }
 
-  // 下一頁
-  box.appendChild(btn(page + 1, "›", page === totalPages));
+  return { render, go };
 }
 
-window.renderPagination = renderPagination;
+window.createPagination = createPagination;

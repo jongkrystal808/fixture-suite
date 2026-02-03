@@ -419,3 +419,60 @@ dialog.inventory-modal .modal-body {
   padding: 6px 16px;
   font-size: 14px;
 }
+
+/* ================================
+   Hover Tooltip（tx-hover）
+================================ */
+.tx-hover {
+  position: relative;
+  cursor: pointer;
+}
+
+.tx-hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 120%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(17, 24, 39, 0.95); /* gray-900 */
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .15s ease, transform .15s ease;
+  z-index: 50;
+}
+
+.tx-hover:hover::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(-2px);
+}
+
+
+/* ================================
+ * Inventory inline collapse animation
+ * ================================ */
+
+.inv-inline-wrapper {
+  overflow: hidden;
+  transition:
+    max-height 0.25s ease,
+    opacity 0.2s ease,
+    transform 0.25s ease;
+}
+
+.inv-inline-collapsed {
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+.inv-inline-expanded {
+  max-height: 800px; /* 足夠大即可 */
+  opacity: 1;
+  transform: translateY(0);
+}
+

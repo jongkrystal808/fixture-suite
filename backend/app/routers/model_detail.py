@@ -581,33 +581,28 @@ async def get_model_detail(
         (model_id, customer_id)
     )
 
-    # 4️⃣ 最大可開站數（瓶頸計算）
-    max_map = {}
 
-    for r in requirements:
-        sid = r["station_id"]
-        req_qty = r["required_qty"]
-        avail_qty = r["in_stock_qty"] or 0
-
-        if req_qty <= 0:
-            continue
-
-        max_open = avail_qty // req_qty
-
-        if sid not in max_map or max_open < max_map[sid]["max_station"]:
-            max_map[sid] = {
-                "station_id": sid,
-                "station_name": r["station_name"],
-                "max_station": max_open,
-                "bottleneck_fixture_id": r["fixture_id"],
-                "bottleneck_qty": avail_qty,
-            }
+    # 4️⃣ 最大可開站數（直接查 View）
+    capacities = db.execute_query(
+        """
+        SELECT
+            station_id,
+            station_name,
+            max_available_stations,
+            limiting_fixtures
+        FROM view_model_max_stations
+        WHERE customer_id = %s
+          AND model_id = %s
+        ORDER BY station_id
+        """,
+        (customer_id, model_id)
+    )
 
     return {
         "model": model,
         "stations": stations,
         "requirements": requirements,
-        "capacity": list(max_map.values()),
+        "capacity": capacities,
     }
 
 

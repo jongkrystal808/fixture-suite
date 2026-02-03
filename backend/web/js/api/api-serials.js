@@ -97,5 +97,3 @@ window.apiNormalizeSerials = apiNormalizeSerials;
 window.apiValidateSerials = apiValidateSerials;
 window.apiDetectSerialPrefix = apiDetectSerialPrefix;
 window.apiCalculateSerialRange = apiCalculateSerialRange;
-
-console.log("✅ api-serials.js v4.x FINAL loaded");

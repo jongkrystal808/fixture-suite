@@ -1,9 +1,11 @@
 """
-治具 Excel 匯入 Router（Step1 最終版）
-- 單一路徑 /fixtures/import
+治具 Excel 匯入 Router（v4.x FINAL）
+- 路徑：POST /fixtures/import
 - Header-based customer context
-- 支援新增 / 更新
-- 回傳 imported / updated / skipped / errors
+- 僅允許「新增治具」
+- fixture_id 已存在 → 視為錯誤
+- 任一列錯誤 → 全部 rollback
+- 匯入回報格式完全對齊 models import
 """
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
@@ -19,12 +21,43 @@ from backend.app.dependencies import (
 router = APIRouter(prefix="/fixtures", tags=["Fixtures Import"])
 
 
+# ============================================================
+# Utils
+# ============================================================
+
+def compress_rows(rows: list[int]) -> list[str]:
+    """
+    將 [2,3,4,7,9] 壓縮為 ['2-4', '7', '9']
+    """
+    if not rows:
+        return []
+
+    rows = sorted(set(rows))
+    result = []
+
+    start = prev = rows[0]
+    for r in rows[1:]:
+        if r == prev + 1:
+            prev = r
+            continue
+        result.append(f"{start}-{prev}" if start != prev else f"{start}")
+        start = prev = r
+
+    result.append(f"{start}-{prev}" if start != prev else f"{start}")
+    return result
+
+
+# ============================================================
+# Router
+# ============================================================
+
 @router.post("/import", summary="匯入治具（XLSX）")
 async def import_fixtures_xlsx(
     file: UploadFile = File(...),
     user=Depends(get_current_user),
     customer_id: str = Depends(get_current_customer_id),
 ):
+
     # =================================================
     # 1️⃣ 基本檢查
     # =================================================
@@ -43,36 +76,41 @@ async def import_fixtures_xlsx(
     ws = wb["fixtures"]
 
     # =================================================
-    # 2️⃣ Header 檢查
+    # 2️⃣ Header 檢查（必填 / 選填）
     # =================================================
     header = [str(c.value).strip() if c.value else "" for c in ws[1]]
-    required = [
-        "id",
-        "fixture_name",
+
+    REQUIRED_COLS = ["id", "fixture_name"]
+    OPTIONAL_COLS = [
         "fixture_type",
         "storage_location",
         "replacement_cycle",
         "cycle_unit",
-        "status",
         "note",
     ]
 
-    for col in required:
+    for col in REQUIRED_COLS:
         if col not in header:
             raise HTTPException(
                 status_code=400,
                 detail=f"缺少必要欄位：{col}"
             )
 
-    idx = {name: header.index(name) for name in required}
+    # 建立 idx（僅存在於 Excel 的欄位才會出現）
+    idx = {name: header.index(name) for name in header}
 
     # =================================================
-    # 3️⃣ 初始化
+    # 3️⃣ 初始化匯入回報（對齊 models import）
     # =================================================
-    imported = 0
-    updated = 0
-    skipped = 0
-    errors = []
+    result = {
+        "fixtures": {
+            "imported": 0,
+            "skipped": 0,
+            "success_rows": [],
+            "skipped_rows": [],
+        },
+        "errors": [],
+    }
 
     conn = db.get_conn()
     cursor = conn.cursor()
@@ -86,132 +124,159 @@ async def import_fixtures_xlsx(
             start=2
         ):
             try:
-                if not row or not row[idx["id"]] or not row[idx["fixture_name"]]:
-                    skipped += 1
+                # 空列
+                if not row:
+                    result["fixtures"]["skipped"] += 1
+                    result["fixtures"]["skipped_rows"].append(row_no)
                     continue
 
-                fixture_id = str(row[idx["id"]]).strip()
-                fixture_name = str(row[idx["fixture_name"]]).strip()
+                # ---------- 必填欄位 ----------
+                fixture_id = str(row[idx["id"]] or "").strip()
+                fixture_name = str(row[idx["fixture_name"]] or "").strip()
 
-                fixture_type = row[idx["fixture_type"]] or ""
-                storage_location = row[idx["storage_location"]] or ""
-                replacement_cycle = row[idx["replacement_cycle"]]
-                cycle_unit = (row[idx["cycle_unit"]] or "uses").lower()
-                note = row[idx["note"]] or ""
-
-                # ---------- status 正規化 ----------
-                raw_status = str(row[idx["status"]] or "").strip().lower()
-                status_map = {
-                    "normal": "normal",
-                    "returned": "returned",
-                    "scrapped": "scrapped",
-                    "正常": "normal",
-                    "返還": "returned",
-                    "報廢": "scrapped",
-                }
-
-                status = status_map.get(raw_status)
-                if not status:
-                    errors.append(f"第 {row_no} 行：status 不合法")
+                if not fixture_id or not fixture_name:
+                    result["fixtures"]["skipped"] += 1
+                    result["fixtures"]["skipped_rows"].append(row_no)
                     continue
 
-                # ---------- cycle_unit 合法化 ----------
+                # ---------- 選填欄位（安全讀取） ----------
+                fixture_type = (
+                    str(row[idx["fixture_type"]]).strip()
+                    if "fixture_type" in idx and row[idx["fixture_type"]] is not None
+                    else ""
+                )
+
+                storage_location = (
+                    str(row[idx["storage_location"]]).strip()
+                    if "storage_location" in idx and row[idx["storage_location"]] is not None
+                    else ""
+                )
+
+                replacement_cycle = (
+                    int(row[idx["replacement_cycle"]])
+                    if "replacement_cycle" in idx and row[idx["replacement_cycle"]] is not None
+                    else None
+                )
+
+                cycle_unit = (
+                    str(row[idx["cycle_unit"]]).strip().lower()
+                    if "cycle_unit" in idx and row[idx["cycle_unit"]] is not None
+                    else "uses"
+                )
+
+                note = (
+                    str(row[idx["note"]]).strip()
+                    if "note" in idx and row[idx["note"]] is not None
+                    else ""
+                )
+
+                # ---------- 驗證 ----------
                 if cycle_unit not in ("uses", "days", "none"):
-                    errors.append(f"第 {row_no} 行：cycle_unit 不合法")
-                    continue
+                    raise ValueError("cycle_unit 必須是 uses / days / none")
 
-                # -----------------------------
-                # 是否存在
-                # -----------------------------
+                if cycle_unit == "none":
+                    replacement_cycle = None
+
+                # ---------- 不允許已存在 ----------
                 cursor.execute(
-                    "SELECT id FROM fixtures WHERE customer_id=%s AND id=%s",
+                    """
+                    SELECT 1 FROM fixtures
+                    WHERE customer_id=%s AND id=%s
+                    """,
                     (customer_id, fixture_id)
                 )
-                exist = cursor.fetchone()
+                if cursor.fetchone():
+                    raise ValueError(
+                        f"治具編號 {fixture_id} 已存在，禁止重複匯入"
+                    )
 
-                # -----------------------------
-                # 更新 / 新增
-                # -----------------------------
-                if exist:
-                    cursor.execute(
-                        """
-                        UPDATE fixtures
-                        SET
-                            fixture_name=%s,
-                            fixture_type=%s,
-                            storage_location=%s,
-                            replacement_cycle=%s,
-                            cycle_unit=%s,
-                            status=%s,
-                            note=%s
-                        WHERE customer_id=%s AND id=%s
-                        """,
-                        (
-                            fixture_name,
-                            fixture_type,
-                            storage_location,
-                            replacement_cycle,
-                            cycle_unit,
-                            status,
-                            note,
-                            customer_id,
-                            fixture_id,
-                        )
+                # ---------- INSERT ----------
+                cursor.execute(
+                    """
+                    INSERT INTO fixtures (
+                        customer_id,
+                        id,
+                        fixture_name,
+                        fixture_type,
+                        storage_location,
+                        replacement_cycle,
+                        cycle_unit,
+                        note
                     )
-                    updated += 1
-                else:
-                    cursor.execute(
-                        """
-                        INSERT INTO fixtures (
-                            customer_id,
-                            id,
-                            fixture_name,
-                            fixture_type,
-                            storage_location,
-                            replacement_cycle,
-                            cycle_unit,
-                            status,
-                            note
-                        )
-                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                        """,
-                        (
-                            customer_id,
-                            fixture_id,
-                            fixture_name,
-                            fixture_type,
-                            storage_location,
-                            replacement_cycle,
-                            cycle_unit,
-                            status,
-                            note,
-                        )
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                    """,
+                    (
+                        customer_id,
+                        fixture_id,
+                        fixture_name,
+                        fixture_type,
+                        storage_location,
+                        replacement_cycle,
+                        cycle_unit,
+                        note,
                     )
-                    imported += 1
+                )
+
+                result["fixtures"]["imported"] += 1
+                result["fixtures"]["success_rows"].append(row_no)
 
             except Exception as e:
-                errors.append(f"第 {row_no} 行：{str(e)}")
+                result["errors"].append(
+                    f"第 {row_no} 行：{str(e)}"
+                )
 
         # =================================================
-        # 5️⃣ Commit
+        # 5️⃣ 無有效資料（非錯誤）
         # =================================================
+        if (
+                result["fixtures"]["imported"] == 0
+                and not result["errors"]
+        ):
+            conn.rollback()
+            return {
+                "message": "未匯入任何有效治具資料",
+                "fixtures": {
+                    "imported": 0,
+                    "skipped": result["fixtures"]["skipped"],
+                    "success_rows": [],
+                    "skipped_rows": compress_rows(
+                        result["fixtures"]["skipped_rows"]
+                    ),
+                },
+                "errors": [],
+                "warning": "檔案中沒有可匯入的有效資料列",
+            }
+
+        if result["errors"]:
+            conn.rollback()
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "message": "匯入失敗，資料未寫入",
+                    **result,
+                }
+            )
+
         conn.commit()
-
-    except Exception:
-        conn.rollback()
-        raise
 
     finally:
         cursor.close()
         conn.close()
 
     # =================================================
-    # 6️⃣ 回傳結果
+    # 6️⃣ 成功回傳（models import 風格）
     # =================================================
     return {
         "message": "匯入完成",
-        "imported": imported,
-        "updated": updated,
-        "skipped": skipped,
-        "errors": errors,
+        "fixtures": {
+            "imported": result["fixtures"]["imported"],
+            "skipped": result["fixtures"]["skipped"],
+            "success_rows": compress_rows(
+                result["fixtures"]["success_rows"]
+            ),
+            "skipped_rows": compress_rows(
+                result["fixtures"]["skipped_rows"]
+            ),
+        },
+        "errors": [],
     }

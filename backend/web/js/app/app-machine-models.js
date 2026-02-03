@@ -721,10 +721,6 @@ async function mmDownloadModelsTemplate() {
 window.mmDownloadModelsTemplate = mmDownloadModelsTemplate;
 
 async function mmImportModels(file) {
-  console.log("📦 file =", file);
-  console.log("📄 file.name =", file?.name);
-  console.log("📄 file.type =", file?.type);
-
   if (!file) return;
 
   if (!file.name.toLowerCase().endsWith(".xlsx")) {
@@ -757,22 +753,60 @@ async function mmImportModels(file) {
       data = null;
     }
 
+    // =========================
+    // ❌ 真正失敗（HTTP 400+）
+    // =========================
     if (!res.ok) {
-      throw new Error(data?.detail || "匯入失敗");
+      const errors = data?.errors || [];
+
+      // 特別補 required_qty 說明
+      const hasQtyError = errors.some(e =>
+        String(e).includes("required_qty")
+      );
+
+      if (hasQtyError) {
+        errors.unshift("required_qty 必須 >= 0");
+      }
+
+      openImportResultModal({
+        title: "❌ 機種匯入失敗",
+        summary: `<div>匯入失敗，資料未寫入</div>`,
+        errors: errors.join("\n"),
+      });
+      return;
     }
 
-    toast(
-      `匯入完成：新增 ${data?.imported ?? 0} 筆、更新 ${data?.updated ?? 0} 筆、跳過 ${data?.skipped ?? 0} 筆`
-    );
+    // =========================
+    // ✅ 成功（含 update）
+    // =========================
+    const m = data.models || {};
+    const msf = data.model_station_fixture || {};
 
+    const successCount =
+      (m.imported || 0) +
+      (m.updated || 0) +
+      (msf.imported || 0) +
+      (msf.updated || 0);
+
+    // 🔕 成功 → 不跳 modal，只 toast
+    toast(`匯入完成，共成功處理 ${successCount} 筆（含更新）`);
+
+    // 🔄 只刷新機種清單
     await mmLoadModelList();
 
   } catch (err) {
     console.error(err);
-    toast(err.message || "匯入失敗", "error");
+
+    openImportResultModal({
+      title: "❌ 機種匯入失敗",
+      summary: `<div>系統錯誤，請稍後再試</div>`,
+      errors: [err.message || "未知錯誤"].join("\n"),
+    });
   }
 }
+
 window.mmImportModels = mmImportModels;
+
 
 function mmImportModelsXlsx(file) {
   if (!file) return;

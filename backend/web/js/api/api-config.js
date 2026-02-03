@@ -26,12 +26,6 @@ function getToken() {
  * ============================================================ */
 function api(path, options = {}) {
   const token = getToken();
-    console.log('[api debug]', {
-    path,
-    token,
-    skipAuth: options.skipAuth,
-    willAttachAuth: !options.skipAuth && !!token
-  });
   // ----------------------------------------
   // 1️⃣ URL + Query Params
   // ----------------------------------------

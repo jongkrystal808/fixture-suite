@@ -126,4 +126,3 @@ window.apiUpdateStation = apiUpdateStation;
 window.apiDeleteStation = apiDeleteStation;
 window.apiListStationsSimple = apiListStationsSimple;
 
-console.log("✅ api-stations.js v4.x FINAL loaded");

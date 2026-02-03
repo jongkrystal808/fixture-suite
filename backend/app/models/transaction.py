@@ -1,6 +1,8 @@
 """
-收料 / 退料 資料模型 (v4.0)
+收料 / 退料 資料模型 (v4.1)
 SP-first 設計：Model 僅作為 SP 參數鏡像
+- 新增 transaction_type（用於 receipt / return 分流）
+- 不影響既有 record_type / serial / datecode 驗證
 """
 
 from typing import Optional, List
@@ -12,6 +14,11 @@ from enum import Enum
 # ============================================================
 # ENUM
 # ============================================================
+
+class TransactionType(str, Enum):
+    RECEIPT = "receipt"
+    RETURN = "return"
+
 
 class RecordType(str, Enum):
     BATCH = "batch"
@@ -29,6 +36,9 @@ class SourceType(str, Enum):
 # ============================================================
 
 class TransactionCreate(BaseModel):
+    # ⭐ 關鍵：新增交易方向（收 / 退）
+    transaction_type: TransactionType
+
     fixture_id: str
     order_no: Optional[str] = None
     operator: Optional[str] = None
@@ -43,6 +53,10 @@ class TransactionCreate(BaseModel):
     # datecode 模式
     datecode: Optional[str] = None
     quantity: Optional[int] = None
+
+    # --------------------------------------------------------
+    # Validators
+    # --------------------------------------------------------
 
     @validator("serials", always=True)
     def validate_serials(cls, v, values):
@@ -80,6 +94,7 @@ class TransactionCreate(BaseModel):
 
 class TransactionResponse(BaseModel):
     id: int
+    transaction_type: TransactionType
     record_type: RecordType
     fixture_id: str
     order_no: Optional[str]

@@ -64,12 +64,6 @@ async function loadUndurableFixtures() {
     // 相容：後端可能回 array 或 { items, total }
     const rows = data?.items || data || [];
     const total = data?.total ?? rows.length;
-    console.log("[undurable-pagination-check]", {
-      total,
-      rowsLength: rows.length,
-      page: lifespanPage,
-      pageSize: lifespanPageSize
-    });
 
     renderUndurableTable(rows);
 

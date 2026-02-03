@@ -141,4 +141,3 @@ window.apiBatchReplacementLogs = apiBatchReplacementLogs;
 window.apiDeleteReplacementLog = apiDeleteReplacementLog;
 window.apiImportReplacementLogsXlsx = apiImportReplacementLogsXlsx;
 
-console.log("✅ api-replacement.js v4.x FINAL loaded");

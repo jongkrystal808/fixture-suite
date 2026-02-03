@@ -204,7 +204,6 @@ function refreshModulesAfterCustomerChange() {
   if (!activeTab) return;
 
   const tabId = activeTab.id;
-  console.log("[customer] refresh for tab:", tabId);
 
   switch (tabId) {
     case "tab-dashboard":
@@ -285,4 +284,3 @@ window.switchCustomerFromHeader = switchCustomerFromHeader;
 window.confirmCustomerSelection = confirmCustomerSelection;
 window.hideCustomerHeaderSelect = hideCustomerHeaderSelect;
 
-console.log("✅ customer-context.js v4.x FINAL loaded");

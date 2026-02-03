@@ -27,33 +27,40 @@ async def view_all_transactions(
     serial: Optional[str] = Query(None),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
+    query_mode: Optional[str] = Query(None),
 
     skip: int = Query(0),
     limit: int = Query(200),
     customer_id: str = Depends(get_current_customer_id),
     user=Depends(get_current_user)
 ):
-    where = ["customer_id = %s"]
+    where = ["e.customer_id = %s"]
     params = [customer_id]
 
+    # ============================================================
+    # query_mode 控制（只在這裡鎖語意）
+    # ============================================================
+    if query_mode == "datecode":
+        where.append("e.record_type = 'datecode'")
+
     if fixture_id:
-        where.append("fixture_id LIKE %s")
+        where.append("e.fixture_id LIKE %s")
         params.append(f"%{fixture_id}%")
 
     if operator:
-        where.append("operator LIKE %s")
+        where.append("e.operator LIKE %s")
         params.append(f"%{operator}%")
 
     if transaction_type in ("receipt", "return"):
-        where.append("transaction_type = %s")
+        where.append("e.transaction_type = %s")
         params.append(transaction_type)
 
     if date_from:
-        where.append("transaction_date >= %s")
+        where.append("e.transaction_date >= %s")
         params.append(date_from)
 
     if date_to:
-        where.append("transaction_date <= %s")
+        where.append("e.transaction_date <= %s")
         params.append(date_to)
 
     # 🔍 serial 查詢（仍然需要 EXISTS）
@@ -72,20 +79,29 @@ async def view_all_transactions(
 
     sql = f"""
         SELECT
-            transaction_id AS id,
-            transaction_date,
-            transaction_type,
-            fixture_id,
-            order_no,
-            record_type,
-            source_type,
-            operator,
-            note,
-            display_quantity,
-            display_quantity_text
-        FROM v_material_transactions_event
+            e.transaction_id AS id,
+            e.transaction_date,
+            e.transaction_type,
+            e.fixture_id,
+            e.order_no,
+            e.record_type,
+            e.source_type,
+            e.operator,
+            e.note,
+            e.display_quantity,
+            e.display_quantity_text,
+        
+            -- ★ 新增：datecode（只對 datecode record 有值）
+            fdt.datecode
+        
+        FROM v_material_transactions_event e
+        
+        LEFT JOIN fixture_datecode_transactions fdt
+          ON fdt.transaction_id = e.transaction_id
+        
         WHERE {where_sql}
-        ORDER BY transaction_date DESC, transaction_id DESC
+        
+        ORDER BY e.transaction_date DESC, e.transaction_id DESC
         LIMIT %s OFFSET %s
     """
 
@@ -94,7 +110,7 @@ async def view_all_transactions(
     total = db.execute_query(
         f"""
         SELECT COUNT(*) AS total
-        FROM v_material_transactions_event
+        FROM v_material_transactions_event e
         WHERE {where_sql}
         """,
         tuple(params)
@@ -515,3 +531,80 @@ async def export_summary(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
+
+
+
+
+@router.get("/{transaction_id}/detail")
+def get_transaction_detail(
+    transaction_id: int,
+    customer_id: str = Depends(get_current_customer_id),
+):
+    """
+    交易明細（hover / drawer 共用）
+    - 一筆交易展開為多列 item
+    - serial / datecode 皆支援
+    """
+
+    rows = db.execute_query(
+        """
+        SELECT
+            transaction_id,
+            transaction_type,
+            record_type,
+            transaction_date,
+            customer_id,
+            fixture_id,
+            order_no,
+            source_type,
+            operator,
+            note,
+            total_quantity,
+            created_at,
+
+            item_id,
+            serial_number,
+            datecode,
+            item_quantity,
+            serial_status,
+            hover_item_text
+        FROM view_material_transaction_details
+        WHERE transaction_id = %s
+          AND customer_id = %s
+        ORDER BY
+            serial_number IS NULL,
+            serial_number,
+            datecode
+        """,
+        (transaction_id, customer_id),
+    )
+
+    if not rows:
+        raise HTTPException(
+            status_code=404,
+            detail="交易不存在或不屬於目前客戶",
+        )
+
+    # =========================
+    # Header（共用資訊）
+    # =========================
+    header = rows[0]
+
+    return {
+        "transaction_id": header["transaction_id"],
+        "transaction_type": header["transaction_type"],
+        "record_type": header["record_type"],
+        "transaction_date": header["transaction_date"],
+        "fixture_id": header["fixture_id"],
+        "order_no": header["order_no"],
+        "source_type": header["source_type"],
+        "operator": header["operator"],
+        "note": header["note"],
+        "total_quantity": header["total_quantity"],
+        "created_at": header["created_at"],
+
+        # =========================
+        # 明細 rows（hover / drawer 自由使用）
+        # =========================
+        "items": rows,
+    }

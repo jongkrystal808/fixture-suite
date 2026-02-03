@@ -1,0 +1,76 @@
+<!-- =========================
+     Import Result Modal
+========================= -->
+<div id="importResultModal" class="hidden">
+  <div class="import-modal-backdrop"></div>
+  <div class="import-modal">
+    <h3 id="importModalTitle">匯入結果</h3>
+
+    <div class="import-modal-summary" id="importModalSummary"></div>
+
+    <pre class="import-modal-errors" id="importModalErrors"></pre>
+
+    <div class="import-modal-actions">
+      <button type="button" onclick="closeImportResultModal()">確認</button>
+    </div>
+  </div>
+</div>
+
+
+
+<!-- 🔍 搜尋 + 分頁：同一行 -->
+<div class="flex items-center justify-between gap-4 mb-4">
+
+  <!-- 左側：搜尋 -->
+  <div class="flex items-center gap-4">
+    <div>
+      <span class="query-label">治具搜尋：</span>
+      <input id="fixtureSearch"
+             class="query-input"
+             placeholder="輸入治具編號 / 名稱"
+             oninput="
+               fixtureQueryPage = 1;
+               debounceLoadFixtures();
+             ">
+    </div>
+
+    <button
+      class="btn btn-primary"
+      onclick="fixtureQueryPage = 1; loadFixturesQuery();">
+      搜尋
+    </button>
+  </div>
+
+  <!-- 右側：分頁 -->
+  <div id="fixtureQueryPagination"
+       class="flex items-center gap-2">
+
+    <button class="btn btn-xs"
+            onclick="fixtureQueryPager.go('first')">
+      «
+    </button>
+
+    <button class="btn btn-xs"
+            onclick="fixtureQueryPager.go('prev')">
+      上一頁
+    </button>
+
+    <span class="px-3 text-sm text-gray-600 whitespace-nowrap">
+      第 <span id="fixturePageNow">1</span> /
+      <span id="fixturePageMax">1</span> 頁
+    </span>
+
+    <button class="btn btn-xs"
+            onclick="fixtureQueryPager.go('next')">
+      下一頁
+    </button>
+
+    <button class="btn btn-xs"
+            onclick="fixtureQueryPager.go('last')">
+      »
+    </button>
+  </div>
+
+</div>
+
+

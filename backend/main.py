@@ -23,20 +23,18 @@ from backend.app.routers.fixtures import router as fixtures_router
 from backend.app.routers.machine_models import router as machine_models_router
 from backend.app.routers.model_detail import router as model_detail_router
 from backend.app.routers.owners import router as owners_router
-from backend.app.routers.receipts import router as receipts_router
+from backend.app.routers.material_transactions import router as material_transactions_router
 from backend.app.routers.replacement import router as replacement_router
-from backend.app.routers.returns import router as returns_router
 from backend.app.routers.serials import router as serials_router
 from backend.app.routers.stations import router as stations_router
 from backend.app.routers.stats import router as stats_router
 from backend.app.routers.usage import router as usage_router
 from backend.app.routers.users import router as users_router
 from backend.app.routers.transactions import router as transactions_router
-from backend.app.routers.receipts_import import router as receipts_import_router
-from backend.app.routers.returns_import import router as returns_import_router
 from backend.app.routers.fixtures_import import router as fixtures_import_router
 from backend.app.routers.machine_models_import import router as machine_models_import_router
 from backend.app.routers.inventory import router as inventory_router
+from backend.app.routers.transactions_import import router as transaction_import_router
 
 # 導入配置和資料庫
 from backend.config import settings
@@ -249,14 +247,10 @@ app.include_router(serials_router, prefix="/api/v2")
 # ============================================================
 
 app.include_router(transactions_router, prefix="/api/v2")
-app.include_router(receipts_router, prefix="/api/v2")        # 收料
-app.include_router(returns_router, prefix="/api/v2")         # 退料
+app.include_router(material_transactions_router, prefix="/api/v2")  # 收退料
 app.include_router(usage_router, prefix="/api/v2")           # 使用紀錄
 app.include_router(replacement_router, prefix="/api/v2")     # 更換紀錄
-
-app.include_router(receipts_import_router, prefix="/api/v2")
-
-app.include_router(returns_import_router, prefix="/api/v2")
+app.include_router(transaction_import_router, prefix="/api/v2")
 
 # ============================================================
 # 📊 統計（Analytics / Dashboard）

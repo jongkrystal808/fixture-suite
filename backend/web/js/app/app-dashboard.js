@@ -3,7 +3,6 @@
  * 對應 /stats/dashboard
  */
 
-console.log("[dashboard] app-dashboard.js loaded");
 onUserReady(() => {
   if (window.currentCustomerId) {
     loadDashboard();
@@ -11,11 +10,9 @@ onUserReady(() => {
 });
 
 async function loadDashboard() {
-  console.log("[dashboard] loadDashboard called");
 
   try {
     const data = await api("/stats/dashboard");
-    console.log("[dashboard] raw response:", data);
 
     // ===============================
     // 1️⃣ 今日收料

@@ -21,10 +21,11 @@ from pydantic import BaseModel, Field, ConfigDict
 # ============================================================
 
 class FixtureBase(BaseModel):
-  id: str = Field(..., description="治具編號")   # ⭐ 主鍵統一
+  id: str = Field(..., description="治具編號")
   fixture_name: str = Field(..., description="治具名稱")
   fixture_type: Optional[str] = None
 
+  # ⚠️ 這些是 cache / summary，不是人為輸入
   self_purchased_qty: int = 0
   customer_supplied_qty: int = 0
 
@@ -32,7 +33,6 @@ class FixtureBase(BaseModel):
   replacement_cycle: Optional[int] = None
   cycle_unit: Optional[str] = None
 
-  status: Optional[str] = None
   owner_id: Optional[int] = None
   note: Optional[str] = None
 
@@ -49,17 +49,13 @@ class FixtureUpdate(BaseModel):
   fixture_name: Optional[str] = None
   fixture_type: Optional[str] = None
 
-  self_purchased_qty: Optional[int] = None
-  customer_supplied_qty: Optional[int] = None
-
   storage_location: Optional[str] = None
   replacement_cycle: Optional[int] = None
   cycle_unit: Optional[str] = None
 
-  status: Optional[str] = None
-
   owner_id: Optional[int] = None
   note: Optional[str] = None
+
 
 # ============================================================
 # 治具回應（API回傳資料模型）
@@ -72,7 +68,8 @@ class FixtureResponse(FixtureBase):
 
   total_qty: Optional[int] = Field(
       None,
-      description = "可用總數量（serial available + datecode available）" )
+      description="治具總數（收料總數 - 退料總數，包含 in_stock / deployed / maintenance / returned / scrapped）"
+  )
 
   created_at: Optional[datetime] = None
   updated_at: Optional[datetime] = None
@@ -80,14 +77,27 @@ class FixtureResponse(FixtureBase):
   model_config = ConfigDict(from_attributes=True)
 
 # ============================================================
-# view_fixture_status 視圖用模型
+# 治具列表回應（包含總數及治具資料）
 # ============================================================
 
+class FixtureListResponse(BaseModel):
+    total: int
+    fixtures: List[FixtureResponse]
+
+# ============================================================
+# 簡化的治具資料（下拉選單用）
+# ============================================================
+
+class FixtureSimple(BaseModel):
+    fixture_id: str
+    fixture_name: str
+
+# ============================================================
+# 治具狀態視圖（視圖模式）
+# ============================================================
 class FixtureStatusViewRow(BaseModel):
   """
-  對應資料庫 view_fixture_status 的欄位。
-  為了安全起見全部設為 Optional，並允許 extra key 被忽略，
-  這樣即使 SQL 有多回幾個欄位也不會爆。
+  對應資料庫 view_fixture_status
   """
   fixture_id: Optional[str] = None
   fixture_name: Optional[str] = None
@@ -108,33 +118,6 @@ class FixtureStatusViewRow(BaseModel):
 
   model_config = ConfigDict(extra="ignore")
 
-# ============================================================
-# 治具列表回應（包含總數及治具資料）
-# ============================================================
-
-class FixtureListResponse(BaseModel):
-    total: int
-    fixtures: List[FixtureResponse]
-
-# ============================================================
-# 簡化的治具資料（下拉選單用）
-# ============================================================
-
-class FixtureSimple(BaseModel):
-    fixture_id: str
-    fixture_name: str
-    status: str
-
-# ============================================================
-# 治具狀態視圖（視圖模式）
-# ============================================================
-
-class FixtureStatus_View(BaseModel):
-    fixture_id: str
-    status: str
-    owner_name: Optional[str] = None
-    last_used_at: Optional[datetime] = None
-
 
 # ============================================================
 # 治具統計（總覽統計）
@@ -149,17 +132,14 @@ class FixtureStatistics(BaseModel):
     returned_qty: int
 
 
-# ============================================================
-# 治具狀態（基本狀態欄位）
-# ============================================================
-
-class FixtureStatus(BaseModel):
-    status: str
-
 
 # ============================================================
 # 週期單位（可選擇單位）
 # ============================================================
 
-class CycleUnit(BaseModel):
-    value: str  # days, uses, etc.
+from enum import Enum
+
+class CycleUnit(str, Enum):
+    uses = "uses"
+    days = "days"
+    none = "none"

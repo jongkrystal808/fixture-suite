@@ -151,5 +151,3 @@ window.apiDeleteMachineModel = apiDeleteMachineModel;
 window.apiExportModelsXlsx = apiExportModelsXlsx;
 window.apiDownloadModelsTemplate = apiDownloadModelsTemplate;
 window.apiImportModelsXlsx = apiImportModelsXlsx;
-
-console.log("✅ api-machine-models.js v4.x FINAL loaded");

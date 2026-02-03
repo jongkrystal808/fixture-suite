@@ -98,4 +98,3 @@ window.apiCreateReturn = apiCreateReturn;
 window.apiImportReturnsXlsx = apiImportReturnsXlsx;
 window.apiExportReturnXlsx = apiExportReturnXlsx;
 
-console.log("✅ api-returns.js v4.x FINAL loaded");

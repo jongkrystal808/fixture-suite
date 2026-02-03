@@ -157,7 +157,7 @@ window.__activeOverlayCloser = null;
       const tabKey = btn.dataset.tab;
 
       if (tabKey === "transactions") {
-        setHash("transactions/receipts");
+        setHash("transactions/register");
         showTab(tabKey, { updateHash: false });
       } else if (tabKey === "logs") {
         setHash("logs/usage");
@@ -283,64 +283,46 @@ window.__activeOverlayCloser = null;
     }
 
     // (1) Transactions 子頁籤切換
-    const rtabSections = [
-      "#rtab-receipts",
-      "#rtab-returns",
-      "#viewAllTab",
-      "#viewSerialTab"
-    ];
+    window.showTransactionSubTab = function(tabId) {
+      const tabs = [
+          "ttab-register",
+          "ttab-view-all",
+          "inventoryTab"   // ← 新增
+        ];
+      const buttons = document.querySelectorAll("[data-ttab]");
 
-    window.switchRTab = function(tab) {
-      const rtabButtons = document.querySelectorAll("[data-rtab]");
+      // 隱藏所有分頁
+      tabs.forEach(id => {
+        const tab = document.getElementById(id);
+        if (tab) tab.classList.add("hidden");
+      });
 
-      rtabButtons.forEach(b => b.classList.remove("subtab-active"));
-      const currentBtn = document.querySelector(`[data-rtab="${tab}"]`);
-      if (currentBtn) currentBtn.classList.add("subtab-active");
+      // 顯示指定分頁
+      const targetTab = document.getElementById(tabId);
+      if (targetTab) targetTab.classList.remove("hidden");
 
-      const hashMap = {
-        "receipts": "transactions/receipts",
-        "returns": "transactions/returns",
-        "viewall": "transactions/view_all",
-        "serial": "transactions/view_serials"
-      };
-      if (hashMap[tab]) {
-        setHash(hashMap[tab]);
-      }
-
-      let targetElement = null;
-
-      if (tab === "receipts") {
-        targetElement = document.getElementById("rtab-receipts");
-      } else if (tab === "returns") {
-        targetElement = document.getElementById("rtab-returns");
-      } else if (tab === "viewall") {
-        targetElement = document.getElementById("viewAllTab");
-        if (typeof window.loadTransactionViewAll === "function") {
-          window.loadTransactionViewAll(1);
-        }
-      } else if (tab === "serial") {
-        targetElement = document.getElementById("viewSerialTab");
-        const today = new Date();
-        const from = new Date(Date.now() - 7 * 86400000);
-        const df = document.getElementById("vsDateFrom");
-        const dt = document.getElementById("vsDateTo");
-        if (df && dt) {
-          df.value = from.toISOString().slice(0, 10);
-          dt.value = today.toISOString().slice(0, 10);
-        }
-        if (typeof window.loadTransactionViewSerial === "function") {
-          window.loadTransactionViewSerial(1);
-        }
-      }
-
-      document.querySelectorAll(rtabSections.join(",")).forEach(sec => {
-        if (sec !== targetElement) {
-          sec.classList.add("hidden");
+      // 更新按鈕樣式
+      buttons.forEach(btn => {
+        if (btn.dataset.ttab === tabId.replace("ttab-", "")) {
+          btn.classList.add("subtab-active");
+        } else {
+          btn.classList.remove("subtab-active");
         }
       });
 
-      if (targetElement) {
-        targetElement.classList.remove("hidden");
+      // 更新 hash
+      const hashMap = {
+        "ttab-register": "transactions/register",
+        "ttab-view-all": "transactions/view-all",
+        "inventoryTab": "transactions/inventory"
+      };
+      if (hashMap[tabId]) {
+        setHash(hashMap[tabId]);
+      }
+
+      // 載入資料
+      if (tabId === "ttab-view-all" && typeof window.loadTransactionViewAll === "function") {
+        window.loadTransactionViewAll(1);
       }
     };
 
@@ -349,7 +331,7 @@ window.__activeOverlayCloser = null;
     const initialSubTab = getSubTab(location.hash);
 
     if (initialTab === "transactions" && !initialSubTab) {
-      setHash("transactions/receipts");
+      setHash("transactions/register");
       showTab(initialTab, { updateHash: false });
     } else if (initialTab === "logs" && !initialSubTab) {
       setHash("logs/usage");
@@ -370,17 +352,15 @@ window.__activeOverlayCloser = null;
     if (shouldTriggerSubTab) {
       setTimeout(() => {
         if (initialTab === "transactions") {
-          const rtabMap = {
-            "receipts": "receipts",
-            "returns": "returns",
-            "view_all": "viewall",
-            "view_serials": "serial"
+          const ttabMap = {
+            "register": "ttab-register",
+            "view-all": "ttab-view-all"
           };
-          const targetSubTab = initialSubTab || "receipts";
-          const rtabValue = rtabMap[targetSubTab];
+          const targetSubTab = initialSubTab || "register";
+          const ttabValue = ttabMap[targetSubTab];
 
-          if (rtabValue && typeof window.switchRTab === "function") {
-            window.switchRTab(rtabValue);
+          if (ttabValue && typeof window.showTransactionSubTab === "function") {
+            window.showTransactionSubTab(ttabValue);
           }
         }
 
@@ -432,21 +412,7 @@ window.__activeOverlayCloser = null;
       }, 100);
     }
 
-    // (4) 綁定 transactions 子頁籤按鈕
-    const rtabButtons = document.querySelectorAll("[data-rtab]");
-    rtabButtons.forEach(btn => {
-      if (btn.__rtabBound) return;
-      btn.__rtabBound = true;
-
-      btn.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const tab = btn.dataset.rtab;
-        window.switchRTab(tab);
-      });
-    });
-
-    // (5) Query 子分頁
+    // (4) Query 子分頁
    window.switchQueryType = function(type) {
       const select = document.getElementById("queryType");
       if (!select) return;
@@ -478,7 +444,7 @@ window.__activeOverlayCloser = null;
     };
 
 
-    // (6) Logs 子分頁
+    // (5) Logs 子分頁
     window.switchLogTab = function(target) {
       const usageTab = document.getElementById("logtab-usage");
       const replaceTab = document.getElementById("logtab-replacement");
@@ -523,7 +489,7 @@ window.__activeOverlayCloser = null;
       });
     });
 
-    // (7) Admin 子選單按鈕
+    // (6) Admin 子選單按鈕
     document.querySelectorAll(".admin-menu").forEach(btn => {
       if (btn.__adminBound) return;
       btn.__adminBound = true;
@@ -536,7 +502,7 @@ window.__activeOverlayCloser = null;
       });
     });
 
-    // (8) 啟動時鐘
+    // (7) 啟動時鐘
     function updateClock() {
       const now = new Date();
       const hh = String(now.getHours()).padStart(2, "0");

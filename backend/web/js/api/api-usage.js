@@ -169,5 +169,4 @@ window.apiDeleteUsageLog = apiDeleteUsageLog;
 window.apiLookupStationsByModel = apiLookupStationsByModel;
 window.apiLookupFixturesByModelStation = apiLookupFixturesByModelStation;
 
-console.log("✅ api-usage.js v4.x ALIGNED loaded");
 

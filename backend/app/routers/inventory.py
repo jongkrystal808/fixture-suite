@@ -134,47 +134,17 @@ def list_datecode_inventory(
 def list_inventory_history(
     customer_id: str = Depends(get_current_customer_id),
     fixture_id: str = Query(...),
-    skip: int = Query(default=0, ge=0),
-    limit: int = Query(default=200, ge=1, le=1000),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=500),
 ):
-    """
-    庫存異動歷史（Read-only）
-    來源：
-    - material_transactions
-    - material_transaction_items
-    """
-
     sql = """
-          SELECT 
-              mt.id,
-              mt.transaction_type,                 -- receipt / return
-              mt.record_type,                      -- individual / batch / datecode
-              mt.transaction_date AS date,
-              mt.order_no,
-              mt.quantity,                         -- ✅ 正確的「數量」
-              mt.note,
-            
-              -- 依 record_type 組合顯示內容
-              CASE
-                WHEN mt.record_type IN ('individual','batch')
-                  THEN GROUP_CONCAT(mti.serial_number ORDER BY mti.serial_number SEPARATOR ', ')
-                WHEN mt.record_type = 'datecode'
-                  THEN CONCAT('Datecode: ', MAX(mti.datecode))
-                ELSE NULL
-              END AS content
-            
-            FROM material_transactions mt
-            LEFT JOIN material_transaction_items mti
-              ON mti.transaction_id = mt.id
-            
-            WHERE mt.customer_id = %s
-              AND mt.fixture_id = %s
-            
-            GROUP BY mt.id
-            
-            ORDER BY mt.transaction_date DESC, mt.id DESC
-            LIMIT %s OFFSET %s
-          """
+        SELECT *
+        FROM v_inventory_history
+        WHERE customer_id = %s
+          AND fixture_id = %s
+        ORDER BY transaction_date DESC, id DESC
+        LIMIT %s OFFSET %s
+    """
 
     rows = db.execute_query(
         sql,
@@ -186,6 +156,7 @@ def list_inventory_history(
         "skip": skip,
         "limit": limit,
     }
+
 
 
 @router.get("/search")
@@ -269,15 +240,13 @@ def search_inventory(
     # ==================================================
     serial_row = db.execute_one(
         """
-        SELECT
-            fixture_id,
-            serial_number,
-            status
+        SELECT fixture_id,
+               serial_number,
+               status
         FROM fixture_serials
         WHERE customer_id = %s
           AND fixture_id = %s
-          AND serial_number = %s
-        LIMIT 1
+          AND serial_number = %s LIMIT 1
         """,
         (customer_id, fixture_id, keyword)
     )
@@ -285,27 +254,31 @@ def search_inventory(
     if serial_row:
         history = db.execute_query(
             """
-            SELECT
-                transaction_date AS date,
+            SELECT transaction_date AS date,
                 order_no,
                 record_type,
                 source_type,
                 quantity,
                 operator,
                 note
-            FROM material_transactions
-            WHERE customer_id = %s
-              AND fixture_id = %s
+            FROM material_transactions mt
+            WHERE mt.customer_id = %s
+              AND mt.fixture_id = %s
+              AND EXISTS (
+                SELECT 1
+                FROM material_transaction_items mti
+                WHERE mti.transaction_id = mt.id
               AND (
-                serials LIKE %s
-                OR serial_range LIKE %s
-              )
+                mti.serial_number = %s
+               OR mti.serial_range LIKE %s
+                )
+                )
             ORDER BY transaction_date DESC
             """,
             (
                 customer_id,
                 fixture_id,
-                f"%{keyword}%",
+                keyword,
                 f"%{keyword}%"
             )
         )
@@ -383,4 +356,54 @@ def search_inventory(
         "fixture_id": fixture_id,
         "found": False,
         "message": "查無此治具 / 序號 / Datecode"
+    }
+
+
+@router.get("")
+def list_inventory_overview(
+    customer_id: str = Depends(get_current_customer_id),
+    keyword: str = Query("", description="治具編號 / 名稱"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+):
+    where = ["f.customer_id = %s"]
+    params = [customer_id]
+
+    if keyword:
+        where.append("(f.id LIKE %s OR f.fixture_name LIKE %s)")
+        params.extend([f"%{keyword}%", f"%{keyword}%"])
+
+    where_sql = " AND ".join(where)
+
+    rows = db.execute_query(
+        f"""
+        SELECT
+            f.id,
+            f.fixture_name,
+            f.in_stock_qty,
+            f.self_purchased_qty,
+            f.customer_supplied_qty,
+            f.returned_qty
+        FROM fixtures f
+        WHERE {where_sql}
+        ORDER BY f.id
+        LIMIT %s OFFSET %s
+        """,
+        tuple(params + [limit, skip])
+    )
+
+    total = db.execute_one(
+        f"""
+        SELECT COUNT(*) AS cnt
+        FROM fixtures f
+        WHERE {where_sql}
+        """,
+        tuple(params)
+    )["cnt"]
+
+    return {
+        "fixtures": rows,
+        "total": total,
+        "skip": skip,
+        "limit": limit,
     }

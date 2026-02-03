@@ -11,9 +11,8 @@ from backend.app.models.fixture import (
     FixtureUpdate,
     FixtureResponse,
     FixtureSimple,
-    FixtureStatus_View,
+    FixtureStatusViewRow,
     FixtureStatistics,
-    FixtureStatus,
     CycleUnit
 )
 router = APIRouter(
@@ -101,7 +100,7 @@ async def fixture_statistics(
 # ============================================================
 @router.get(
     "/status/view",
-    response_model=List[FixtureStatus_View],
+    response_model=List[FixtureStatusViewRow],
     summary="治具狀態總覽"
 )
 async def fixture_status_view(
@@ -121,7 +120,7 @@ async def fixture_status_view(
             """,
             (customer_id, limit, skip)
         )
-        return [FixtureStatus_View(**row) for row in rows]
+        return [FixtureStatusViewRow(**row) for row in rows]
 
     except Exception:
         print("❌ [fixture_status_view]\n", traceback.format_exc())
@@ -145,8 +144,7 @@ async def simple_fixture_list(
             """
             SELECT
                 id AS fixture_id,
-                fixture_name,
-                status
+                fixture_name
             FROM fixtures
             WHERE customer_id = %s
             ORDER BY id
@@ -179,7 +177,6 @@ async def download_fixtures_template(
         "storage_location",
         "replacement_cycle",
         "cycle_unit",
-        "status",
         "note",
     ])
 
@@ -190,7 +187,6 @@ async def download_fixtures_template(
         "A01",
         1000,
         "uses",
-        "normal",
         "備註示例",
     ])
 
@@ -227,7 +223,6 @@ async def export_fixtures_xlsx(
             storage_location,
             replacement_cycle,
             cycle_unit,
-            status,
             note
         FROM fixtures
         WHERE customer_id = %s
@@ -247,7 +242,6 @@ async def export_fixtures_xlsx(
         "storage_location",
         "replacement_cycle",
         "cycle_unit",
-        "status",
         "note",
     ])
 
@@ -259,7 +253,6 @@ async def export_fixtures_xlsx(
             r.get("storage_location") or "",
             r.get("replacement_cycle") or "",
             r.get("cycle_unit") or "",
-            r.get("status") or "",
             r.get("note") or "",
         ])
 
@@ -334,7 +327,6 @@ async def create_fixture(
                 storage_location,
                 replacement_cycle,
                 cycle_unit,
-                status,
                 owner_id,
                 note
             ) VALUES (
@@ -343,7 +335,6 @@ async def create_fixture(
                 %s, %s, %s, %s, %s,
                 %s,
                 %s, %s,
-                %s,
                 %s,
                 %s
             )
@@ -367,7 +358,6 @@ async def create_fixture(
             data.storage_location,
             data.replacement_cycle,
             data.cycle_unit.value if hasattr(data.cycle_unit, "value") else data.cycle_unit,
-            data.status.value if hasattr(data.status, "value") else data.status,
             data.owner_id,
             data.note,
         )
@@ -413,7 +403,6 @@ async def get_fixture(
                 f.customer_id,
                 f.fixture_name,
                 f.fixture_type,
-                f.serial_number,
                 f.self_purchased_qty,
                 f.customer_supplied_qty,
                 f.in_stock_qty,
@@ -424,7 +413,6 @@ async def get_fixture(
                 f.storage_location,
                 f.replacement_cycle,
                 f.cycle_unit,
-                f.status,
                 f.last_replacement_date,
                 f.last_notification_time,
                 f.owner_id,
@@ -556,7 +544,6 @@ async def list_fixtures(
     skip: int = Query(0, ge=0),
     limit: int = Query(8, ge=1, le=200),
     search: Optional[str] = Query(None),
-    status_filter: Optional[str] = Query(None),
     owner_id: Optional[int] = Query(None),
 
     user=Depends(get_current_user),
@@ -570,10 +557,6 @@ async def list_fixtures(
             where.append("(f.id LIKE %s OR f.fixture_name LIKE %s)")
             like = f"%{search}%"
             params.extend([like, like])
-
-        if status_filter:
-            where.append("f.status = %s")
-            params.append(status_filter)
 
         if owner_id:
             where.append("f.owner_id = %s")
@@ -644,6 +627,9 @@ async def update_fixture(
         params = []
 
         for field, value in data.dict(exclude_unset=True).items():
+            if field == "status":
+                continue
+
             if value is None:
                 continue
 

@@ -217,4 +217,3 @@ window.apiDownloadFixturesTemplate = apiDownloadFixturesTemplate;
 window.apiImportFixturesXlsx = apiImportFixturesXlsx;
 window.apiSearchFixtures = apiSearchFixtures;
 
-console.log("✅ api-fixtures.js v4.x FINAL loaded");
