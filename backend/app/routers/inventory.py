@@ -363,6 +363,10 @@ def search_inventory(
 def list_inventory_overview(
     customer_id: str = Depends(get_current_customer_id),
     keyword: str = Query("", description="治具編號 / 名稱"),
+    hide_zero: bool = Query(
+            default=True,
+            description="是否隱藏庫存為 0 的治具"
+        ),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
 ):
@@ -372,6 +376,8 @@ def list_inventory_overview(
     if keyword:
         where.append("(f.id LIKE %s OR f.fixture_name LIKE %s)")
         params.extend([f"%{keyword}%", f"%{keyword}%"])
+    if hide_zero:
+        where.append("f.in_stock_qty > 0")
 
     where_sql = " AND ".join(where)
 

@@ -7,7 +7,7 @@
  * ✔ customer 由 api-config.js 注入 X-Customer-Id
  * ============================================================ */
 let fixtureQueryPage = 1;
-const fixtureQueryPageSize = 8;
+const fixtureQueryPageSize = 20;
 let fixtureQueryPager = null;
 
 /* ============================================================
@@ -965,6 +965,8 @@ function filterInventoryHistory(type) {
     tr.classList.toggle("hidden", tr.dataset.type !== type);
   });
 }
+
+
 
 /* ============================================================
  * Fixture Detail Drawer - Tab Switch

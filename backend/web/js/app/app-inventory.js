@@ -86,6 +86,7 @@ async function loadInventoryOverview(page = 1) {
          keyword,
          skip: (invPage - 1) * invPageSize,
          limit: invPageSize,
+         hide_zero: true,
        }
      });
 
@@ -223,7 +224,7 @@ async function toggleInventoryInlineDetail(fixtureId, btn) {
     const [serialRes, dcRes, historyRes] = await Promise.all([
       apiInventorySerial({ fixture_id: fixtureId }),
       apiInventoryDatecode({ fixture_id: fixtureId }),
-      apiInventoryHistory({ fixture_id: fixtureId, limit: 5 }),
+      apiInventoryHistory({ fixture_id: fixtureId, limit: 200 }),
     ]);
 
     detailRow.innerHTML = `
@@ -278,56 +279,64 @@ async function toggleInventoryInlineDetail(fixtureId, btn) {
     }
 
 
-    function renderInlineHistory(items) {
-      if (!items.length) {
-        return `<div class="text-gray-500">近期異動：無</div>`;
-      }
+function renderInlineHistory(items) {
+  if (!items.length) {
+    return `<div class="text-gray-500">近期異動：無</div>`;
+  }
 
-      return `
-        <div>
-          <div class="font-semibold mb-2">收料 / 退料記錄</div>
-    
-          <div class="flex gap-2 mb-2">
-            <button class="btn btn-xs" onclick="filterInvHistory('all')">全部</button>
-            <button class="btn btn-xs" onclick="filterInvHistory('receipt')">只看收料</button>
-            <button class="btn btn-xs" onclick="filterInvHistory('return')">只看退料</button>
-          </div>
-    
-          <table class="w-full text-xs border-t">
-            <thead class="text-gray-500">
-              <tr>
-                <th class="py-1 text-left">類型</th>
-                <th class="py-1 text-left">日期</th>
-                <th class="py-1 text-left">數量</th>
-                <th class="py-1 text-left">單號</th>
-                <th class="py-1 text-left">內容</th>
-              </tr>
-            </thead>
-            <tbody id="invHistoryBody">
-              ${items.map(h => `
-                <tr class="border-t inv-history-row ${h.transaction_type}">
-                  <td class="py-1 ${h.transaction_type === "return" ? "text-red-600" : ""}">
-                    ${h.transaction_type === "return" ? "退料" : "收料"}
-                  </td>
-                  <td class="py-1">
-                    ${getHistoryDate(h)}
-                  </td>
-                  <td class="py-1">
-                    ${h.quantity ?? 0}
-                  </td>
-                  <td class="py-1">
-                    ${h.order_no || "-"}
-                  </td>
-                  <td class="py-1">
-                    ${h.note || "-"}
-                  </td>
-                </tr>
-              `).join("")}
-            </tbody>
-          </table>
-        </div>
-      `;
-    }
+  const THRESHOLD = 5;
+  const hasMore = items.length > THRESHOLD;
+
+  return `
+    <div class="inv-history-block" data-expanded="false">
+      <div class="font-semibold mb-2">收料 / 退料記錄</div>
+
+      <div class="flex gap-2 mb-2">
+        <button class="btn btn-xs" onclick="filterInvHistory('all')">全部</button>
+        <button class="btn btn-xs" onclick="filterInvHistory('receipt')">只看收料</button>
+        <button class="btn btn-xs" onclick="filterInvHistory('return')">只看退料</button>
+      </div>
+
+      <table class="w-full text-xs border-t">
+        <thead class="text-gray-500">
+          <tr>
+            <th class="py-1 text-left">類型</th>
+            <th class="py-1 text-left">日期</th>
+            <th class="py-1 text-left">數量</th>
+            <th class="py-1 text-left">單號</th>
+            <th class="py-1 text-left">內容</th>
+          </tr>
+        </thead>
+        <tbody id="invHistoryBody">
+          ${items.map((h, i) => `
+            <tr class="border-t inv-history-row ${h.transaction_type}"
+                data-idx="${i}"
+                style="${i >= THRESHOLD ? "display:none" : ""}">
+              <td class="py-1 ${h.transaction_type === "return" ? "text-red-600" : ""}">
+                ${h.transaction_type === "return" ? "退料" : "收料"}
+              </td>
+              <td class="py-1">${getHistoryDate(h)}</td>
+              <td class="py-1">${h.quantity ?? 0}</td>
+              <td class="py-1">${h.order_no || "-"}</td>
+              <td class="py-1">${h.note || "-"}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+
+      ${
+        hasMore
+          ? `<div class="text-center mt-2">
+               <button class="btn btn-xs btn-ghost"
+                       onclick="toggleInvHistoryExpand(this)">
+                 展開其餘 ${items.length - THRESHOLD} 筆
+               </button>
+             </div>`
+          : ""
+      }
+    </div>
+  `;
+}
 
 
 
@@ -374,6 +383,21 @@ function getHistoryDate(h) {
   );
 }
 
+function toggleInvHistoryExpand(btn) {
+  const block = btn.closest(".inv-history-block");
+  const expanded = block.dataset.expanded === "true";
+
+  block.querySelectorAll("[data-idx]").forEach(tr => {
+    const idx = Number(tr.dataset.idx);
+    if (idx >= 5) {
+      tr.style.display = expanded ? "none" : "";
+    }
+  });
+
+  block.dataset.expanded = expanded ? "false" : "true";
+  btn.innerText = expanded ? "展開其餘紀錄" : "收合";
+}
+window.toggleInvHistoryExpand = toggleInvHistoryExpand;
 
 
 // expose

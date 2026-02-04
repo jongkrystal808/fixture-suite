@@ -657,6 +657,7 @@
                                     onchange="loadInventoryOverview(1);">
                               <option value="10">10</option>
                               <option value="20">20</option>
+                              <option value="50">50</option>
                             </select>
                           </div>
 
@@ -720,7 +721,30 @@
                 <!-- ============================================================= -->
                 <section id="tab-query" class="hidden space-y-4">
                       <div class="card p-5 space-y-4">
-                        <h3 class="font-semibold text-lg">治具／機種查詢</h3>
+                        <div class="flex items-center justify-between">
+                          <h3 class="font-semibold text-lg">治具／機種查詢</h3>
+
+                          <!-- 🔧 管理入口（只做跳轉） -->
+                          <div id="queryAdminActions" class="flex gap-2">
+                            <button
+                              class="btn btn-outline btn-sm"
+                              onclick="goAdminPage('fixtures')">
+                              治具管理
+                            </button>
+
+                            <button
+                              class="btn btn-outline btn-sm"
+                              onclick="goAdminPage('models')">
+                              機種管理
+                            </button>
+
+                            <button
+                              class="btn btn-outline btn-sm"
+                              onclick="goAdminPage('stations')">
+                              站點管理
+                            </button>
+                          </div>
+                        </div>
 
                         <!-- 查詢類型 -->
                         <div class="flex gap-4 items-center">

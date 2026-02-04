@@ -516,6 +516,19 @@ window.__activeOverlayCloser = null;
       });
     });
 
+    window.goAdminPage = function (page) {
+      // 1️⃣ 切主頁籤（不要讓它自己改 hash）
+      showTab("admin", { updateHash: false });
+
+      // 2️⃣ 切 admin 子頁（這裡會負責 hash + load）
+      setTimeout(() => {
+        if (typeof window.switchAdminPage === "function") {
+          window.switchAdminPage(page);
+        }
+      }, 0);
+    };
+
+
     // (7) 啟動時鐘
     function updateClock() {
       const now = new Date();
