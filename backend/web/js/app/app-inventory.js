@@ -222,7 +222,11 @@ async function toggleInventoryInlineDetail(fixtureId, btn) {
 
   try {
     const [serialRes, dcRes, historyRes] = await Promise.all([
-      apiInventorySerial({ fixture_id: fixtureId }),
+      apiInventorySerial({
+      fixture_id: fixtureId,
+      limit: 1000
+    }),
+
       apiInventoryDatecode({ fixture_id: fixtureId }),
       apiInventoryHistory({ fixture_id: fixtureId, limit: 200 }),
     ]);
@@ -249,19 +253,32 @@ async function toggleInventoryInlineDetail(fixtureId, btn) {
  * ============================================================ */
 
     function renderInlineSerial(items) {
-      const inUse = items.filter(s => s.status !== "in_stock");
-      const idle = items.filter(s => s.status === "in_stock");
+      const inUse = items
+        .filter(s => s.status !== "in_stock")
+        .map(s => s.serial_number);
+
+      const idle = items
+        .filter(s => s.status === "in_stock")
+        .map(s => s.serial_number);
 
       return `
         <div>
           <div class="font-semibold mb-1">序號庫存</div>
           <div class="grid grid-cols-2 gap-4 text-xs">
-            <div><span class="text-gray-500">使用中：</span>${inUse.map(s => s.serial_number).join(", ") || "—"}</div>
-            <div><span class="text-gray-500">可用：</span>${idle.map(s => s.serial_number).join(", ") || "—"}</div>
+            <div>
+              <span class="text-gray-500">使用中：</span>
+              ${inUse.length ? renderSerialRanges(inUse) : "—"}
+            </div>
+            <div>
+              <span class="text-gray-500">可用：</span>
+              ${idle.length ? renderSerialRanges(idle) : "—"}
+            </div>
           </div>
         </div>
       `;
     }
+
+
 
     function renderInlineDatecode(items) {
       if (!items.length) {
@@ -297,14 +314,16 @@ function renderInlineHistory(items) {
         <button class="btn btn-xs" onclick="filterInvHistory('return')">只看退料</button>
       </div>
 
-      <table class="w-full text-xs border-t">
+      <table class="w-full text-xs border-t border-collapse">
         <thead class="text-gray-500">
           <tr>
-            <th class="py-1 text-left">類型</th>
             <th class="py-1 text-left">日期</th>
-            <th class="py-1 text-left">數量</th>
+            <th class="py-1 text-left">類型</th>
             <th class="py-1 text-left">單號</th>
-            <th class="py-1 text-left">內容</th>
+            <th class="py-1 text-left">數量</th>
+            <th class="py-1 text-left">記錄類型</th>
+            <th class="py-1 text-left">序號明細</th>
+            <th class="py-1 text-left">備註</th>
           </tr>
         </thead>
         <tbody id="invHistoryBody">
@@ -312,12 +331,18 @@ function renderInlineHistory(items) {
             <tr class="border-t inv-history-row ${h.transaction_type}"
                 data-idx="${i}"
                 style="${i >= THRESHOLD ? "display:none" : ""}">
+              <td class="py-1">${getHistoryDate(h)}</td>
               <td class="py-1 ${h.transaction_type === "return" ? "text-red-600" : ""}">
                 ${h.transaction_type === "return" ? "退料" : "收料"}
               </td>
-              <td class="py-1">${getHistoryDate(h)}</td>
-              <td class="py-1">${h.quantity ?? 0}</td>
               <td class="py-1">${h.order_no || "-"}</td>
+              <td class="py-1">${h.quantity ?? 0}</td>
+                <!-- 收退料方式 -->
+              <td class="py-1">${renderRecordType(h)}</td>
+              <!-- 序號明細 -->
+              <td class="py-1 font-mono text-xs">
+                ${renderSerialDetail(h)}
+              </td>  
               <td class="py-1">${h.note || "-"}</td>
             </tr>
           `).join("")}
@@ -397,16 +422,181 @@ function toggleInvHistoryExpand(btn) {
   block.dataset.expanded = expanded ? "false" : "true";
   btn.innerText = expanded ? "展開其餘紀錄" : "收合";
 }
-window.toggleInvHistoryExpand = toggleInvHistoryExpand;
 
 
-// expose
-window.loadInventoryOverview = loadInventoryOverview;
-window.initInventoryPage = initInventoryPage;
-window.toggleInventoryInlineDetail = toggleInventoryInlineDetail;
+function toggleInvSerialExpand(btn, type) {
+  const block = btn.closest(".inv-serial-block");
+  if (!block) return;
+
+  const expanded = block.dataset.expanded === "true";
+  const listSpan = block.querySelector(".inv-serial-list");
+  const fullSpan = block.querySelector(".inv-serial-full");
+
+  if (!listSpan || !fullSpan) return;
+
+  if (expanded) {
+    // 收合
+    listSpan.classList.remove("hidden");
+    fullSpan.classList.add("hidden");
+    block.dataset.expanded = "false";
+    btn.innerText = btn.innerText.replace("收合", "展開");
+  } else {
+    // 展開
+    listSpan.classList.add("hidden");
+    fullSpan.classList.remove("hidden");
+    block.dataset.expanded = "true";
+    btn.innerText = "收合";
+  }
+}
+
+
+
+function parseSerial(serial) {
+  const s = String(serial).trim();
+
+  const m = s.match(/^(.*?)(\d+)$/);
+  if (!m) {
+    return {
+      raw: s,
+      prefix: "__RAW__",
+      num: null,
+      width: null,
+      isRaw: true
+    };
+  }
+
+  return {
+    raw: s,
+    prefix: m[1],
+    num: Number(m[2]),
+    width: m[2].length,
+    isRaw: false
+  };
+}
+
+
+function compressSerialRanges(serials) {
+  const parsed = serials.map(parseSerial);
+
+  const raws = parsed.filter(s => s.isRaw);
+  const normals = parsed.filter(s => !s.isRaw);
+
+  const groups = {};
+  normals.forEach(s => {
+    groups[s.prefix] ??= [];
+    groups[s.prefix].push(s);
+  });
+
+  const ranges = [];
+
+  Object.values(groups).forEach(list => {
+    list.sort((a, b) => a.num - b.num);
+
+    let start = list[0];
+    let prev = list[0];
+
+    for (let i = 1; i < list.length; i++) {
+      const cur = list[i];
+      if (cur.num === prev.num + 1) {
+        prev = cur;
+      } else {
+        ranges.push({ start, end: prev });
+        start = cur;
+        prev = cur;
+      }
+    }
+    ranges.push({ start, end: prev });
+  });
+
+  // 把 raw 的補回來（每個當成單筆）
+  raws.forEach(s => {
+    ranges.push({ start: s, end: s });
+  });
+
+  return ranges;
+}
+
+
+
+function formatSerial(s) {
+  return s.prefix + String(s.num).padStart(s.width, "0");
+}
+
+function renderSerialRanges(serials) {
+  const ranges = compressSerialRanges(serials);
+
+  return ranges
+    .map(r => {
+      const a = formatSerial(r.start);
+      const b = formatSerial(r.end);
+      return a === b ? a : `${a}–${b}`;
+    })
+    .join(", ");
+}
+
+
+function renderRecordType(h) {
+  switch (h.record_type) {
+    case "individual":
+      return "序號";
+    case "datecode":
+      return "Datecode";
+    case "batch":
+      return "批量";
+    default:
+      return "-";
+  }
+}
+
+function renderSerialDetail(h) {
+  if (h.record_type !== 'batch' && h.record_type !== 'individual') {
+    return '-';
+  }
+
+  return `
+    <a class="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 text-xs cursor-pointer"
+       onclick="goToTransactionSerialSearch({
+         fixture_id: '${h.fixture_id}',
+         date_from: '${h.transaction_date?.slice(0,10) || ''}',
+         date_to: '${h.transaction_date?.slice(0,10) || ''}'
+       })">
+       <span>查看明細</span>
+    </a>
+  `;
+}
+
+
+
+
+function goToSerialViewFromHistory(h) {
+  const fixtureId = h.fixture_id;
+  const date = getHistoryDate(h); // 你已經有這個
+
+  // 組 query
+  const params = new URLSearchParams({
+    tab: "transactions",
+    subtab: "view-all",
+    mode: "serial",
+    fixture_id: fixtureId,
+    date: date,
+  });
+
+  // 跳轉
+  window.location.href = `/index.html?${params.toString()}`;
+}
+
+
 
 document.addEventListener("DOMContentLoaded", () => {
   if (typeof initInventoryPage === "function") {
     initInventoryPage();
   }
 });
+
+
+// expose
+window.loadInventoryOverview = loadInventoryOverview;
+window.initInventoryPage = initInventoryPage;
+window.toggleInventoryInlineDetail = toggleInventoryInlineDetail;
+window.toggleInvHistoryExpand = toggleInvHistoryExpand;
+window.toggleInvSerialExpand = toggleInvSerialExpand;

@@ -20,10 +20,6 @@ window.__activeOverlayCloser = null;
       sectionId: "tab-logs",
       title: "使用 / 更換記錄"
     },
-    stats: {
-      sectionId: "tab-stats",
-      title: "治具情況統計"
-    },
     admin: {
       sectionId: "tab-admin",
       title: "後台管理"
@@ -107,7 +103,6 @@ window.__activeOverlayCloser = null;
         case "transactions":
         case "query":
         case "logs":
-        case "stats":
         case "admin":
           if (!loadedFlags[tabKey]) {
             loadedFlags[tabKey] = true;
@@ -129,10 +124,6 @@ window.__activeOverlayCloser = null;
                     window.switchLogTab("usage");
                   }
                 }, 100);
-                break;
-
-              case "stats":
-                if (typeof window.loadStats === "function") window.loadStats();
                 break;
 
               case "admin":
@@ -524,6 +515,70 @@ window.__activeOverlayCloser = null;
       setTimeout(() => {
         if (typeof window.switchAdminPage === "function") {
           window.switchAdminPage(page);
+        }
+      }, 0);
+    };
+
+    window.goToTransactionSerialSearch = function ({
+      fixture_id,
+      date_from,
+      date_to
+    }) {
+      // 1️⃣ 切到「交易」主頁籤（不要讓它自己亂改 hash）
+      showTab("transactions", { updateHash: false });
+
+      // 2️⃣ 切到「交易記錄 / 總檢視」
+      setTimeout(() => {
+        showTransactionSubTab("ttab-view-all");
+
+        // 3️⃣ 切成「序號查詢模式」
+        switchViewAllMode("serial");
+
+        // 4️⃣ 塞查詢條件
+        if (fixture_id) {
+          const el = document.getElementById("vaSerialFixture");
+          if (el) el.value = fixture_id;
+        }
+
+        if (date_from) {
+          const el = document.getElementById("vaSerialDateFrom");
+          if (el) el.value = date_from;
+        }
+
+        if (date_to) {
+          const el = document.getElementById("vaSerialDateTo");
+          if (el) el.value = date_to;
+        }
+
+        // 5️⃣ 查詢
+        loadTransactionViewAll(1);
+      }, 0);
+    };
+
+    window.goToInventoryByFixture = function (fixture_id) {
+      if (!fixture_id) return;
+
+      // 關 Drawer
+      if (typeof window.__activeOverlayCloser === "function") {
+        window.__activeOverlayCloser();
+        window.__activeOverlayCloser = null;
+      }
+
+      // 切主 tab
+      showTab("transactions", { updateHash: false });
+
+      setTimeout(() => {
+        // 切 inventory 子頁
+        showTransactionSubTab("inventoryTab");
+
+        // 帶查詢條件
+        const input = document.getElementById("invSearchKeyword");
+        if (input) {
+          input.value = fixture_id;
+        }
+
+        if (typeof window.loadInventoryOverview === "function") {
+          window.loadInventoryOverview(1);
         }
       }, 0);
     };

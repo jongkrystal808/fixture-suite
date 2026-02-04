@@ -1,76 +1,98 @@
-<!-- =========================
-     Import Result Modal
-========================= -->
-<div id="importResultModal" class="hidden">
-  <div class="import-modal-backdrop"></div>
-  <div class="import-modal">
-    <h3 id="importModalTitle">匯入結果</h3>
+                <!-- ============================================================= -->
+                <!-- 儀表板 Dashboard -->
+                <!-- ============================================================= -->
+                <section id="tab-dashboard" class="space-y-6">
+                  <div class="grid md:grid-cols-3 gap-4">
+                    <div class="card p-5">
+                      <div class="flex items-center justify-between">
+                        <h3 class="font-semibold">今日收料</h3>
+                        <span class="pill border-green-300 text-green-700 bg-green-50">即時</span>
+                      </div>
+                      <p class="text-3xl font-bold mt-2" id="todayIn">0</p>
+                      <div class="mt-3 space-y-2" id="todayInList"></div>
+                    </div>
+                    <div class="card p-5">
+                      <div class="flex items-center justify-between">
+                        <h3 class="font-semibold">今日退料</h3>
+                        <span class="pill border-blue-300 text-blue-700 bg-blue-50">即時</span>
+                      </div>
+                      <p class="text-3xl font-bold mt-2" id="todayOut">0</p>
+                      <div class="mt-3 space-y-2" id="todayOutList"></div>
+                    </div>
+                    <div class="card p-5">
+                      <div class="flex items-center justify-between">
+                        <h3 class="font-semibold">即將更換治具</h3>
+                      </div>
+                      <div class="mt-3 space-y-2 max-h-40 overflow-auto" id="upcomingList"></div>
+                    </div>
+                  </div>
 
-    <div class="import-modal-summary" id="importModalSummary"></div>
+                  <!-- 不耐用治具清單 -->
+                  <div class="card p-5 space-y-4">
+                    <div class="flex items-center justify-between">
+                      <h3 class="font-semibold">不耐用治具清單(壽命未達預設值)</h3>
+                      <button class="btn btn-ghost text-sm" onclick="downloadCSV('undurable_fixtures.csv', toCSV(getUndurableFixtures()))">匯出清單</button>
+                    </div>
+                    <div class="overflow-auto">
+                      <table class="min-w-full text-sm">
+                        <thead class="text-left text-gray-500">
+                          <tr>
+                            <th class="py-2 pr-4">治具編號</th>
+                            <th class="py-2 pr-4">名稱</th>
+                            <th class="py-2 pr-4">預期壽命</th>
+                            <th class="py-2 pr-4">實際使用</th>
+                            <th class="py-2 pr-4">達成率</th>
+                            <th class="py-2 pr-4">警示等級</th>
+                            <th class="py-2 pr-4">負責人</th>
+                            <th class="py-2 pr-4">操作</th>
+                          </tr>
+                        </thead>
+                        <tbody id="undurableTable"></tbody>
+                      </table>
+                      <div id="undurablePagination" class="flex justify-center mt-4"></div>
+                    </div>
+                  </div>
 
-    <pre class="import-modal-errors" id="importModalErrors"></pre>
+                  <!-- 統計卡片 -->
+                  <div class="grid md:grid-cols-4 gap-4">
+                    <div class="card p-5 stat-card">
+                      <div class="text-sm opacity-90">總治具數量</div>
+                      <div class="text-3xl font-bold mt-2" id="statTotalFixtures">0</div>
+                    </div>
+                    <div class="card p-5 bg-gradient-to-br from-green-400 to-emerald-600 text-white">
+                      <div class="text-sm opacity-90">正常使用中</div>
+                      <div class="text-3xl font-bold mt-2" id="statActiveFixtures">0</div>
+                    </div>
+                    <div class="card p-5 bg-gradient-to-br from-amber-400 to-orange-600 text-white">
+                      <div class="text-sm opacity-90">壽命未達標</div>
+                      <div class="text-3xl font-bold mt-2" id="statUnderLifespan">0</div>
+                    </div>
+                    <div class="card p-5 bg-gradient-to-br from-red-400 to-rose-600 text-white">
+                      <div class="text-sm opacity-90">即將更換</div>
+                      <div class="text-3xl font-bold mt-2" id="statNeedReplacement">0</div>
+                    </div>
+                  </div>
 
-    <div class="import-modal-actions">
-      <button type="button" onclick="closeImportResultModal()">確認</button>
-    </div>
-  </div>
-</div>
 
+                  <div class="card p-5">
+                    <div class="flex items-center justify-between mb-3">
+                      <h3 class="font-semibold">常用治具</h3>
+                    </div>
+                    <div class="overflow-auto">
+                      <table class="min-w-full text-sm">
+                        <thead class="text-left text-gray-500">
+                          <tr>
+                            <th class="py-2 pr-4">治具編號</th>
+                            <th class="py-2 pr-4">名稱</th>
+                            <th class="py-2 pr-4">狀態</th>
+                            <th class="py-2 pr-4">使用次數/週期</th>
+                          </tr>
+                        </thead>
+                        <tbody id="commonFixturesTable"></tbody>
+                      </table>
+                    </div>
+                  </div>
+                </section>
 
-
-<!-- 🔍 搜尋 + 分頁：同一行 -->
-<div class="flex items-center justify-between gap-4 mb-4">
-
-  <!-- 左側：搜尋 -->
-  <div class="flex items-center gap-4">
-    <div>
-      <span class="query-label">治具搜尋：</span>
-      <input id="fixtureSearch"
-             class="query-input"
-             placeholder="輸入治具編號 / 名稱"
-             oninput="
-               fixtureQueryPage = 1;
-               debounceLoadFixtures();
-             ">
-    </div>
-
-    <button
-      class="btn btn-primary"
-      onclick="fixtureQueryPage = 1; loadFixturesQuery();">
-      搜尋
-    </button>
-  </div>
-
-  <!-- 右側：分頁 -->
-  <div id="fixtureQueryPagination"
-       class="flex items-center gap-2">
-
-    <button class="btn btn-xs"
-            onclick="fixtureQueryPager.go('first')">
-      «
-    </button>
-
-    <button class="btn btn-xs"
-            onclick="fixtureQueryPager.go('prev')">
-      上一頁
-    </button>
-
-    <span class="px-3 text-sm text-gray-600 whitespace-nowrap">
-      第 <span id="fixturePageNow">1</span> /
-      <span id="fixturePageMax">1</span> 頁
-    </span>
-
-    <button class="btn btn-xs"
-            onclick="fixtureQueryPager.go('next')">
-      下一頁
-    </button>
-
-    <button class="btn btn-xs"
-            onclick="fixtureQueryPager.go('last')">
-      »
-    </button>
-  </div>
-
-</div>
 
 

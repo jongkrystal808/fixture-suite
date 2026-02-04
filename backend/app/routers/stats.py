@@ -135,19 +135,24 @@ async def get_serial_status(
 
 
 # ============================================================
-# 6. 儀表板 Dashboard（Event-based，v4.x FINAL）
+# 6. 儀表板 Dashboard（Event-based + State Summary）
 # ============================================================
 
-@router.get("/dashboard", summary="儀表板資料")
+@router.get("/dashboard", summary="儀表板資料（v4.x FINAL）")
 async def get_dashboard_stats(
     customer_id: str = Depends(get_current_customer_id),
     user=Depends(get_current_user),
 ):
-    today = date.today()
+    """
+    Dashboard 設計原則：
+    - Event-based：今天發生了什麼（收 / 退）
+    - State-based：目前整體狀態（治具總覽，來自 View）
+    - 不進行前端推算
+    """
 
-    # --------------------------------------------------
-    # 1️⃣ 今日收料（完整支援 batch / individual / datecode）
-    # --------------------------------------------------
+    # ========================================================
+    # 1️⃣ 今日收料（Event-based）
+    # ========================================================
     today_in_items = db.execute_query(
         """
         SELECT
@@ -186,9 +191,9 @@ async def get_dashboard_stats(
 
     today_in_total = sum((r.get("qty") or 0) for r in today_in_items)
 
-    # --------------------------------------------------
-    # 2️⃣ 今日退料（完整支援 batch / individual / datecode）
-    # --------------------------------------------------
+    # ========================================================
+    # 2️⃣ 今日退料（Event-based）
+    # ========================================================
     today_out_items = db.execute_query(
         """
         SELECT
@@ -227,13 +232,16 @@ async def get_dashboard_stats(
 
     today_out_total = sum((r.get("qty") or 0) for r in today_out_items)
 
-    # --------------------------------------------------
-    # 3️⃣ 即將更換治具（View，允許不存在）
-    # --------------------------------------------------
+    # ========================================================
+    # 3️⃣ 即將更換治具（State-based View，允許不存在）
+    # ========================================================
     try:
-        upcoming = db.execute_query(
+        upcoming_replacements = db.execute_query(
             """
-            SELECT *
+            SELECT
+                fixture_id,
+                fixture_name,
+                usage_ratio
             FROM view_upcoming_fixture_replacements
             WHERE customer_id = %s
               AND usage_ratio >= 0.8
@@ -243,12 +251,43 @@ async def get_dashboard_stats(
             (customer_id,)
         )
     except Exception:
-        upcoming = []
+        # view 尚未建立或暫時不可用時，不影響 Dashboard
+        upcoming_replacements = []
 
-    # --------------------------------------------------
-    # Response
-    # --------------------------------------------------
+    # ========================================================
+    # 4️⃣ 治具整體狀態總覽（State-based View）
+    # ========================================================
+    fixture_summary_rows = db.execute_query(
+        """
+        SELECT
+            total_fixtures,
+            fixtures_in_stock,
+            fixtures_deployed,
+            fixtures_maintenance,
+            fixtures_scrapped
+        FROM view_fixture_dashboard_stats
+        WHERE customer_id = %s
+        """,
+        (customer_id,)
+    )
+
+    fixture_summary = (
+        fixture_summary_rows[0]
+        if fixture_summary_rows
+        else {
+            "total_fixtures": 0,
+            "fixtures_in_stock": 0,
+            "fixtures_deployed": 0,
+            "fixtures_maintenance": 0,
+            "fixtures_scrapped": 0,
+        }
+    )
+
+    # ========================================================
+    # Response（前端可直接使用）
+    # ========================================================
     return {
+        # Event-based
         "today_in": {
             "total": today_in_total,
             "items": today_in_items,
@@ -257,5 +296,10 @@ async def get_dashboard_stats(
             "total": today_out_total,
             "items": today_out_items,
         },
-        "upcoming_replacements": upcoming,
+
+        # State-based
+        "fixture_summary": fixture_summary,
+
+        # Mixed（State view + rule）
+        "upcoming_replacements": upcoming_replacements,
     }
