@@ -1,4 +1,4 @@
-version: '3.8'
+
 
 # 治具管理系統 - Docker Compose 配置
 # 用於快速部署多人測試環境

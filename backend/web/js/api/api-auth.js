@@ -11,7 +11,10 @@
 async function apiLogin(username, password) {
   return api("/auth/login", {
     method: "POST",
-    body: { username, password },
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ username, password }),
     skipCustomerId: true,
     skipAuth: true
   });

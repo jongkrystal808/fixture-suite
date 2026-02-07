@@ -24,6 +24,32 @@ router = APIRouter(
 # ⭐ 重要：所有具體路徑必須在動態路徑 /{fixture_id} 之前定義
 # ============================================================
 
+
+# ============================================================
+# 📦 治具儲位清單（一定要在動態路徑之前）
+# ============================================================
+@router.get(
+    "/storages",
+    summary="取得治具儲位清單"
+)
+async def list_fixture_storages(
+    customer_id: str = Depends(get_current_customer_id),
+):
+    rows = db.execute_query(
+        """
+        SELECT DISTINCT storage_location
+        FROM fixtures
+        WHERE customer_id = %s
+          AND storage_location IS NOT NULL
+          AND storage_location <> ''
+        ORDER BY storage_location
+        """,
+        (customer_id,)
+    )
+
+    return [r["storage_location"] for r in rows]
+
+
 # ============================================================
 # 🔍 治具模糊搜尋
 # ============================================================
@@ -545,6 +571,9 @@ async def list_fixtures(
     limit: int = Query(8, ge=1, le=200),
     search: Optional[str] = Query(None),
     owner_id: Optional[int] = Query(None),
+    storage: Optional[str] = Query(None),
+
+
 
     user=Depends(get_current_user),
     customer_id: str = Depends(get_current_customer_id),
@@ -557,6 +586,10 @@ async def list_fixtures(
             where.append("(f.id LIKE %s OR f.fixture_name LIKE %s)")
             like = f"%{search}%"
             params.extend([like, like])
+
+        if storage:
+            where.append("f.storage_location = %s")
+            params.append(storage)
 
         if owner_id:
             where.append("f.owner_id = %s")
@@ -701,3 +734,4 @@ async def delete_fixture(
     except Exception:
         print("❌ [delete_fixture]\n", traceback.format_exc())
         raise HTTPException(status_code=500, detail="刪除治具失敗")
+

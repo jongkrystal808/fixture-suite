@@ -651,3 +651,40 @@ async def get_stations_by_fixture(
     )
 
     return rows or []
+
+# --------------------------------------------------------------
+# 1️⃣1️⃣ Model Summary（基本資料頁專用）
+# --------------------------------------------------------------
+
+@router.get(
+    "/{model_id}/summary",
+    summary="取得機種可開站數摘要（基本資料頁）"
+)
+async def get_model_summary(
+    model_id: str,
+    customer_id: str = Depends(get_current_customer_id),
+    user=Depends(get_current_user),
+):
+    ensure_model(customer_id, model_id)
+
+    rows = db.execute_query(
+        """
+        SELECT
+            COUNT(*)                           AS total_stations,
+            SUM(CASE WHEN max_available_stations > 0 THEN 1 ELSE 0 END)
+                                             AS usable_stations,
+            MIN(max_available_stations)       AS min_available_stations
+        FROM view_model_max_stations
+        WHERE customer_id = %s
+          AND model_id = %s
+        """,
+        (customer_id, model_id)
+    )
+
+    r = rows[0]
+
+    return {
+        "total_stations": r["total_stations"] or 0,
+        "usable_stations": r["usable_stations"] or 0,
+        "min_available_stations": r["min_available_stations"] or 0,
+    }

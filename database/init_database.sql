@@ -227,7 +227,7 @@ CREATE TABLE `fixture_datecode_transactions` (
   KEY `idx_fixture_datecode` (`fixture_id`,`datecode`),
   CONSTRAINT `fk_fdt_fixture` FOREIGN KEY (`fixture_id`) REFERENCES `fixtures` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_fdt_transaction` FOREIGN KEY (`transaction_id`) REFERENCES `material_transactions` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=192 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=192 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='æ²»å…·æ—¥æœŸç¢¼åº«å­˜ç•°å‹•æ˜Žç´°ï¼ˆéžåºè™Ÿ auditï¼‰';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -365,7 +365,7 @@ CREATE TABLE `fixture_serials` (
   CONSTRAINT `fk_fixture_serials_deployment` FOREIGN KEY (`deployment_id`) REFERENCES `fixture_deployments` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_fixture_serials_receipt_tx` FOREIGN KEY (`receipt_transaction_id`) REFERENCES `material_transactions` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_fixture_serials_return_tx` FOREIGN KEY (`return_transaction_id`) REFERENCES `material_transactions` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=676 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='序號表';
+) ENGINE=InnoDB AUTO_INCREMENT=1177 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='序號表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!50003 SET @saved_cs_client      = @@character_set_client */ ;
 /*!50003 SET @saved_cs_results     = @@character_set_results */ ;
@@ -655,7 +655,7 @@ CREATE TABLE `fixture_serials_history` (
   PRIMARY KEY (`history_id`),
   KEY `idx_fsh_serial_id` (`serial_id`),
   KEY `idx_fsh_changed_at` (`changed_at`)
-) ENGINE=InnoDB AUTO_INCREMENT=100 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=612 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -785,7 +785,7 @@ CREATE TABLE `fixtures_history` (
   PRIMARY KEY (`history_id`),
   KEY `idx_fixture_id` (`fixture_id`),
   KEY `idx_changed_at` (`changed_at`)
-) ENGINE=InnoDB AUTO_INCREMENT=69283 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=69806 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -860,7 +860,7 @@ CREATE TABLE `material_transaction_items` (
   KEY `idx_fixture` (`fixture_id`),
   KEY `idx_customer_fixture` (`customer_id`,`fixture_id`),
   CONSTRAINT `fk_mti_transaction` FOREIGN KEY (`transaction_id`) REFERENCES `material_transactions` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=500 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='收退料實際項目（序號 / 日期碼）';
+) ENGINE=InnoDB AUTO_INCREMENT=1012 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='收退料實際項目（序號 / 日期碼）';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -895,7 +895,7 @@ CREATE TABLE `material_transactions` (
   CONSTRAINT `material_transactions_ibfk_1` FOREIGN KEY (`customer_id`) REFERENCES `customers` (`id`) ON DELETE RESTRICT,
   CONSTRAINT `material_transactions_ibfk_2` FOREIGN KEY (`fixture_id`) REFERENCES `fixtures` (`id`) ON DELETE RESTRICT,
   CONSTRAINT `chk_material_tx_quantity_positive` CHECK ((`quantity` > 0))
-) ENGINE=InnoDB AUTO_INCREMENT=5236 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='物料異動主表';
+) ENGINE=InnoDB AUTO_INCREMENT=5238 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='物料異動主表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!50003 SET @saved_cs_client      = @@character_set_client */ ;
 /*!50003 SET @saved_cs_results     = @@character_set_results */ ;
@@ -983,7 +983,7 @@ CREATE TABLE `owners` (
   CONSTRAINT `fk_owner_customer` FOREIGN KEY (`customer_id`) REFERENCES `customers` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_owner_primary_user` FOREIGN KEY (`primary_user_id`) REFERENCES `users` (`id`),
   CONSTRAINT `fk_owner_secondary_user` FOREIGN KEY (`secondary_user_id`) REFERENCES `users` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=31 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=32 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1077,7 +1077,7 @@ CREATE TABLE `trigger_error_logs` (
   KEY `idx_trigger_name` (`trigger_name`),
   KEY `idx_table_name` (`table_name`),
   KEY `idx_created_at` (`created_at`)
-) ENGINE=InnoDB AUTO_INCREMENT=75 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Trigger 錯誤日誌表';
+) ENGINE=InnoDB AUTO_INCREMENT=106 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Trigger 錯誤日誌表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1324,6 +1324,23 @@ SET @saved_cs_client     = @@character_set_client;
  1 AS `fixture_id`,
  1 AS `serial_number`,
  1 AS `created_at`*/;
+SET character_set_client = @saved_cs_client;
+
+--
+-- Temporary view structure for view `view_fixture_dashboard_stats`
+--
+
+DROP TABLE IF EXISTS `view_fixture_dashboard_stats`;
+/*!50001 DROP VIEW IF EXISTS `view_fixture_dashboard_stats`*/;
+SET @saved_cs_client     = @@character_set_client;
+/*!50503 SET character_set_client = utf8mb4 */;
+/*!50001 CREATE VIEW `view_fixture_dashboard_stats` AS SELECT 
+ 1 AS `customer_id`,
+ 1 AS `total_fixtures`,
+ 1 AS `fixtures_in_stock`,
+ 1 AS `fixtures_deployed`,
+ 1 AS `fixtures_maintenance`,
+ 1 AS `fixtures_scrapped`*/;
 SET character_set_client = @saved_cs_client;
 
 --
@@ -3387,6 +3404,24 @@ DELIMITER ;
 /*!50001 SET collation_connection      = @saved_col_connection */;
 
 --
+-- Final view structure for view `view_fixture_dashboard_stats`
+--
+
+/*!50001 DROP VIEW IF EXISTS `view_fixture_dashboard_stats`*/;
+/*!50001 SET @saved_cs_client          = @@character_set_client */;
+/*!50001 SET @saved_cs_results         = @@character_set_results */;
+/*!50001 SET @saved_col_connection     = @@collation_connection */;
+/*!50001 SET character_set_client      = utf8mb4 */;
+/*!50001 SET character_set_results     = utf8mb4 */;
+/*!50001 SET collation_connection      = utf8mb4_0900_ai_ci */;
+/*!50001 CREATE ALGORITHM=UNDEFINED */
+/*!50013 SQL SECURITY DEFINER */
+/*!50001 VIEW `view_fixture_dashboard_stats` AS select `fixtures`.`customer_id` AS `customer_id`,count(0) AS `total_fixtures`,sum((`fixtures`.`in_stock_qty` > 0)) AS `fixtures_in_stock`,sum((`fixtures`.`deployed_qty` > 0)) AS `fixtures_deployed`,sum((`fixtures`.`maintenance_qty` > 0)) AS `fixtures_maintenance`,sum(((`fixtures`.`in_stock_qty` = 0) and (`fixtures`.`deployed_qty` = 0) and (`fixtures`.`maintenance_qty` = 0) and (`fixtures`.`scrapped_qty` > 0))) AS `fixtures_scrapped` from `fixtures` where (`fixtures`.`deleted_at` is null) group by `fixtures`.`customer_id` */;
+/*!50001 SET character_set_client      = @saved_cs_client */;
+/*!50001 SET character_set_results     = @saved_cs_results */;
+/*!50001 SET collation_connection      = @saved_col_connection */;
+
+--
 -- Final view structure for view `view_fixture_lifespan_status`
 --
 
@@ -3521,4 +3556,4 @@ DELIMITER ;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-02-04  8:55:54
+-- Dump completed on 2026-02-04 16:13:58

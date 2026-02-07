@@ -9,6 +9,8 @@
 let fixtureQueryPage = 1;
 const fixtureQueryPageSize = 20;
 let fixtureQueryPager = null;
+let fixtureStorageOptionsLoaded = false;
+
 
 /* ============================================================
  * 工具：通用分頁元件
@@ -77,6 +79,37 @@ function debounceLoadFixtures() {
   fixturesQueryTimer = setTimeout(loadFixturesQuery, 250);
 }
 
+async function loadFixtureStorageOptions() {
+  if (!window.currentCustomerId) return;
+
+  const select = document.getElementById("fixtureStorageSelect");
+  if (!select) return;
+
+  if (fixtureStorageOptionsLoaded) return;
+
+  try {
+    const list = await apiListFixtureStorages();
+
+    select.innerHTML = `<option value="">全部</option>`;
+
+    list.forEach(r => {
+      const s = typeof r === "string" ? r : r.storage_location;
+      if (!s) return;
+
+      const opt = document.createElement("option");
+      opt.value = s;
+      opt.textContent = s;
+      select.appendChild(opt);
+    });
+
+    fixtureStorageOptionsLoaded = true;
+
+  } catch (err) {
+    console.error("[query] loadFixtureStorageOptions failed:", err);
+  }
+}
+
+
 async function loadFixturesQuery() {
   // v4.x：一定要有 customer context
   if (!window.currentCustomerId) return;
@@ -90,6 +123,9 @@ async function loadFixturesQuery() {
   }
 
   const keyword = searchEl.value.trim();
+  const storage =
+  document.getElementById("fixtureStorageSelect")?.value || "";
+
 
   const params = {
     skip: (fixtureQueryPage - 1) * fixtureQueryPageSize,
@@ -97,9 +133,10 @@ async function loadFixturesQuery() {
   };
 
   if (keyword) params.search = keyword;
+  if (storage) params.storage = storage;
 
   try {
-    const data = await apiListFixtures(params);
+    const data = await apiListFixtures({ params });
     renderFixturesTable(data?.fixtures || []);
 
     if (fixtureQueryPager) {
@@ -358,22 +395,28 @@ function renderModelsQueryTable(list) {
   tbody.innerHTML = "";
 
   if (!Array.isArray(list) || !list.length) {
-    tbody.innerHTML = `<tr><td colspan="4" class="text-center py-3 text-gray-400">沒有資料</td></tr>`;
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="3" class="text-center py-3 text-gray-400">
+          沒有資料
+        </td>
+      </tr>`;
     return;
   }
 
   list.forEach((m) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td class="py-2 px-4">${m.id}</td>
+      <!-- ✅ 機種編號可點擊 -->
+      <td class="py-2 px-4">
+        <span class="text-indigo-600 underline cursor-pointer"
+              onclick="openModelDetail('${m.id}')">
+          ${m.id}
+        </span>
+      </td>
+
       <td class="py-2 px-4">${m.model_name || "-"}</td>
       <td class="py-2 px-4">${m.note || "-"}</td>
-      <td class="py-2 px-4">
-        <button class="text-indigo-600 underline"
-                onclick="openModelDetail('${m.id}')">
-          詳情
-        </button>
-      </td>
     `;
     tbody.appendChild(tr);
   });
@@ -397,14 +440,17 @@ document.addEventListener("DOMContentLoaded", () => {
       pageMax: document.getElementById("fixturePageMax"),
     }
   });
+
+  // ⭐⭐⭐ 關鍵補這段
+  const type = document.getElementById("queryType")?.value;
+  if (type === "fixture" && window.currentCustomerId) {
+    loadFixtureStorageOptions();
+    loadFixturesQuery();
+  }
 });
 
 
 
-onCustomerReady(() => {
-  // 如果 Query tab 首次進來才 load，你也可以只綁事件，不在這裡硬載
-  // 這裡先不主動 load，避免與 app-main.js 的 lazy-load 重複
-});
 
 
 
@@ -420,13 +466,14 @@ function switchQueryType() {
   const fixtureArea = document.getElementById("fixtureQueryArea");
   const modelArea = document.getElementById("modelQueryArea");
   if (!fixtureArea || !modelArea) return;
-
-  // v4.x：沒有 customer context 就不要載
   if (!window.currentCustomerId) return;
 
   if (type === "fixture") {
     fixtureArea.classList.remove("hidden");
     modelArea.classList.add("hidden");
+
+    // ✅ 正確、穩定的時機
+    loadFixtureStorageOptions();
 
     fixtureQueryPage = 1;
     loadFixturesQuery();
@@ -438,6 +485,7 @@ function switchQueryType() {
     loadModelsQuery();
   }
 }
+
 window.switchQueryType = switchQueryType;
 
 
@@ -528,7 +576,6 @@ function closeModelDetail() {
     window.__activeOverlayCloser = null;
   }
 }
-window.closeModelDetail = closeModelDetail;
 
 async function openModelDetail(modelId) {
   const drawer = document.getElementById("modelDetailDrawer");
@@ -584,7 +631,6 @@ async function openModelDetail(modelId) {
     }</div>`;
   }
 }
-window.openModelDetail = openModelDetail;
 
 
 /* ============================================================
@@ -659,9 +705,6 @@ function renderBasicSection(m, capacity = []) {
     }
   `;
 }
-
-
-
 
 
 function renderCapacitySection(capacity, requirements) {
@@ -771,8 +814,6 @@ function renderCapacitySection(capacity, requirements) {
 }
 
 
-
-
 /* ============================================================
  * Fixture Detail Drawer - Tab Switch
  * ============================================================ */
@@ -791,5 +832,18 @@ function switchFixtureDetailTab(tab) {
   });
 }
 
+async function apiListFixtureStorages() {
+  return await api("/fixtures/storages");
+}
+
+
+
+
+window.apiListFixtureStorages = apiListFixtureStorages;
+
+
+
 // 掛到 window，確保 inline onclick 找得到
 window.switchFixtureDetailTab = switchFixtureDetailTab;
+window.openModelDetail = openModelDetail;
+window.closeModelDetail = closeModelDetail;

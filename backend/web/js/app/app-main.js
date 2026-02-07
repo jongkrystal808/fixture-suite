@@ -440,9 +440,20 @@ window.__activeOverlayCloser = null;
       if (modelTab) modelTab.classList.toggle("hidden", type !== "model");
 
       // 資料載入（只在切到時）
-      if (type === "fixture" && typeof window.loadFixturesQuery === "function") {
+      if (type === "fixture") {
+      if (typeof window.loadFixtureStorageOptions === "function") {
+        window.loadFixtureStorageOptions();
+      }
+
+      if (typeof window.fixtureQueryPage !== "undefined") {
+        window.fixtureQueryPage = 1;
+      }
+
+      if (typeof window.loadFixturesQuery === "function") {
         window.loadFixturesQuery();
       }
+    }
+
       if (type === "model" && typeof window.loadModelsQuery === "function") {
         window.loadModelsQuery();
       }

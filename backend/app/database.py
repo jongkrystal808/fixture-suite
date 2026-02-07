@@ -24,7 +24,7 @@ class Database:
                 password=settings.DB_PASS,
                 database=settings.DB_NAME,
                 charset="utf8mb4",
-                autocommit=False,
+                autocommit=True,
             )
 
     # --------------------------------------------------------

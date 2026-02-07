@@ -56,7 +56,12 @@ function renderMachineModelTable(list) {
   list.forEach(m => {
     tbody.insertAdjacentHTML("beforeend", `
       <tr class="hover:bg-gray-50 transition">
-        <td class="py-2 pr-4 text-center text-600 font-bold">${m.id}</td>
+        <td class="py-2 px-4">
+            <span class="text-indigo-600 underline cursor-pointer"
+                  onclick="openModelDetail('${m.id}')">
+              ${m.id}
+            </span>
+        </td>
         <td class="py-2 pr-4 max-w-[200px] truncate text-center">${m.model_name || "-"}</td>
         <td class="py-2 pr-4 max-w-[200px] truncate text-center">${m.note || "-"}</td>
         <td class="py-1 px-3 whitespace-nowrap w-32 align-middle">
