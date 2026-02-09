@@ -86,29 +86,6 @@ async def get_fixture_lifespan(
     }
 
 
-# ============================================================
-#最大開站數（View）
-# ============================================================
-
-@router.get("/max-stations", summary="最大開站數")
-async def get_max_stations(
-    model_id: str = Query(...),
-    customer_id: str = Depends(get_current_customer_id),
-    user=Depends(get_current_user),
-):
-    return db.execute_query(
-        """
-        SELECT
-            station_id,
-            station_name,
-            max_available_stations,
-            limiting_fixtures
-        FROM view_model_max_stations
-        WHERE model_id = %s
-        """,
-        (model_id,)
-    )
-
 
 # ============================================================
 # 序號狀態（View）

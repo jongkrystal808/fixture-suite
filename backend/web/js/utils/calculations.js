@@ -104,39 +104,6 @@ function getTodayReturnCount(returns = window.mockReturns) {
   }).length;
 }
 
-// ============================================
-// 機種與站點計算
-// ============================================
-
-/**
- * 計算機種最大開站數
- * @param {string} modelId - 機種代碼
- * @param {string} stationCode - 站點代碼
- * @param {Array} fixtures - 治具列表
- * @param {Array} requirements - 需求列表
- * @returns {number} 最大開站數
- */
-function calcMaxStations(modelId, stationCode, fixtures, requirements) {
-  // 取得該機種在該站點的所有治具需求
-  const stationReqs = requirements.filter(r =>
-    r.model_id === modelId && r.station_code === stationCode
-  );
-  
-  if (stationReqs.length === 0) return 0;
-  
-  // 計算每個治具可支援的站數
-  const possibleStations = stationReqs.map(req => {
-    const fixture = fixtures.find(f => f.fixture_id === req.fixture_id);
-    if (!fixture || fixture.status !== '正常') return 0;
-    
-    const totalQty = fixture.self_purchased_qty + fixture.customer_supplied_qty;
-    return Math.floor(totalQty / req.required_qty);
-  });
-  
-  // 返回最小值（瓶頸）
-  return Math.min(...possibleStations, 0);
-}
-
 /**
  * 計算治具使用率
  * @param {number} used - 已使用數量
@@ -250,7 +217,6 @@ window.getFixtureStatus = getFixtureStatus;
 window.calcStats = calcStats;
 window.getTodayReceiptCount = getTodayReceiptCount;
 window.getTodayReturnCount = getTodayReturnCount;
-window.calcMaxStations = calcMaxStations;
 window.calcUsageRate = calcUsageRate;
 window.daysSince = daysSince;
 window.calcExpiryDate = calcExpiryDate;

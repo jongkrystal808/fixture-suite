@@ -186,7 +186,20 @@ def create_return(
     created_by = user["id"]
 
     record_type = data.record_type.value
-    source_type = data.source_type.value
+    # =========================
+    # source_type 預設規則
+    # =========================
+    if data.source_type is None:
+        source_type = "customer_supplied"
+    else:
+        source_type = data.source_type.value
+
+    # 保險：嚴格驗證
+    if source_type not in ("customer_supplied", "self_purchased"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"非法 source_type: {source_type}"
+        )
 
     serials_csv = None
     datecode = None

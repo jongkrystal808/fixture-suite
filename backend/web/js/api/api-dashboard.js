@@ -36,22 +36,6 @@ window.apiGetFixtureLifespan = apiGetFixtureLifespan;
  * ============================================================ */
 
 /**
- * 取得某機種最大可開站數
- * GET /stats/max-stations
- */
-function apiGetMaxStations(modelId) {
-  if (!modelId) {
-    throw new Error("apiGetMaxStations: modelId is required");
-  }
-
-  return api("/stats/max-stations", {
-    params: { model_id: modelId },
-  });
-}
-
-window.apiGetMaxStations = apiGetMaxStations;
-
-/**
  * 取得機種治具需求總表
  * GET /stats/model-requirements
  */

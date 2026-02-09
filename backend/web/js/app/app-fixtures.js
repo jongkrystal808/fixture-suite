@@ -227,8 +227,8 @@ function renderFixtureTable(rows) {
               編輯
             </button>
             <button class="btn btn-xs btn-error"
-                    onclick="deleteFixture('${id}')">
-              刪除
+                    onclick="scrapFixture('${id}')">
+              報廢
             </button>
           </div>
         </td>
@@ -350,36 +350,77 @@ window.submitFixtureForm = submitFixtureForm;
 
 
 /* ============================================================
- * 刪除治具（v4.x）
+ * 報廢治具（v4.x）
  * ============================================================ */
 
-async function deleteFixture(id) {
-  if (
-    !id ||
-    typeof id !== "string" ||
-    id === "-" ||
-    id === "undefined" ||
-    id === "[object Object]"
-  ) {
+async function scrapFixture(id) {
+  if (!id || typeof id !== "string") {
     toast("治具資料異常，請重新整理", "error");
     return;
   }
 
-  if (!confirm(`確定要刪除治具 ${id}？`)) return;
-
   if (!window.currentCustomerId) {
-    return toast("尚未選擇客戶", "warning");
+    toast("尚未選擇客戶", "warning");
+    return;
   }
 
   try {
-    await apiDeleteFixture(id);
-    toast("刪除成功");
+    // 1️⃣ 先取得報廢提示資訊
+    const info = await api(`/fixtures/${id}/scrap-info`);
+
+    const qty = info.in_stock_qty ?? 0;
+    const hasTx = info.has_transactions;
+
+    const message = `
+確定要【報廢】治具 ${id} 嗎？
+
+${qty > 0 ? `• 目前庫存數量：${qty}\n` : ""}
+${hasTx ? "• 已存在收/退料或使用紀錄\n" : ""}
+• 報廢後不會出現在正常清單
+• 歷史資料會完整保留
+• 可隨時還原
+    `.trim();
+
+    if (!confirm(message)) return;
+
+    // 2️⃣ 確認後執行報廢
+    await api(`/fixtures/${id}/scrap`, {
+      method: "POST",
+    });
+
+    toast("治具已報廢");
+    loadFixtureList();
+
+  } catch (err) {
+    console.error(err);
+    toast(err?.detail || "報廢治具失敗", "error");
+  }
+}
+
+window.scrapFixture = scrapFixture;
+
+//還原治具
+async function restoreFixture(id) {
+  if (!id) return;
+
+  if (!confirm(`確定要還原治具 ${id}？`)) return;
+
+  try {
+    await api(`/fixtures/${id}/restore`, {
+      method: "POST",
+    });
+
+    toast("治具已還原");
     loadFixtureList();
   } catch (err) {
     console.error(err);
-    toast("刪除失敗", "error");
+    toast(err?.detail || "還原治具失敗", "error");
   }
 }
+
+window.restoreFixture = restoreFixture;
+
+
 
 /* ============================================================
  * 綁定查詢 UI（v4.x）

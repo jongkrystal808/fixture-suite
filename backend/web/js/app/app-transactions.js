@@ -119,7 +119,9 @@ async function submitTransaction() {
   const orderNo = document.getElementById('transactionAddOrder')?.value?.trim();
   const recordType = document.getElementById('transactionAddType')?.value;
   const note = document.getElementById('transactionAddNote')?.value?.trim();
-  const sourceType = document.getElementById('transactionAddSourceType')?.value;
+  const sourceType =
+    document.getElementById('transactionAddSourceType')?.value || 'customer_supplied';
+
 
   if (!fixtureId) return toast('請輸入治具 ID', 'warning');
   if (!sourceType) return toast('請選擇來源類型（客供 / 自購）', 'warning');
@@ -252,12 +254,13 @@ async function loadRecentTransactions() {
           <td class="py-2 pr-4">${t.order_no || '-'}</td>
           <td class="py-2 pr-4">${recordTypeLabel}</td>
           <td class="py-2 pr-4">
-              ${
+              ${    
                 t.record_type === 'datecode'
                   ? `${t.datecode || '-'} (${t.quantity || t.display_quantity_text || '-'})`
                   : (t.quantity || t.display_quantity_text || '-')
               }
             </td>
+          <td class="py-2 pr-4">${t.source_type || '-'}</td>  
           <td class="py-2 pr-4">${t.operator || '-'}</td>
         </tr>
       `;

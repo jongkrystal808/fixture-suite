@@ -1,10 +1,11 @@
 /* ============================================================
- * app-query.js (v4.x PATCHED)
+ * app-query.js (v4.x PATCHED - FIXED MAX STATIONS DISPLAY)
  *
  * ✔ 對應 index.html 查詢頁
  * ✔ fixtures / models 查詢 + 分頁
  * ✔ Detail Drawer
  * ✔ customer 由 api-config.js 注入 X-Customer-Id
+ * ✔ FIXED: 最大可開站數顯示問題
  * ============================================================ */
 let fixtureQueryPage = 1;
 const fixtureQueryPageSize = 20;
@@ -13,7 +14,7 @@ let fixtureStorageOptionsLoaded = false;
 
 
 /* ============================================================
- * 工具：通用分頁元件
+ * 工具:通用分頁元件
  * ============================================================ */
 function renderPagination(targetId, total, page, pageSize, onClick) {
   const el = document.getElementById(targetId);
@@ -233,7 +234,7 @@ async function openFixtureDetail(fixtureId) {
 
   try {
     // =====================================================
-    // 1️⃣ 治具壽命 / 狀態（核心資料）
+    // 1️⃣ 治具壽命 / 狀態(核心資料)
     // =====================================================
     const lifespanResp = await apiGetFixtureLifespan({
       fixture_id: fixtureId,
@@ -248,7 +249,7 @@ async function openFixtureDetail(fixtureId) {
     }
 
     // =====================================================
-    // 2️⃣ 使用 / 更換紀錄（各取前 5 筆）
+    // 2️⃣ 使用 / 更換紀錄(各取前 5 筆)
     // =====================================================
     let usageLogs = [];
     let replacementLogs = [];
@@ -272,7 +273,7 @@ async function openFixtureDetail(fixtureId) {
     } catch (_) {}
 
     // =====================================================
-    // 3️⃣ Render（無庫存、無序號、無 datecode）
+    // 3️⃣ Render(無庫存、無序號、無 datecode)
     // =====================================================
     box.innerHTML = `
       <!-- Tabs -->
@@ -345,7 +346,7 @@ window.closeFixtureDetail = closeFixtureDetail;
 
 
 /* ============================================================
- * 🟩 機種查詢 Models（v4.x：不帶 customer_id）
+ * 🟩 機種查詢 Models(v4.x：不帶 customer_id)
  * ============================================================ */
 
 let modelQueryPage = 1;
@@ -424,7 +425,7 @@ function renderModelsQueryTable(list) {
 
 
 /* ============================================================
- * v4.x：Query 模組初始化（等 customer ready）
+ * v4.x：Query 模組初始化(等 customer ready)
  * ============================================================ */
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -455,7 +456,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 /* ============================================================
- * queryType 切換（v4.x PATCHED）
+ * queryType 切換(v4.x PATCHED)
  * - 等 customer ready
  * - 切換時重置分頁
  * ============================================================ */
@@ -490,7 +491,7 @@ window.switchQueryType = switchQueryType;
 
 
 /* ============================================================
- * Drawer：使用紀錄 / 更換紀錄（供 Fixture Drawer 使用）
+ * Drawer：使用紀錄 / 更換紀錄(供 Fixture Drawer 使用)
  * ============================================================ */
 function renderUsageLogs(logs, fixtureInfo) {
   if (!logs || !logs.length) {
@@ -508,7 +509,7 @@ function renderUsageLogs(logs, fixtureInfo) {
 
         const useCount = log.use_count ?? 0;
 
-        // 壽命消耗比例（單筆）
+        // 壽命消耗比例(單筆)
         const ratio =
           cycle > 0
             ? `${Math.round((useCount / cycle) * 100)}%`
@@ -562,10 +563,10 @@ window.formatTrans = formatTrans;
 
 
 /* ============================================================
- * 🟦 Model Detail Drawer（v4.x PATCHED）
- * - 不再顯示 customer_id（因為 customer 已是 context）
- * - tabs 綁定限制在 drawer 內，避免多次開啟重複綁事件
- * - initRequirementFilter 改傳 stations（重建 options，避免 stale）
+ * 🟦 Model Detail Drawer (v4.x FIXED - 最大可開站數顯示)
+ * - 修正 max_available_stations 欄位讀取
+ * - 加入除錯日誌
+ * - tabs 綁定限制在 drawer 內
  * ============================================================ */
 
 function closeModelDetail() {
@@ -596,10 +597,16 @@ async function openModelDetail(modelId) {
   try {
     const data = await apiGetModelDetail(modelId);
 
+    // 🔥 除錯：檢查原始資料
+    console.log("🔥 RAW model detail data:", data);
+
     const m = data?.model || {};
     const stations = Array.isArray(data?.stations) ? data.stations : [];
     const fixtures = Array.isArray(data?.requirements) ? data.requirements : [];
     const capacity = Array.isArray(data?.capacity) ? data.capacity : [];
+
+    // 🔥 除錯：檢查 capacity 結構
+    console.log("🔥 CAPACITY data:", capacity);
 
     box.innerHTML = `
       <section class="space-y-4">
@@ -634,7 +641,7 @@ async function openModelDetail(modelId) {
 
 
 /* ============================================================
- * 🟦 Tabs 控制（v4.x：限制在 drawer 內容內）
+ * 🟦 Tabs 控制(v4.x：限制在 drawer 內容內)
  * ============================================================ */
 function initModelDetailTabs() {
   const box = document.getElementById("modelDetailContent");
@@ -656,9 +663,12 @@ function initModelDetailTabs() {
 
 
 /* ============================================================
- * 🟦 渲染各區域（v4.x PATCHED）
+ * 🟦 渲染各區域 (v4.x FIXED)
  * ============================================================ */
 function renderBasicSection(m, capacity = []) {
+  // 🔥 除錯日誌
+  console.log("🔥 renderBasicSection called with capacity:", capacity);
+
   const rows = [...capacity].sort((a, b) =>
     String(a.station_id).localeCompare(String(b.station_id))
   );
@@ -679,7 +689,13 @@ function renderBasicSection(m, capacity = []) {
         ? `
           <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
             ${rows.map(r => {
-              const v = Number(r.max_station) || 0;
+              // ✅ FIXED: 嘗試多個可能的欄位名稱，加入除錯
+              const rawValue = r.max_available_stations ?? r.max_station ?? r.maxAvailableStations;
+              const v = Number(rawValue) || 0;
+              
+              // 🔥 除錯每個站點的值
+              console.log(`🔥 Station ${r.station_id}: rawValue=${rawValue}, parsed=${v}`);
+              
               const color =
                 v > 0
                   ? "bg-green-50 text-green-700 border-green-300"
@@ -708,16 +724,14 @@ function renderBasicSection(m, capacity = []) {
 
 
 function renderCapacitySection(capacity, requirements) {
-  // station_id -> max_station
   const capMap = {};
   (capacity || []).forEach(c => {
-    capMap[c.station_id] = Number.isFinite(Number(c.max_station))
-      ? Number(c.max_station)
-      : 0;
+    // ✅ FIXED: 統一使用 max_available_stations
+    const value = c.max_available_stations ?? c.max_station ?? c.maxAvailableStations ?? 0;
+    capMap[c.station_id] = Number.isFinite(Number(value)) ? Number(value) : 0;
   });
 
   // fixture_id -> in_stock_qty
-  // requirements 裡通常已經會帶 in_stock_qty（若你後端有 join fixtures）
   const stockMap = {};
   (requirements || []).forEach(r => {
     if (r.fixture_id && r.in_stock_qty != null) {
@@ -756,6 +770,8 @@ function renderCapacitySection(capacity, requirements) {
                 stationIds.map(stationId => {
                   const rows = group[stationId];
                   const rowspan = rows.length;
+                  
+                  // ✅ FIXED: 從 capMap 讀取預先處理好的值
                   const maxStation = capMap[stationId] ?? 0;
 
                   return rows.map((r, idx) => {
@@ -769,7 +785,6 @@ function renderCapacitySection(capacity, requirements) {
                       reqQty > 0 ? Math.floor(stockQty / reqQty) : 0;
                     
                     const shortage = possibleByThisFixture <= 0;
-
 
                     const stationCell = idx === 0
                       ? `<td class="px-3 py-2 border align-top font-semibold" rowspan="${rowspan}">

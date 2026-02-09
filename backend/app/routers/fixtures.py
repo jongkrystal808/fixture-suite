@@ -40,6 +40,7 @@ async def list_fixture_storages(
         SELECT DISTINCT storage_location
         FROM fixtures
         WHERE customer_id = %s
+          AND is_scrapped = 0
           AND storage_location IS NOT NULL
           AND storage_location <> ''
         ORDER BY storage_location
@@ -66,6 +67,7 @@ async def search_fixtures(
             SELECT id AS fixture_id, fixture_name
             FROM fixtures
             WHERE customer_id = %s
+              AND is_scrapped = 0
               AND LOWER(id) LIKE LOWER(%s)
             ORDER BY id
             LIMIT %s
@@ -173,6 +175,7 @@ async def simple_fixture_list(
                 fixture_name
             FROM fixtures
             WHERE customer_id = %s
+            AND is_scrapped = 0
             ORDER BY id
             """,
             (customer_id,)
@@ -580,6 +583,7 @@ async def list_fixtures(
 ):
     try:
         where = ["f.customer_id = %s"]
+        where.append("f.is_scrapped = 0")
         params = [customer_id]
 
         if search:
@@ -703,11 +707,60 @@ async def update_fixture(
 
 
 
-# ============================================================
-# 刪除治具 (DELETE) - 動態路徑
-# ============================================================
-@router.delete("/{fixture_id}", summary="刪除治具")
-async def delete_fixture(
+@router.post("/{fixture_id}/scrap", summary="報廢治具")
+async def scrap_fixture(
+    fixture_id: str,
+    admin=Depends(get_current_admin),
+    customer_id: str = Depends(get_current_customer_id),
+):
+    try:
+        # 1️⃣ 先讀治具狀態（給前端用）
+        rows = db.execute_query(
+            """
+            SELECT
+                in_stock_qty,
+                is_scrapped
+            FROM fixtures
+            WHERE id = %s AND customer_id = %s
+            """,
+            (fixture_id, customer_id)
+        )
+
+        if not rows:
+            raise HTTPException(status_code=404, detail="治具不存在")
+
+        if rows[0]["is_scrapped"] == 1:
+            raise HTTPException(status_code=400, detail="治具已是報廢狀態")
+
+        # 2️⃣ 執行報廢（不動歷史資料）
+        db.execute_update(
+            """
+            UPDATE fixtures
+            SET
+                is_scrapped = 1,
+                scrapped_at = NOW(),
+                updated_at = NOW()
+            WHERE id = %s AND customer_id = %s
+            """,
+            (fixture_id, customer_id)
+        )
+
+        return {
+            "message": "治具已報廢",
+            "fixture_id": fixture_id
+        }
+
+    except HTTPException:
+        raise
+    except Exception:
+        print("❌ [scrap_fixture]\n", traceback.format_exc())
+        raise HTTPException(status_code=500, detail="報廢治具失敗")
+
+
+
+
+@router.post("/{fixture_id}/restore", summary="還原報廢治具")
+async def restore_fixture(
     fixture_id: str,
     admin=Depends(get_current_admin),
     customer_id: str = Depends(get_current_customer_id),
@@ -715,23 +768,74 @@ async def delete_fixture(
     try:
         affected = db.execute_update(
             """
-            DELETE FROM fixtures
-            WHERE id = %s AND customer_id = %s
+            UPDATE fixtures
+            SET
+                is_scrapped = 0,
+                scrapped_at = NULL,
+                updated_at = NOW()
+            WHERE id = %s
+              AND customer_id = %s
+              AND is_scrapped = 1
             """,
             (fixture_id, customer_id)
         )
 
         if affected == 0:
-            raise HTTPException(status_code=404, detail="治具不存在")
+            raise HTTPException(status_code=400, detail="治具未處於報廢狀態")
 
         return {
-            "message": "刪除成功",
+            "message": "治具已還原",
             "fixture_id": fixture_id
         }
 
     except HTTPException:
         raise
     except Exception:
-        print("❌ [delete_fixture]\n", traceback.format_exc())
-        raise HTTPException(status_code=500, detail="刪除治具失敗")
+        print("❌ [restore_fixture]\n", traceback.format_exc())
+        raise HTTPException(status_code=500, detail="還原治具失敗")
 
+@router.get("/{fixture_id}/scrap-info", summary="取得治具報廢確認資訊")
+async def get_fixture_scrap_info(
+    fixture_id: str,
+    admin=Depends(get_current_admin),
+    customer_id: str = Depends(get_current_customer_id),
+):
+    try:
+        rows = db.execute_query(
+            """
+            SELECT
+                in_stock_qty,
+                is_scrapped
+            FROM fixtures
+            WHERE id = %s AND customer_id = %s
+            """,
+            (fixture_id, customer_id)
+        )
+
+        if not rows:
+            raise HTTPException(status_code=404, detail="治具不存在")
+
+        if rows[0]["is_scrapped"] == 1:
+            raise HTTPException(status_code=400, detail="治具已是報廢狀態")
+
+        tx_exists = db.execute_query(
+            """
+            SELECT 1
+            FROM material_transactions
+            WHERE fixture_id = %s AND customer_id = %s
+            LIMIT 1
+            """,
+            (fixture_id, customer_id)
+        )
+
+        return {
+            "fixture_id": fixture_id,
+            "in_stock_qty": rows[0]["in_stock_qty"] or 0,
+            "has_transactions": bool(tx_exists),
+        }
+
+    except HTTPException:
+        raise
+    except Exception:
+        print("❌ [get_fixture_scrap_info]\n", traceback.format_exc())
+        raise HTTPException(status_code=500, detail="取得報廢確認資訊失敗")

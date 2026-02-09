@@ -58,7 +58,7 @@ function renderMachineModelTable(list) {
       <tr class="hover:bg-gray-50 transition">
         <td class="py-2 px-4">
             <span class="text-indigo-600 underline cursor-pointer"
-                  onclick="openModelDetail('${m.id}')">
+                  onclick="openModelDetailDrawer('${m.id}')"
               ${m.id}
             </span>
         </td>
@@ -844,29 +844,69 @@ async function openModelDetailDrawer(modelId) {
 }
 
 function renderModelDetailDrawer(data) {
-  const { model, stations, requirements, capacity } = data;
+  const { model, stations, capacity } = data;
   const box = document.getElementById("modelDetailContent");
+
+  console.error("🔥 renderModelDetailDrawer capacity =", capacity);
 
   box.innerHTML = `
     <section class="space-y-6">
+
+      <!-- 基本資料 -->
       <div>
-        <h3 class="font-semibold">${model.id}</h3>
-        <p>${model.model_name}</p>
+        <h3 class="text-lg font-semibold">${model.id}</h3>
+        <p class="text-sm text-gray-600">${model.model_name}</p>
       </div>
 
+      <!-- 綁定站點 -->
       <div>
-        <h4>綁定站點</h4>
-        <ul>
-          ${(stations || []).map(s => `<li>${s.station_id} - ${s.station_name}</li>`).join("")}
-        </ul>
+        <h4 class="font-semibold mb-1">綁定站點</h4>
+        ${
+          stations.length
+            ? `<ul class="list-disc ml-5 text-sm">
+                ${stations.map(s =>
+                  `<li>${s.station_id} - ${s.station_name}</li>`
+                ).join("")}
+               </ul>`
+            : `<p class="text-gray-400 text-sm">尚未綁定站點</p>`
+        }
       </div>
 
+      <!-- 最大可開站數（重點） -->
       <div>
-        <h4>最大可開站數</h4>
-        ${(capacity || []).map(c => `
-          <div>${c.station_id}：${c.max_station}</div>
-        `).join("")}
+        <h4 class="font-semibold mb-2">最大可開站數</h4>
+
+        ${
+          capacity && capacity.length
+            ? `
+              <div class="grid grid-cols-2 gap-3">
+                ${capacity.map(c => {
+                  const v = Number(c.max_available_stations) || 0;
+                  const color =
+                    v > 0
+                      ? "bg-green-50 text-green-700 border-green-300"
+                      : "bg-red-50 text-red-700 border-red-300";
+
+                  return `
+                    <div class="border rounded-lg px-3 py-2 text-center ${color}">
+                      <div class="text-xs font-semibold">
+                        ${c.station_id}
+                      </div>
+                      <div class="text-2xl font-bold">
+                        ${v}
+                      </div>
+                      <div class="text-[11px] text-gray-500">
+                        最大可開站數
+                      </div>
+                    </div>
+                  `;
+                }).join("")}
+              </div>
+            `
+            : `<p class="text-gray-400 text-sm">無可計算資料</p>`
+        }
       </div>
+
     </section>
   `;
 }

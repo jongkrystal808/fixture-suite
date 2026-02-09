@@ -45,7 +45,8 @@ class TransactionCreate(BaseModel):
     note: Optional[str] = None
 
     record_type: RecordType
-    source_type: SourceType
+    source_type: Optional[SourceType] = None
+
 
     # serial 模式（batch / individual）
     serials: Optional[List[str]] = None
