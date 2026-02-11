@@ -16,7 +16,7 @@ router = APIRouter(
 
 
 # ============================================================
-# ★ 收退料總檢視（v4.x FINAL｜VIEW 版）
+# ★ 收退料總檢視（v4.x FINAL｜VIEW 版｜修法 B 穩定版）
 # ============================================================
 
 @router.get("/view-all", summary="收退料總檢視（收料 + 退料）")
@@ -24,25 +24,57 @@ async def view_all_transactions(
     fixture_id: Optional[str] = Query(None),
     operator: Optional[str] = Query(None),
     transaction_type: Optional[str] = Query(None),  # receipt | return
+
+    # ★ 修法 B 核心
+    record_type_hint: Optional[str] = Query(None, enum=["serial", "datecode"]),
     serial: Optional[str] = Query(None),
+    datecode: Optional[str] = Query(None),
+    order_no: Optional[str] = Query(None),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
+
+    # UI 狀態用（保留，不主導邏輯）
     query_mode: Optional[str] = Query(None),
 
     skip: int = Query(0),
     limit: int = Query(200),
+
     customer_id: str = Depends(get_current_customer_id),
-    user=Depends(get_current_user)
+    user=Depends(get_current_user),
 ):
+    # ============================================================
+    # 防呆：record_type_hint 必須搭配對應條件
+    # ============================================================
+    if record_type_hint == "serial" and not serial:
+        raise HTTPException(status_code=400, detail="serial 查詢缺少序號")
+
+    if record_type_hint == "datecode" and not datecode:
+        raise HTTPException(status_code=400, detail="datecode 查詢缺少 datecode")
+
+    # ============================================================
+    # WHERE 條件組裝
+    # ============================================================
     where = ["e.customer_id = %s"]
     params = [customer_id]
 
-    # ============================================================
-    # query_mode 控制（只在這裡鎖語意）
-    # ============================================================
+    # ------------------------------------------------------------
+    # UI mode（僅作語意限制，不負責細項）
+    # ------------------------------------------------------------
     if query_mode == "datecode":
         where.append("e.record_type = 'datecode'")
 
+    # ------------------------------------------------------------
+    # 修法 B：record_type 收斂（最重要）
+    # ------------------------------------------------------------
+    if record_type_hint == "serial":
+        where.append("e.record_type != 'datecode'")
+
+    elif record_type_hint == "datecode":
+        where.append("e.record_type = 'datecode'")
+
+    # ------------------------------------------------------------
+    # 共用欄位
+    # ------------------------------------------------------------
     if fixture_id:
         where.append("e.fixture_id LIKE %s")
         params.append(f"%{fixture_id}%")
@@ -55,6 +87,10 @@ async def view_all_transactions(
         where.append("e.transaction_type = %s")
         params.append(transaction_type)
 
+    if order_no:
+        where.append("e.order_no LIKE %s")
+        params.append(f"%{order_no}%")
+
     if date_from:
         where.append("e.transaction_date >= %s")
         params.append(date_from)
@@ -63,20 +99,31 @@ async def view_all_transactions(
         where.append("e.transaction_date <= %s")
         params.append(date_to)
 
-    # 🔍 serial 查詢（仍然需要 EXISTS）
+    # ------------------------------------------------------------
+    # serial 查詢（EXISTS，注意 alias）
+    # ------------------------------------------------------------
     if serial:
         where.append("""
             EXISTS (
                 SELECT 1
                 FROM material_transaction_items i
-                WHERE i.transaction_id = transaction_id
+                WHERE i.transaction_id = e.transaction_id
                   AND i.serial_number LIKE %s
             )
         """)
         params.append(f"%{serial}%")
 
-    where_sql = " AND ".join(where)
+    # ------------------------------------------------------------
+    # datecode 查詢（LEFT JOIN + WHERE）
+    # ------------------------------------------------------------
+    if datecode:
+        where.append("fdt.datecode LIKE %s")
+        params.append(f"%{datecode}%")
 
+    where_sql = " AND ".join(where)
+    # ============================================================
+    # 主查詢（rows）
+    # ============================================================
     sql = f"""
         SELECT
             e.transaction_id AS id,
@@ -90,36 +137,46 @@ async def view_all_transactions(
             e.note,
             e.display_quantity,
             e.display_quantity_text,
-        
-            -- ★ 新增：datecode（只對 datecode record 有值）
+
+            -- datecode（僅 datecode record 有值）
             fdt.datecode
-        
+
         FROM v_material_transactions_event e
-        
+
         LEFT JOIN fixture_datecode_transactions fdt
           ON fdt.transaction_id = e.transaction_id
-        
+
         WHERE {where_sql}
-        
+
         ORDER BY e.transaction_date DESC, e.transaction_id DESC
         LIMIT %s OFFSET %s
     """
 
-    rows = db.execute_query(sql, tuple(params + [limit, skip]))
-
+    rows = db.execute_query(
+        sql,
+        tuple(params + [limit, skip])
+    )
+    # ============================================================
+    # total（JOIN 結構必須與 rows 一致）
+    # ============================================================
     total = db.execute_query(
         f"""
         SELECT COUNT(*) AS total
         FROM v_material_transactions_event e
+        LEFT JOIN fixture_datecode_transactions fdt
+          ON fdt.transaction_id = e.transaction_id
         WHERE {where_sql}
         """,
         tuple(params)
     )[0]["total"]
-
     return {
         "total": total,
         "rows": rows
     }
+
+
+
+
 
 # ============================================================
 # ★ 序號檢視（收 / 退）

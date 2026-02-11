@@ -101,7 +101,7 @@ const VIEW_ALL_TABLE_SCHEMA = {
       { key: 'transaction_date', label: '日期', render: r => formatDate(r.transaction_date) },
       { key: 'transaction_type', label: '類型', render: renderTxType },
       { key: 'fixture_id', label: '治具' },
-      { key: 'order_no', label: '單號' },
+      { key: 'order_no', label: '單號', render: r => formatOrderNo(r.order_no)},
       { key: 'record_type', label: '記錄類型', render: renderRecordType },
       { key: 'quantity', label: '數量', render: renderQuantity },
       { key: 'operator', label: '操作人員' }
@@ -135,6 +135,22 @@ function formatDatecodeQuantity(r) {
   const qty = r.quantity ?? r.display_quantity ?? '-';
 
   return `${dc} (${qty})`;
+}
+
+function formatOrderNo(value) {
+  if (value === null || value === undefined) return '-';
+
+  // 已經是字串，直接回傳
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  // 數字：轉成不含小數的字串
+  if (typeof value === 'number') {
+    return String(Math.trunc(value));
+  }
+
+  return String(value);
 }
 
 
@@ -201,7 +217,7 @@ function switchViewAllMode(mode) {
 window.switchViewAllMode = switchViewAllMode;
 
 // ============================================================
-// 總檢視 - 查詢
+// 總檢視 - 查詢（修正版）
 // ============================================================
 async function loadTransactionViewAll(page = 1) {
   try {
@@ -211,6 +227,7 @@ async function loadTransactionViewAll(page = 1) {
     }
 
     viewAllPage = page;
+
     if (typeof writeQueryState === 'function') {
       writeQueryState({
         va_page: viewAllPage,
@@ -218,25 +235,45 @@ async function loadTransactionViewAll(page = 1) {
       });
     }
 
-
+    // ✅ 一定要最先宣告 params
     const params = {
       skip: (page - 1) * viewPageSize,
       limit: viewPageSize,
-      query_mode: viewAllMode // 傳遞查詢模式給後端
+      query_mode: viewAllMode,
     };
 
-   // ============================================================
-    // 統一組裝查詢參數（依模式）
-    // ============================================================
+    // ========================================================
+    // 修法 B：all mode 的 serial / datecode（集中處理）
+    // ========================================================
+    if (viewAllMode === 'all') {
+      const serial = document.getElementById('vaAllSerial')?.value?.trim();
+      const datecode = document.getElementById('vaAllDatecode')?.value?.trim();
+
+      if (serial && datecode) {
+        toast('序號與 Datecode 請擇一查詢', 'warning');
+        return;
+      }
+
+      if (serial) {
+        params.serial = serial;
+        params.record_type_hint = 'serial';
+      } else if (datecode) {
+        params.datecode = datecode;
+        params.record_type_hint = 'datecode';
+      }
+    }
+
+    // ========================================================
+    // 其他欄位（依模式）
+    // ========================================================
     const config = VIEW_ALL_FIELD_MAP[viewAllMode];
 
     if (config) {
-      // 收退料類型（radio）
+      // 收退料類型
       if (config.txTypeRadio) {
         const txType = document.querySelector(
           `input[name="${config.txTypeRadio}"]:checked`
         )?.value;
-
         if (txType) {
           params.transaction_type = txType;
         }
@@ -248,44 +285,47 @@ async function loadTransactionViewAll(page = 1) {
         if (!el) return;
 
         const value = el.value?.trim();
-        if (value) {
-          params[paramKey] = value;
+        if (!value) return;
+
+        // ⚠️ all mode 時，serial / datecode 已處理，避免覆蓋
+        if (
+          viewAllMode === 'all' &&
+          (paramKey === 'serial' || paramKey === 'datecode')
+        ) {
+          return;
         }
+
+        params[paramKey] = value;
       });
     }
 
-
-    // 根據模式決定使用哪個API
-    let res;
-    if (viewAllMode === 'serial') {
-      res = await apiViewTransactionSerials(params);
-    } else {
-      res = await apiViewAllTransactions(params);
-    }
-
+    // ========================================================
+    // API 呼叫
+    // ========================================================
+    const res =
+      viewAllMode === 'serial'
+        ? await apiViewTransactionSerials(params)
+        : await apiViewAllTransactions(params);
 
     const rows = res?.rows || res?.data || res?.items || [];
     const total = Number(res?.total ?? rows.length ?? 0);
 
-    // 根據模式渲染不同的表格
     if (viewAllMode === 'serial') {
       renderSerialModeTable(rows);
     } else {
       renderViewAllTable(rows);
     }
 
-    if (viewAllPager) {
-      viewAllPager.render(total);
-    }
-
+    viewAllPager?.render(total);
 
   } catch (err) {
-    console.error("[View All] 查詢失敗:", err);
-    toast("查詢失敗", "error");
+    console.error('[View All] 查詢失敗:', err);
+    toast('查詢失敗', 'error');
   }
 }
 
 window.loadTransactionViewAll = loadTransactionViewAll;
+
 
 // ============================================================
 // API - 序號查詢
@@ -356,7 +396,7 @@ function renderSerialModeTable(rows) {
     }
 
     const fixtureId = r.fixture_id || "-";
-    const orderNo = r.order_no || "-";
+    const orderNo = formatOrderNo(r.order_no);
     const serialNo = r.serial_number || r.serial || "-";
     const operator = r.operator || "-";
 

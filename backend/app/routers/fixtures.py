@@ -210,7 +210,7 @@ async def download_fixtures_template(
     ])
 
     ws.append([
-        "FX-001",
+        "*[必填]FX-001",
         "治具範例一",
         "ICT",
         "A01",
@@ -570,17 +570,20 @@ async def get_fixture_detail(
 # ============================================================
 @router.get("", summary="查詢治具列表")
 async def list_fixtures(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(8, ge=1, le=200),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(8, alias="pageSize", ge=1, le=200),
+
+    skip: Optional[int] = Query(None),
+    limit: Optional[int] = Query(None),
+
     search: Optional[str] = Query(None),
     owner_id: Optional[int] = Query(None),
     storage: Optional[str] = Query(None),
 
-
-
     user=Depends(get_current_user),
     customer_id: str = Depends(get_current_customer_id),
 ):
+
     try:
         where = ["f.customer_id = %s"]
         where.append("f.is_scrapped = 0")

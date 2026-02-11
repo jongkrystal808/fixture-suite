@@ -120,6 +120,30 @@ def parse_datecode_qty(raw_datecode, raw_qty) -> tuple[str, int]:
     return dc, qty
 
 
+def normalize_order_no(val):
+    """
+    將 Excel / pandas 讀進來的 order_no 正規化
+    - None / NaN → None
+    - 202505290001.0 → "202505290001"
+    - 保留原本字串（不做數值運算）
+    """
+    if val is None:
+        return None
+    if isinstance(val, float) and pd.isna(val):
+        return None
+
+    s = str(val).strip()
+    if not s:
+        return None
+
+    # Excel 常見問題：數字被轉成 xxxx.0
+    if s.endswith(".0"):
+        s = s[:-2]
+
+    return s
+
+
+
 # ============================================================
 # Excel 匯入（交易合併）
 # ============================================================
@@ -176,7 +200,7 @@ async def import_transactions(
 
             ensure_fixture_exists(fixture_id, customer_id)
 
-            order_no = read_str_optional(row.get("order_no"))
+            order_no = normalize_order_no(row.get("order_no"))
             note = read_str_optional(row.get("note"))
 
             serials_csv = None

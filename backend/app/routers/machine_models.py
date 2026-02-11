@@ -72,7 +72,7 @@ async def download_models_template(
 
     # ── 範例 1：只匯入機種（✔ 合法）
     ws.append([
-        "AWK-1137C",
+        "*[必填]AWK-1137C",
         "AWK-1137C",
         "只建立機種",
         "",
@@ -82,7 +82,7 @@ async def download_models_template(
 
     # ── 範例 2：機種 + 站點 + 治具需求（✔ 合法）
     ws.append([
-        "EDS-108S",
+        "*[必填]EDS-108S",
         "EDS-108S",
         "含站點與治具需求",
         "ST01",
@@ -92,7 +92,7 @@ async def download_models_template(
 
     # ── 範例 3：此站點不需要該治具（✔ 合法）
     ws.append([
-        "EDS-108S",
+        "*[必填]EDS-108S",
         "EDS-108S",
         "",
         "ST02",

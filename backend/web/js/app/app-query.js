@@ -10,65 +10,10 @@
 let fixtureQueryPage = 1;
 const fixtureQueryPageSize = 20;
 let fixtureQueryPager = null;
+let modelQueryPager = null;
+
 let fixtureStorageOptionsLoaded = false;
 
-
-/* ============================================================
- * 工具:通用分頁元件
- * ============================================================ */
-function renderPagination(targetId, total, page, pageSize, onClick) {
-  const el = document.getElementById(targetId);
-  if (!el) return;
-
-  el.innerHTML = "";
-  if (!total || total <= pageSize) return;
-
-  const totalPages = Math.ceil(total / pageSize);
-
-  function addBtn(label, p, active = false, disabled = false) {
-    const btn = document.createElement("button");
-    btn.innerText = label;
-    btn.className =
-      "btn btn-xs mx-1 " +
-      (active ? "btn-primary" : "btn-ghost");
-
-    if (disabled || p == null) {
-      btn.disabled = true;
-      el.appendChild(btn);
-      return;
-    }
-
-    btn.onclick = () => onClick(p);
-    el.appendChild(btn);
-  }
-
-  addBtn("‹", page - 1, false, page === 1);
-
-  // 顯示範圍
-  let start = Math.max(1, page - 4);
-  let end = Math.min(totalPages, page + 4);
-
-  if (page <= 5) end = Math.min(10, totalPages);
-  if (page >= totalPages - 4) start = Math.max(1, totalPages - 9);
-
-  // 第一頁
-  if (start > 1) {
-    addBtn("1", 1);
-    if (start > 2) addBtn("...", null, false, true);
-  }
-
-  for (let p = start; p <= end; p++) {
-    addBtn(String(p), p, p === page);
-  }
-
-  // 最後一頁
-  if (end < totalPages) {
-    if (end < totalPages - 1) addBtn("...", null, false, true);
-    addBtn(String(totalPages), totalPages);
-  }
-
-  addBtn("›", page + 1, false, page === totalPages);
-}
 
 /* ============================================================
  * 🔵 治具查詢 Fixtures
@@ -129,15 +74,22 @@ async function loadFixturesQuery() {
 
 
   const params = {
-    skip: (fixtureQueryPage - 1) * fixtureQueryPageSize,
-    limit: fixtureQueryPageSize,
-  };
+      skip: (fixtureQueryPage - 1) * fixtureQueryPageSize,
+      limit: fixtureQueryPageSize,
+    };
+
+    console.log("[fixture query]", {
+      page: fixtureQueryPage,
+      skip: params.skip,
+      limit: params.limit
+    });
+
 
   if (keyword) params.search = keyword;
   if (storage) params.storage = storage;
 
   try {
-    const data = await apiListFixtures({ params });
+    const data = await apiListFixtures(params);
     renderFixturesTable(data?.fixtures || []);
 
     if (fixtureQueryPager) {
@@ -372,16 +324,11 @@ async function loadModelsQuery() {
 
     renderModelsQueryTable(list);
 
-    renderPagination(
-      "modelQueryPagination",
-      data?.total || (Array.isArray(list) ? list.length : 0) || 0,
-      modelQueryPage,
-      modelQueryPageSize,
-      (p) => {
-        modelQueryPage = p;
-        loadModelsQuery();
-      }
-    );
+    if (modelQueryPager) {
+      modelQueryPager.render(data?.total || 0);
+    }
+
+
   } catch (err) {
     console.error("loadModelsQuery() failed:", err);
     renderModelsQueryTable([]);
@@ -430,17 +377,35 @@ function renderModelsQueryTable(list) {
 
 document.addEventListener("DOMContentLoaded", () => {
   fixtureQueryPager = createPagination({
-    getPage: () => fixtureQueryPage,
-    setPage: v => fixtureQueryPage = v,
-    getPageSize: () => fixtureQueryPageSize,
+  getPage: () => fixtureQueryPage,
+  setPage: (v) => {
+    fixtureQueryPage = v;
+  },
+  getPageSize: () => fixtureQueryPageSize,
+  onPageChange: () => {
+    loadFixturesQuery();
+  },
+  els: {
+    pageNow: document.getElementById("fixturePageNow"),
+    pageMax: document.getElementById("fixturePageMax"),
+  }
+});
+    modelQueryPager = createPagination({
+    getPage: () => modelQueryPage,
+    setPage: (v) => {
+      modelQueryPage = v;
+    },
+    getPageSize: () => modelQueryPageSize,
     onPageChange: () => {
-      loadFixturesQuery();
+      loadModelsQuery();
     },
     els: {
-      pageNow: document.getElementById("fixturePageNow"),
-      pageMax: document.getElementById("fixturePageMax"),
+      pageNow: document.getElementById("modelPageNow"),
+      pageMax: document.getElementById("modelPageMax"),
     }
   });
+
+
 
   // ⭐⭐⭐ 關鍵補這段
   const type = document.getElementById("queryType")?.value;

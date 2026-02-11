@@ -360,11 +360,11 @@ window.apiImportTransactionsXlsx = apiImportTransactionsXlsx;
 function downloadTransactionTemplate() {
   const template = [
     {
-      transaction_type: 'receipt',
-      fixture_id: 'C-00001',
+      transaction_type: '*[必填]receipt',
+      fixture_id: '*[必填]C-00001',
       order_no: '25123456',
-      record_type: 'batch',
-      source_type: 'customer_supplied',
+      record_type: '*[必填]batch',
+      source_type: '*[必填]customer_supplied',
       serial_start: 'SN001',
       serial_end: 'SN100',
       serials: '',
@@ -373,11 +373,11 @@ function downloadTransactionTemplate() {
       note: '批量收料範例'
     },
     {
-      transaction_type: 'return',
-      fixture_id: 'L-00018',
+      transaction_type: '*[必填]return',
+      fixture_id: '*[必填]L-00018',
       order_no: '25123457',
-      record_type: 'individual',
-      source_type: 'self_purchased',
+      record_type: '*[必填]individual',
+      source_type: '*[必填]self_purchased',
       serial_start: '',
       serial_end: '',
       serials: 'SN010,SN011,SN012',
@@ -386,11 +386,11 @@ function downloadTransactionTemplate() {
       note: '個別退料範例'
     },
     {
-      transaction_type: 'receipt',
-      fixture_id: 'L-00020',
+      transaction_type: '*[必填]receipt',
+      fixture_id: '*[必填]L-00020',
       order_no: '25123458',
-      record_type: 'datecode',
-      source_type: 'customer_supplied',
+      record_type: '*[必填]datecode',
+      source_type: '*[必填]customer_supplied',
       serial_start: '',
       serial_end: '',
       serials: '',

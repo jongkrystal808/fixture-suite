@@ -32,7 +32,10 @@ document.addEventListener("DOMContentLoaded", () => {
     getPage: () => fxPage,
     setPage: v => fxPage = v,
     getPageSize: () => Number(fxPageSizeSelect?.value || 10),
-    onPageChange: () => loadFixtureList(),
+    onPageChange: (page) => {
+      fxPage = page;          // ⭐ 關鍵：同步目前頁碼
+      loadFixtureList();
+    },
     els: {
       count: fxCount,
       pageNow: fxPageNow,
@@ -140,13 +143,29 @@ async function loadFixtureList() {
 
   const data = await apiListFixtures(params);
 
-  renderFixtureTable(data.fixtures);
-  if (fxPager) {
+    // ⭐ 關鍵修正：防止頁碼超出最大頁
+    const maxPage = Math.max(1, Math.ceil(data.total / pageSize));
+
+    if (fxPage > maxPage) {
+      fxPage = maxPage;
+    }
+
+    renderFixtureTable(data.fixtures);
+
+    if (fxPager) {
       fxPager.render(data.total);
     }
 
 
+
 }
+
+async function apiListFixtures(params = {}) {
+  const qs = new URLSearchParams(params).toString();
+  return api(`/fixtures?${qs}`);
+}
+window.apiListFixtures = apiListFixtures;
+
 
 
 /* ============================================================
