@@ -124,34 +124,44 @@ function switchCustomerFromHeader(customerId) {
 /* ============================================================
  * 初始化 Header customer select
  * ============================================================ */
-function initCustomerHeaderSelect() {
+async function initCustomerHeaderSelect() {
   const select = document.getElementById("currentCustomerSelect");
   if (!select) return;
 
-  const customers = getAllowedCustomers();
-  if (customers.length === 0) {
-    select.classList.add("hidden");
-    return;
-  }
+  try {
+    // ⭐ 呼叫 customers API
+    const list = await api("/customers?limit=100");
 
-  select.innerHTML = `<option value="">--</option>`;
+    if (!Array.isArray(list) || list.length === 0) {
+      select.classList.add("hidden");
+      return;
+    }
 
-  customers.forEach(id => {
-    const opt = document.createElement("option");
-    opt.value = id;
-    opt.textContent = id;
-    select.appendChild(opt);
-  });
+    select.innerHTML = `<option value="">--</option>`;
 
-  select.classList.remove("hidden");
+    list
+      .filter(c => c.is_active) // 只顯示啟用
+      .forEach(c => {
+        const opt = document.createElement("option");
+        opt.value = c.id;
 
-  if (
-    window.currentCustomerId &&
-    customers.includes(window.currentCustomerId)
-  ) {
-    select.value = window.currentCustomerId;
+        // ⭐ 顯示名稱
+        opt.textContent = c.customer_abbr || c.id;
+
+        select.appendChild(opt);
+      });
+
+    select.classList.remove("hidden");
+
+    if (window.currentCustomerId) {
+      select.value = window.currentCustomerId;
+    }
+
+  } catch (err) {
+    console.error("載入客戶失敗", err);
   }
 }
+
 
 /* ============================================================
  * 第一次登入：強制選 customer（若多個）
@@ -283,4 +293,3 @@ window.setCurrentCustomer = setCurrentCustomer;
 window.switchCustomerFromHeader = switchCustomerFromHeader;
 window.confirmCustomerSelection = confirmCustomerSelection;
 window.hideCustomerHeaderSelect = hideCustomerHeaderSelect;
-

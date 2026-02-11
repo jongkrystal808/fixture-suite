@@ -98,12 +98,12 @@ async def fixture_statistics(
             """
             SELECT
                 COUNT(*) AS total_fixtures,
-                SUM(in_stock_qty) AS in_stock_qty,
-                SUM(deployed_qty) AS deployed_qty,
-                SUM(maintenance_qty) AS maintenance_qty,
-                SUM(scrapped_qty) AS scrapped_qty,
-                SUM(returned_qty) AS returned_qty
-            FROM fixtures
+                SUM(serial_in_stock) AS in_stock_qty,
+                SUM(serial_deployed) AS deployed_qty,
+                SUM(serial_maintenance) AS maintenance_qty,
+                SUM(serial_scrapped) AS scrapped_qty,
+                SUM(serial_returned) AS returned_qty
+            FROM view_fixture_status
             WHERE customer_id = %s
             """,
             (customer_id,)
@@ -540,13 +540,33 @@ async def get_fixture_detail(
 
         serials = db.execute_query(
             """
-            SELECT *
+            SELECT id,
+                   serial_number,
+                   source_type,
+                   receipt_date,
+                   return_date,
+                   deployment_id,
+                   current_station_id,
+                   total_uses,
+                   last_use_date,
+                   note,
+                   existence_status,
+                   usage_status,
+                   created_at,
+                   updated_at
             FROM fixture_serials
-            WHERE fixture_id=%s AND customer_id=%s
+            WHERE fixture_id = %s
+              AND customer_id = %s
             ORDER BY serial_number
             """,
             (fixture_id, customer_id)
         )
+
+        for s in serials:
+            s["is_operable"] = (
+                    s["existence_status"] == "in_stock"
+                    and s["usage_status"] == "idle"
+            )
 
         return {
             "fixture": fixture_rows[0],

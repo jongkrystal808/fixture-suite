@@ -1,9 +1,9 @@
 """
 Inventory Router (Read-only)
-庫存查詢 API
+庫存查詢 API（v6｜existence_status / usage_status）
 """
 
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query
 from typing import Optional
 
 from backend.app.database import db
@@ -14,16 +14,23 @@ router = APIRouter(
     tags=["Inventory"]
 )
 
+
 # ============================================================
-# 序號庫存
+# 序號庫存（Serial Inventory）
 # ============================================================
 @router.get("/serial")
 def list_serial_inventory(
     customer_id: str = Depends(get_current_customer_id),
-    status: Optional[str] = Query(
+
+    existence_status: Optional[str] = Query(
         default=None,
-        description="in_stock / deployed / maintenance / returned / scrapped"
+        description="in_stock / returned / scrapped"
     ),
+    usage_status: Optional[str] = Query(
+        default=None,
+        description="idle / deployed / maintenance"
+    ),
+
     fixture_id: Optional[str] = Query(default=None),
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=200, ge=1, le=1000),
@@ -32,13 +39,16 @@ def list_serial_inventory(
     查詢治具序號庫存（Read-only）
     來源：fixture_serials
     """
-
     where = ["customer_id = %s"]
     params = [customer_id]
 
-    if status:
-        where.append("status = %s")
-        params.append(status)
+    if existence_status:
+        where.append("existence_status = %s")
+        params.append(existence_status)
+
+    if usage_status:
+        where.append("usage_status = %s")
+        params.append(usage_status)
 
     if fixture_id:
         where.append("fixture_id = %s")
@@ -50,7 +60,8 @@ def list_serial_inventory(
         SELECT
             fixture_id,
             serial_number,
-            status,
+            existence_status,
+            usage_status,
             source_type,
             current_station_id,
             receipt_date,
@@ -63,7 +74,6 @@ def list_serial_inventory(
     """
 
     params.extend([limit, skip])
-
     rows = db.execute_query(sql, tuple(params))
 
     return {
@@ -88,7 +98,6 @@ def list_datecode_inventory(
     查詢治具 Datecode 庫存（Read-only）
     來源：fixture_datecode_inventory
     """
-
     where = ["customer_id = %s"]
     params = [customer_id]
 
@@ -116,7 +125,6 @@ def list_datecode_inventory(
     """
 
     params.extend([limit, skip])
-
     rows = db.execute_query(sql, tuple(params))
 
     return {
@@ -124,7 +132,6 @@ def list_datecode_inventory(
         "skip": skip,
         "limit": limit,
     }
-
 
 
 # ============================================================
@@ -158,7 +165,6 @@ def list_inventory_history(
     }
 
 
-
 @router.get("/search")
 def search_inventory(
     fixture_id: str = Query(...),
@@ -167,43 +173,47 @@ def search_inventory(
 ):
     """
     Inventory 搜尋：
-    1. fixture_id + serial
-    2. fixture_id + datecode
-    3. fixture_id only（keyword 為空或 *）
+    1. fixture_id only (summary)
+    2. fixture_id + serial
+    3. fixture_id + datecode
     """
 
     # ==================================================
-    # 0️⃣ 只搜尋治具編號（不帶 serial / datecode）
+    # 0️⃣ 只搜尋治具（summary）
     # ==================================================
     if keyword in ("", "*"):
-        # --- serial summary ---
         serial_summary = db.execute_one(
             """
             SELECT
-                SUM(CASE WHEN status IN ('deployed','in_use') THEN 1 ELSE 0 END) AS in_use,
-                SUM(CASE WHEN status = 'in_stock' THEN 1 ELSE 0 END) AS in_stock
+                SUM(CASE WHEN existence_status='in_stock' THEN 1 ELSE 0 END) AS in_stock_qty,
+                SUM(CASE WHEN existence_status='returned' THEN 1 ELSE 0 END) AS returned_qty,
+                SUM(CASE WHEN existence_status='scrapped' THEN 1 ELSE 0 END) AS scrapped_qty,
+
+                SUM(CASE WHEN existence_status='in_stock' AND usage_status='idle' THEN 1 ELSE 0 END) AS available_qty,
+                SUM(CASE WHEN existence_status='in_stock' AND usage_status='deployed' THEN 1 ELSE 0 END) AS deployed_qty,
+                SUM(CASE WHEN existence_status='in_stock' AND usage_status='maintenance' THEN 1 ELSE 0 END) AS maintenance_qty
             FROM fixture_serials
             WHERE customer_id = %s
               AND fixture_id = %s
             """,
             (customer_id, fixture_id)
-        )
+        ) or {}
 
-        # --- datecode summary ---
         datecode_summary = db.execute_query(
             """
             SELECT
                 datecode,
-                in_use_qty,
-                in_stock_qty
+                in_stock_qty,
+                returned_qty,
+                source_type
             FROM fixture_datecode_inventory
             WHERE customer_id = %s
               AND fixture_id = %s
+            ORDER BY datecode
             """,
             (customer_id, fixture_id)
-        )
+        ) or []
 
-        # --- recent history ---
         history = db.execute_query(
             """
             SELECT
@@ -217,19 +227,23 @@ def search_inventory(
             FROM material_transactions
             WHERE customer_id = %s
               AND fixture_id = %s
-            ORDER BY transaction_date DESC
+            ORDER BY transaction_date DESC, id DESC
             LIMIT 50
             """,
             (customer_id, fixture_id)
-        )
+        ) or []
 
         return {
             "type": "fixture",
             "fixture_id": fixture_id,
             "found": True,
             "summary": {
-                "serial_in_use": serial_summary["in_use"] or 0,
-                "serial_in_stock": serial_summary["in_stock"] or 0,
+                "serial_in_stock": serial_summary.get("in_stock_qty") or 0,
+                "serial_available": serial_summary.get("available_qty") or 0,
+                "serial_deployed": serial_summary.get("deployed_qty") or 0,
+                "serial_maintenance": serial_summary.get("maintenance_qty") or 0,
+                "serial_returned": serial_summary.get("returned_qty") or 0,
+                "serial_scrapped": serial_summary.get("scrapped_qty") or 0,
                 "datecodes": datecode_summary,
             },
             "history": history,
@@ -240,13 +254,20 @@ def search_inventory(
     # ==================================================
     serial_row = db.execute_one(
         """
-        SELECT fixture_id,
-               serial_number,
-               status
+        SELECT
+            fixture_id,
+            serial_number,
+            existence_status,
+            usage_status,
+            current_station_id,
+            receipt_date,
+            return_date,
+            note
         FROM fixture_serials
         WHERE customer_id = %s
           AND fixture_id = %s
-          AND serial_number = %s LIMIT 1
+          AND serial_number = %s
+        LIMIT 1
         """,
         (customer_id, fixture_id, keyword)
     )
@@ -254,7 +275,8 @@ def search_inventory(
     if serial_row:
         history = db.execute_query(
             """
-            SELECT transaction_date AS date,
+            SELECT
+                transaction_date AS date,
                 order_no,
                 record_type,
                 source_type,
@@ -268,26 +290,31 @@ def search_inventory(
                 SELECT 1
                 FROM material_transaction_items mti
                 WHERE mti.transaction_id = mt.id
-              AND (
-                mti.serial_number = %s
-               OR mti.serial_range LIKE %s
-                )
-                )
-            ORDER BY transaction_date DESC
+                  AND mti.serial_number = %s
+              )
+            ORDER BY transaction_date DESC, mt.id DESC
             """,
-            (
-                customer_id,
-                fixture_id,
-                keyword,
-                f"%{keyword}%"
-            )
+            (customer_id, fixture_id, keyword)
+        ) or []
+
+        is_available = (
+            serial_row["existence_status"] == "in_stock"
+            and serial_row["usage_status"] == "idle"
+        )
+
+        # 相容舊前端（仍回傳 status），但同時提供 v6 欄位
+        api_status = (
+            serial_row["existence_status"]
+            if serial_row["existence_status"] != "in_stock"
+            else serial_row["usage_status"]
         )
 
         return {
             "type": "serial",
             "fixture_id": fixture_id,
             "found": True,
-            "status": serial_row["status"],
+            "status": api_status,                 # legacy compatibility
+            "is_available": is_available,         # v6 recommended
             "data": serial_row,
             "history": history,
         }
@@ -301,7 +328,9 @@ def search_inventory(
             fixture_id,
             datecode,
             in_stock_qty,
-            in_use_qty
+            returned_qty,
+            source_type,
+            updated_at
         FROM fixture_datecode_inventory
         WHERE customer_id = %s
           AND fixture_id = %s
@@ -326,24 +355,18 @@ def search_inventory(
             WHERE customer_id = %s
               AND fixture_id = %s
               AND datecode = %s
-            ORDER BY transaction_date DESC
+            ORDER BY transaction_date DESC, id DESC
             """,
-            (
-                customer_id,
-                fixture_id,
-                keyword
-            )
-        )
+            (customer_id, fixture_id, keyword)
+        ) or []
+
+        api_status = "in_stock" if (datecode_row["in_stock_qty"] or 0) > 0 else "returned"
 
         return {
             "type": "datecode",
             "fixture_id": fixture_id,
             "found": True,
-            "status": (
-                "in_use"
-                if datecode_row["in_use_qty"] > 0
-                else "in_stock"
-            ),
+            "status": api_status,
             "data": datecode_row,
             "history": history,
         }
@@ -362,50 +385,96 @@ def search_inventory(
 @router.get("")
 def list_inventory_overview(
     customer_id: str = Depends(get_current_customer_id),
-    keyword: str = Query("", description="治具編號 / 名稱"),
-    hide_zero: bool = Query(
-            default=True,
-            description="是否隱藏庫存為 0 的治具"
-        ),
+    keyword: str = Query(""),
+    hide_zero: bool = Query(True),
     skip: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(20, ge=1),
 ):
-    where = ["f.customer_id = %s"]
-    params = [customer_id]
+
+    base_where = "f.customer_id = %s AND f.is_scrapped = 0"
+    base_params = [customer_id]
 
     if keyword:
-        where.append("(f.id LIKE %s OR f.fixture_name LIKE %s)")
-        params.extend([f"%{keyword}%", f"%{keyword}%"])
-    if hide_zero:
-        where.append("f.in_stock_qty > 0")
+        base_where += " AND (f.id LIKE %s OR f.fixture_name LIKE %s)"
+        base_params += [f"%{keyword}%", f"%{keyword}%"]
 
-    where_sql = " AND ".join(where)
-
-    rows = db.execute_query(
-        f"""
+    # --------------------------------------------------
+    # 主查詢（不加 HAVING）
+    # --------------------------------------------------
+    base_sql = f"""
         SELECT
-            f.id,
+            f.id AS fixture_id,
             f.fixture_name,
-            f.in_stock_qty,
-            f.self_purchased_qty,
-            f.customer_supplied_qty,
-            f.returned_qty
-        FROM fixtures f
-        WHERE {where_sql}
-        ORDER BY f.id
-        LIMIT %s OFFSET %s
-        """,
-        tuple(params + [limit, skip])
-    )
 
-    total = db.execute_one(
-        f"""
-        SELECT COUNT(*) AS cnt
+            COALESCE(s.serial_in_stock, 0) AS serial_in_stock,
+            COALESCE(s.serial_available, 0) AS serial_available,
+            COALESCE(s.serial_deployed, 0) AS serial_deployed,
+            COALESCE(s.serial_returned, 0) AS serial_returned,
+
+            COALESCE(d.datecode_in_stock, 0) AS datecode_in_stock,
+            COALESCE(d.datecode_returned, 0) AS datecode_returned,
+            COALESCE(d.datecode_self_in_stock, 0) AS datecode_self_in_stock,
+            COALESCE(d.datecode_customer_in_stock, 0) AS datecode_customer_in_stock
+
         FROM fixtures f
-        WHERE {where_sql}
-        """,
-        tuple(params)
-    )["cnt"]
+
+        LEFT JOIN (
+            SELECT
+                fixture_id,
+                SUM(CASE WHEN existence_status='in_stock' THEN 1 ELSE 0 END) AS serial_in_stock,
+                SUM(CASE WHEN existence_status='in_stock' AND usage_status='idle' THEN 1 ELSE 0 END) AS serial_available,
+                SUM(CASE WHEN existence_status='in_stock' AND usage_status='deployed' THEN 1 ELSE 0 END) AS serial_deployed,
+                SUM(CASE WHEN existence_status='returned' THEN 1 ELSE 0 END) AS serial_returned
+            FROM fixture_serials
+            WHERE customer_id = %s
+            GROUP BY fixture_id
+        ) s ON s.fixture_id = f.id
+
+        LEFT JOIN (
+            SELECT
+                fixture_id,
+                SUM(in_stock_qty) AS datecode_in_stock,
+                SUM(returned_qty) AS datecode_returned,
+                SUM(CASE WHEN source_type='self' THEN in_stock_qty ELSE 0 END) AS datecode_self_in_stock,
+                SUM(CASE WHEN source_type='customer' THEN in_stock_qty ELSE 0 END) AS datecode_customer_in_stock
+            FROM fixture_datecode_inventory
+            WHERE customer_id = %s
+            GROUP BY fixture_id
+        ) d ON d.fixture_id = f.id
+
+        WHERE {base_where}
+    """
+
+    params = [
+        customer_id,
+        customer_id,
+        *base_params
+    ]
+
+    # --------------------------------------------------
+    # hide_zero → 用外層包 SELECT
+    # --------------------------------------------------
+    final_sql = f"SELECT * FROM ({base_sql}) AS inv"
+
+    if hide_zero:
+        final_sql += """
+            WHERE (serial_in_stock + datecode_in_stock) > 0
+        """
+
+    # --------------------------------------------------
+    # total
+    # --------------------------------------------------
+    count_sql = f"SELECT COUNT(*) AS cnt FROM ({final_sql}) AS sub"
+    total = db.execute_one(count_sql, tuple(params))["cnt"]
+
+    # --------------------------------------------------
+    # 分頁
+    # --------------------------------------------------
+    final_sql += " ORDER BY fixture_id LIMIT %s OFFSET %s"
+    rows = db.execute_query(
+        final_sql,
+        tuple(params + [limit, skip])
+    ) or []
 
     return {
         "fixtures": rows,

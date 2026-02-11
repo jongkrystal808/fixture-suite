@@ -1,18 +1,34 @@
 /**
- * 序號管理工具前端控制 (v4.x PATCHED)
+ * 序號管理工具前端控制 (v4.x PATCHED + v6 Align)
  * app-serials.js
  *
- * ✅ 不再依賴後端工具 API（可離線運作）
- * ✅ 展開區間 / 正規化（排序+去重）/ 偵測前綴 / 格式驗證 / 計算範圍總數
- * ✅ 支援：純數字、前綴+數字（含補 0）
- * ✅ UI 與其他模組一致（toast + textarea）
+ * ✅ 離線工具：展開區間 / 正規化 / 偵測前綴 / 格式驗證 / 計算範圍總數
+ * ✅ 線上功能：序號履歷 Drawer（對齊 transactions.py 的 /history）
+ * ✅ 安全性：所有 innerHTML 動態內容都做 escapeHtml 防 XSS
+ * ✅ UX：支援 ESC 關閉 Drawer
+ *
+ * ⚠️ v6 對齊重點：
+ * - serial status：existence_status + usage_status（若後端仍回 status 也兼容）
+ * - replacements：occurred_at / operator / note（兼容舊欄位）
  */
 
 /* ============================================================
  * 初始化
  * ============================================================ */
 document.addEventListener("DOMContentLoaded", () => {
-  // 若需要 tab 切換，可以在此監聽
+  // ESC 關閉 Drawer（若目前有 overlay closer）
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && typeof window.__activeOverlayCloser === "function") {
+      window.__activeOverlayCloser();
+    }
+  });
+
+  // 點遮罩關閉
+  document.getElementById("serialDetailOverlay")?.addEventListener("click", (e) => {
+    if (e.target?.id === "serialDetailOverlay") {
+      closeSerialDetailDrawer();
+    }
+  });
 });
 
 /* ============================================================
@@ -20,6 +36,21 @@ document.addEventListener("DOMContentLoaded", () => {
  * ============================================================ */
 function $(id) {
   return document.getElementById(id);
+}
+
+function escapeHtml(str) {
+  return String(str ?? "").replace(/[&<>"']/g, (s) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }[s]));
+}
+
+function safeToast(msg, type) {
+  if (typeof toast === "function") toast(msg, type);
+  else alert(msg);
 }
 
 function getSerialListFromTextarea() {
@@ -33,11 +64,6 @@ function getSerialListFromTextarea() {
 function putSerialsToOutput(serials = []) {
   if ($("serialOutput")) $("serialOutput").value = serials.join("\n");
   if ($("serialCount")) $("serialCount").innerText = `總數：${serials.length}`;
-}
-
-function safeToast(msg, type) {
-  if (typeof toast === "function") toast(msg, type);
-  else alert(msg);
 }
 
 /* ============================================================
@@ -115,7 +141,6 @@ function normalizeSerials(serials) {
 /**
  * validateSerial：
  * - 允許：純數字 or (非數字前綴 + 數字)
- * - 不允許：含空白、含中間混數字字母交錯、含特殊符號（可自行放寬）
  */
 function validateSerial(s) {
   const str = String(s).trim();
@@ -225,7 +250,6 @@ async function validateSerialListUI() {
     if (!bad.length) {
       safeToast("序號格式全部正確");
     } else {
-      // 顯示前幾個錯誤，避免太長
       const preview = bad.slice(0, 5).join("；");
       safeToast(`格式錯誤：${preview}${bad.length > 5 ? "..." : ""}`, "error");
     }
@@ -276,7 +300,6 @@ async function copySerialOutput() {
     safeToast("已複製到剪貼簿");
   } catch (err) {
     console.error(err);
-    // fallback
     try {
       $("serialOutput")?.select?.();
       document.execCommand("copy");
@@ -288,18 +311,18 @@ async function copySerialOutput() {
 }
 window.copySerialOutput = copySerialOutput;
 
+/* ============================================================
+ * 序號履歷 Drawer（對齊後端 /transactions/.../history）
+ * ============================================================ */
 
-// ============================================================
-// 序號履歷 Drawer
-// ============================================================
 async function apiGetSerialHistory(fixtureId, serial) {
-  return api(`/transactions/fixtures/${encodeURIComponent(fixtureId)}/serials/${encodeURIComponent(serial)}/history`);
+  return api(
+    `/transactions/fixtures/${encodeURIComponent(fixtureId)}/serials/${encodeURIComponent(serial)}/history`
+  );
 }
 
 async function openSerialDetail(fixtureId, serial) {
-  if (!fixtureId || !serial || serial === "-" || serial === "null") {
-    return;
-  }
+  if (!fixtureId || !serial || serial === "-" || serial === "null") return;
 
   try {
     const data = await apiGetSerialHistory(fixtureId, serial);
@@ -307,15 +330,13 @@ async function openSerialDetail(fixtureId, serial) {
     openSerialDetailDrawer();
   } catch (e) {
     console.error(e);
-    toast("載入序號履歷失敗", "error");
+    safeToast("載入序號履歷失敗", "error");
   }
 }
 
 function openSerialDetailDrawer() {
   document.getElementById("serialDetailOverlay")?.classList.remove("hidden");
   document.getElementById("serialDetailDrawer")?.classList.remove("translate-x-full");
-
-  // 登記 ESC 關閉
   window.__activeOverlayCloser = () => closeSerialDetailDrawer();
 }
 
@@ -328,72 +349,131 @@ function closeSerialDetailDrawer() {
   }
 }
 
+/**
+ * v6 狀態顯示（兼容舊欄位 status）
+ * - 若後端已有 existence_status / usage_status：以 v6 為主
+ * - 否則 fallback 到 status
+ */
+function getSerialDisplayStatus(s) {
+  if (!s) return "-";
+
+  // v6: existence_status + usage_status
+  if (s.existence_status || s.usage_status) {
+    const ex = s.existence_status || "in_stock";
+    const us = s.usage_status || "idle";
+
+    if (ex !== "in_stock") return ex;     // returned / scrapped
+    if (us !== "idle") return us;         // deployed / maintenance
+    return "in_stock";
+  }
+
+  // v4: status
+  return s.status || "-";
+}
+
+function fmtDateTime(v) {
+  if (!v) return "-";
+  try {
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return escapeHtml(String(v));
+    return d.toLocaleString();
+  } catch {
+    return escapeHtml(String(v));
+  }
+}
+
 function renderSerialDetailDrawer(data) {
   const s = data?.serial || {};
 
-  document.getElementById("serialDetailTitle").textContent = s.serial_number || "-";
-  document.getElementById("sdFixture").textContent = s.fixture_id || "-";
-  document.getElementById("sdStatus").textContent = s.status || "-";
-  document.getElementById("sdSource").textContent = s.source_type || "-";
-  document.getElementById("sdTotalUses").textContent = s.total_uses ?? "-";
+  // Header
+  $("serialDetailTitle").textContent = s.serial_number || "-";
+  $("sdFixture").textContent = s.fixture_id || "-";
+  $("sdStatus").textContent = getSerialDisplayStatus(s);
+  $("sdSource").textContent = s.source_type || "-";
+  $("sdTotalUses").textContent = s.total_uses ?? "-";
 
   // 收 / 退料記錄
-  const txBody = document.getElementById("sdTransactions");
+  const txBody = $("sdTransactions");
   if (txBody) {
     txBody.innerHTML = "";
     (data?.transactions || []).forEach((r) => {
-      const orderNo = r.order_no || "-";
+      const dt = fmtDateTime(r.transaction_date);
+      const type = escapeHtml(r.transaction_type || "-");
+      const orderNo = escapeHtml(r.order_no || "-");
+      const op = escapeHtml(r.operator || "-");
+      const note = escapeHtml(r.note || "-");
+
       txBody.innerHTML += `
         <tr>
-          <td class="py-2 pr-4">${r.transaction_date ? new Date(r.transaction_date).toLocaleString() : "-"}</td>
-          <td class="py-2 pr-4">${r.transaction_type || "-"}</td>
+          <td class="py-2 pr-4">${dt}</td>
+          <td class="py-2 pr-4">${type}</td>
           <td class="py-2 pr-4">${orderNo}</td>
-          <td class="py-2 pr-4">${r.operator || "-"}</td>
+          <td class="py-2 pr-4">${op}</td>
+          <td class="py-2 pr-4">${note}</td>
         </tr>
       `;
     });
   }
 
   // 使用紀錄
-  const usageBody = document.getElementById("sdUsages");
+  const usageBody = $("sdUsages");
   if (usageBody) {
     usageBody.innerHTML = "";
     (data?.usages || []).forEach((u) => {
+      const dt = fmtDateTime(u.used_at);
+      const modelId = escapeHtml(u.model_id || "-");
+      const stationId = escapeHtml(u.station_id || "-");
+      const cnt = escapeHtml(u.use_count ?? "-");
+      const op = escapeHtml(u.operator || "-");
+      const note = escapeHtml(u.note || "-");
+
       usageBody.innerHTML += `
         <tr>
-          <td class="py-2 pr-4">${u.used_at ? new Date(u.used_at).toLocaleString() : "-"}</td>
-          <td class="py-2 pr-4">${u.model_id || "-"}</td>
-          <td class="py-2 pr-4">${u.station_id || "-"}</td>
-          <td class="py-2 pr-4">${u.use_count ?? "-"}</td>
+          <td class="py-2 pr-4">${dt}</td>
+          <td class="py-2 pr-4">${modelId}</td>
+          <td class="py-2 pr-4">${stationId}</td>
+          <td class="py-2 pr-4">${cnt}</td>
+          <td class="py-2 pr-4">${op}</td>
+          <td class="py-2 pr-4">${note}</td>
         </tr>
       `;
     });
   }
 
-  // 更換紀錄
-  const repBody = document.getElementById("sdReplacements");
+  // 更換紀錄（v4.x Replacement Logs：occurred_at/operator/note）
+  // 兼容舊欄位 created_at/usage_before/usage_after（如果以前有）
+  const repBody = $("sdReplacements");
   if (repBody) {
     repBody.innerHTML = "";
     (data?.replacements || []).forEach((r) => {
+      const dt = fmtDateTime(r.occurred_at || r.created_at);
+      const op = escapeHtml(r.operator || "-");
+      const note = escapeHtml(r.note || "-");
+
+      // 舊系統才會有 usage_before/usage_after
+      const before = r.usage_before !== undefined ? escapeHtml(r.usage_before) : null;
+      const after = r.usage_after !== undefined ? escapeHtml(r.usage_after) : null;
+
       repBody.innerHTML += `
         <tr>
-          <td class="py-2 pr-4">${r.created_at ? new Date(r.created_at).toLocaleString() : "-"}</td>
-          <td class="py-2 pr-4">${r.usage_before ?? "-"}</td>
-          <td class="py-2 pr-4">${r.usage_after ?? "-"}</td>
+          <td class="py-2 pr-4">${dt}</td>
+          <td class="py-2 pr-4">${op}</td>
+          <td class="py-2 pr-4">
+            ${
+              before !== null || after !== null
+                ? `<div class="text-xs text-gray-500">before: ${before ?? "-"} / after: ${after ?? "-"}</div>`
+                : ""
+            }
+            ${note}
+          </td>
         </tr>
       `;
     });
   }
 }
 
-// 點遮罩關閉
-document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById("serialDetailOverlay")?.addEventListener("click", (e) => {
-    if (e.target?.id === "serialDetailOverlay") {
-      closeSerialDetailDrawer();
-    }
-  });
-});
-
+/* ============================================================
+ * Expose
+ * ============================================================ */
 window.openSerialDetail = openSerialDetail;
 window.closeSerialDetailDrawer = closeSerialDetailDrawer;

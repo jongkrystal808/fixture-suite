@@ -269,12 +269,13 @@ async def view_transaction_serials(
     }
 
 
+
 # ============================================================
-# ★ 單一序號完整履歷（v4.x 標準）
+# ★ 單一序號完整履歷（v6 FINAL）
 # ============================================================
 @router.get(
     "/fixtures/{fixture_id}/serials/{serial_number}/history",
-    summary="序號完整履歷"
+    summary="序號完整履歷（v6）"
 )
 async def get_serial_history(
     fixture_id: str,
@@ -284,25 +285,22 @@ async def get_serial_history(
 ):
     serial = serial_number.strip()
 
-    # --------------------------------------------------
-    # 1️⃣ 序號基本狀態（summary 為主，event 為輔）
-    # --------------------------------------------------
+    # ==========================================================
+    # 1️⃣ 序號基本狀態（v6 schema）
+    # ==========================================================
     serial_info = db.execute_one(
         """
         SELECT
             fs.serial_number,
             fs.fixture_id,
-            fs.status,
-            fs.total_uses,
-            fs.last_use_date,
+            fs.existence_status,
+            fs.usage_status,
+            fs.source_type,
+            fs.receipt_date,
+            fs.return_date,
             fs.created_at,
-            fs.updated_at,
-
-            -- 來源交易型態（receipt / return / adjustment）
-            mt.transaction_type AS source_type
+            fs.updated_at
         FROM fixture_serials fs
-        LEFT JOIN material_transactions mt
-          ON mt.id = fs.receipt_transaction_id
         WHERE fs.customer_id   = %s
           AND fs.fixture_id    = %s
           AND fs.serial_number = %s
@@ -313,9 +311,16 @@ async def get_serial_history(
     if not serial_info:
         raise HTTPException(status_code=404, detail="Serial not found")
 
-    # --------------------------------------------------
-    # 2️⃣ 收 / 退料交易紀錄（event）
-    # --------------------------------------------------
+    # 🔹 給舊前端相容的合併狀態
+    serial_info["status"] = (
+        serial_info["existence_status"]
+        if serial_info["existence_status"] != "in_stock"
+        else serial_info["usage_status"]
+    )
+
+    # ==========================================================
+    # 2️⃣ 收 / 退料交易紀錄
+    # ==========================================================
     transactions = db.execute_query(
         """
         SELECT
@@ -333,11 +338,11 @@ async def get_serial_history(
         ORDER BY t.transaction_date DESC, t.id DESC
         """,
         (customer_id, fixture_id, serial)
-    )
+    ) or []
 
-    # --------------------------------------------------
-    # 3️⃣ 使用紀錄（usage_logs，serial-level only）
-    # --------------------------------------------------
+    # ==========================================================
+    # 3️⃣ 使用紀錄（serial-level）
+    # ==========================================================
     usages = db.execute_query(
         """
         SELECT
@@ -355,11 +360,11 @@ async def get_serial_history(
         ORDER BY used_at DESC
         """,
         (customer_id, fixture_id, serial)
-    )
+    ) or []
 
-    # --------------------------------------------------
-    # 4️⃣ 更換紀錄（replacement_logs，純事件）
-    # --------------------------------------------------
+    # ==========================================================
+    # 4️⃣ 更換紀錄
+    # ==========================================================
     replacements = db.execute_query(
         """
         SELECT
@@ -374,14 +379,15 @@ async def get_serial_history(
         ORDER BY occurred_at DESC
         """,
         (customer_id, fixture_id, serial)
-    )
+    ) or []
 
     return {
         "serial": serial_info,
         "transactions": transactions,
         "usages": usages,
-        "replacements": replacements
+        "replacements": replacements,
     }
+
 
 
 

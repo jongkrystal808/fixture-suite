@@ -1,5 +1,5 @@
 """
-治具 Excel 匯入 Router（v4.x FINAL）
+治具 Excel 匯入 Router（v6）
 - 路徑：POST /fixtures/import
 - Header-based customer context
 - 僅允許「新增治具」
@@ -76,18 +76,11 @@ async def import_fixtures_xlsx(
     ws = wb["fixtures"]
 
     # =================================================
-    # 2️⃣ Header 檢查（必填 / 選填）
+    # 2️⃣ Header 檢查
     # =================================================
     header = [str(c.value).strip() if c.value else "" for c in ws[1]]
 
     REQUIRED_COLS = ["id", "fixture_name"]
-    OPTIONAL_COLS = [
-        "fixture_type",
-        "storage_location",
-        "replacement_cycle",
-        "cycle_unit",
-        "note",
-    ]
 
     for col in REQUIRED_COLS:
         if col not in header:
@@ -96,11 +89,10 @@ async def import_fixtures_xlsx(
                 detail=f"缺少必要欄位：{col}"
             )
 
-    # 建立 idx（僅存在於 Excel 的欄位才會出現）
     idx = {name: header.index(name) for name in header}
 
     # =================================================
-    # 3️⃣ 初始化匯入回報（對齊 models import）
+    # 3️⃣ 初始化回報
     # =================================================
     result = {
         "fixtures": {
@@ -124,13 +116,11 @@ async def import_fixtures_xlsx(
             start=2
         ):
             try:
-                # 空列
                 if not row:
                     result["fixtures"]["skipped"] += 1
                     result["fixtures"]["skipped_rows"].append(row_no)
                     continue
 
-                # ---------- 必填欄位 ----------
                 fixture_id = str(row[idx["id"]] or "").strip()
                 fixture_name = str(row[idx["fixture_name"]] or "").strip()
 
@@ -139,7 +129,6 @@ async def import_fixtures_xlsx(
                     result["fixtures"]["skipped_rows"].append(row_no)
                     continue
 
-                # ---------- 選填欄位（安全讀取） ----------
                 fixture_type = (
                     str(row[idx["fixture_type"]]).strip()
                     if "fixture_type" in idx and row[idx["fixture_type"]] is not None
@@ -158,7 +147,7 @@ async def import_fixtures_xlsx(
                     else None
                 )
 
-                cycle_unit = (
+                cycle_unit_raw = (
                     str(row[idx["cycle_unit"]]).strip().lower()
                     if "cycle_unit" in idx and row[idx["cycle_unit"]] is not None
                     else "uses"
@@ -170,17 +159,20 @@ async def import_fixtures_xlsx(
                     else ""
                 )
 
-                # ---------- 驗證 ----------
-                if cycle_unit not in ("uses", "days", "none"):
-                    raise ValueError("cycle_unit 必須是 uses / days / none")
-
-                if cycle_unit == "none":
+                # ---------- 驗證 / 正規化 ----------
+                if cycle_unit_raw == "none":
+                    cycle_unit = None
                     replacement_cycle = None
+                elif cycle_unit_raw in ("uses", "days"):
+                    cycle_unit = cycle_unit_raw
+                else:
+                    raise ValueError("cycle_unit 必須是 uses / days / none")
 
                 # ---------- 不允許已存在 ----------
                 cursor.execute(
                     """
-                    SELECT 1 FROM fixtures
+                    SELECT 1
+                    FROM fixtures
                     WHERE customer_id=%s AND id=%s
                     """,
                     (customer_id, fixture_id)
@@ -190,7 +182,7 @@ async def import_fixtures_xlsx(
                         f"治具編號 {fixture_id} 已存在，禁止重複匯入"
                     )
 
-                # ---------- INSERT ----------
+                # ---------- INSERT（v6 cache 初始化） ----------
                 cursor.execute(
                     """
                     INSERT INTO fixtures (
@@ -198,12 +190,25 @@ async def import_fixtures_xlsx(
                         id,
                         fixture_name,
                         fixture_type,
+
+                        self_purchased_qty,
+                        customer_supplied_qty,
+                        in_stock_qty,
+                        deployed_qty,
+                        maintenance_qty,
+                        scrapped_qty,
+                        returned_qty,
+
                         storage_location,
                         replacement_cycle,
                         cycle_unit,
                         note
                     )
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                    VALUES (
+                        %s,%s,%s,%s,
+                        0,0,0,0,0,0,0,
+                        %s,%s,%s,%s
+                    )
                     """,
                     (
                         customer_id,
@@ -221,17 +226,22 @@ async def import_fixtures_xlsx(
                 result["fixtures"]["success_rows"].append(row_no)
 
             except Exception as e:
-                result["errors"].append(
-                    f"第 {row_no} 行：{str(e)}"
-                )
+                result["errors"].append(f"第 {row_no} 行：{str(e)}")
 
         # =================================================
-        # 5️⃣ 無有效資料（非錯誤）
+        # 5️⃣ 錯誤處理
         # =================================================
-        if (
-                result["fixtures"]["imported"] == 0
-                and not result["errors"]
-        ):
+        if result["errors"]:
+            conn.rollback()
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "message": "匯入失敗，資料未寫入",
+                    **result,
+                }
+            )
+
+        if result["fixtures"]["imported"] == 0:
             conn.rollback()
             return {
                 "message": "未匯入任何有效治具資料",
@@ -247,14 +257,14 @@ async def import_fixtures_xlsx(
                 "warning": "檔案中沒有可匯入的有效資料列",
             }
 
-        if result["errors"]:
-            conn.rollback()
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "message": "匯入失敗，資料未寫入",
-                    **result,
-                }
+        # =================================================
+        # 6️⃣ v6：重建 cache
+        # =================================================
+        for row_no in result["fixtures"]["success_rows"]:
+            fixture_id = str(ws[row_no][idx["id"]].value).strip()
+            cursor.execute(
+                "CALL sp_rebuild_fixture_quantities_v6(%s, %s)",
+                (customer_id, fixture_id)
             )
 
         conn.commit()
@@ -264,7 +274,7 @@ async def import_fixtures_xlsx(
         conn.close()
 
     # =================================================
-    # 6️⃣ 成功回傳（models import 風格）
+    # 7️⃣ 成功回傳
     # =================================================
     return {
         "message": "匯入完成",

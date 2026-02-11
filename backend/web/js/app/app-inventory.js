@@ -9,6 +9,7 @@
  * ✔ 與 inventoryTab HTML 完全對齊
  */
 
+
 const INV_QUERY_SCHEMA = {
   inv_keyword: "",
   inv_page: 1,
@@ -25,6 +26,7 @@ function qs(id) {
   return document.getElementById(id);
 }
 
+
 function escapeHtml(str) {
   return String(str ?? "").replace(/[&<>"']/g, s => ({
     "&": "&amp;",
@@ -34,6 +36,7 @@ function escapeHtml(str) {
     "'": "&#39;"
   }[s]));
 }
+
 
 document.addEventListener("DOMContentLoaded", () => {
   inventoryPager = createPagination({
@@ -109,44 +112,47 @@ async function loadInventoryOverview(page = 1) {
 
 
     tbody.innerHTML = items.map(row => {
-      const fixtureId = row.id || "-";
+    const fixtureId = row.id || row.fixture_id || "-";
 
-      return `
-        <tr class="hover:bg-gray-50">
-          <td class="px-3 py-2 font-mono whitespace-nowrap">
-            ${escapeHtml(fixtureId)}
-          </td>
 
-          <td class="px-3 py-2 break-all">
-            ${escapeHtml(row.fixture_name || "-")}
-          </td>
+  return `
+    <tr class="hover:bg-gray-50">
+      <td class="px-3 py-2 font-mono whitespace-nowrap">
+        ${escapeHtml(fixtureId)}
+      </td>
 
-          <td class="px-3 py-2 text-right">
-            ${row.in_stock_qty ?? 0}
-          </td>
+      <td class="px-3 py-2 break-all">
+        ${escapeHtml(row.fixture_name || "-")}
+      </td>
 
-          <td class="px-3 py-2 text-right">
-            ${row.self_purchased_qty ?? 0}
-          </td>
+        <td class="px-3 py-2 text-right">
+          ${(row.serial_in_stock ?? 0) + (row.datecode_in_stock ?? 0)}
+        </td>
+        
+        <td class="px-3 py-2 text-right">
+          ${row.serial_available ?? 0}
+        </td>
+        
+        <td class="px-3 py-2 text-right">
+          ${row.serial_deployed ?? 0}
+        </td>
+        
+        <td class="px-3 py-2 text-right">
+          ${row.serial_returned ?? 0}
+        </td>
 
-          <td class="px-3 py-2 text-right">
-            ${row.customer_supplied_qty ?? 0}
-          </td>
 
-          <td class="px-3 py-2 text-right">
-            ${row.returned_qty ?? 0}
-          </td>
+      <td class="px-3 py-2 text-center whitespace-nowrap">
+        <button
+          class="btn btn-ghost btn-sm"
+          onclick="toggleInventoryInlineDetail('${fixtureId}', this)">
+          查看
+        </button>
+      </td>
+    </tr>
+  `;
+}).join("");
 
-          <td class="px-3 py-2 text-center whitespace-nowrap">
-            <button
-              class="btn btn-ghost btn-sm"
-              onclick="toggleInventoryInlineDetail('${fixtureId}', this)">
-              查看
-            </button>
-          </td>
-        </tr>
-      `;
-    }).join("");
     inventoryPager?.render(invTotal);
   } catch (err) {
     console.error("[inventory] loadInventoryOverview failed", err);
@@ -176,6 +182,7 @@ function ensureInventoryPager() {
     els: { pageNow, pageMax }
   });
 }
+
 
 /* ============================================================
  * Inline Inventory Detail（展開 / 收合 + 動畫）
@@ -248,39 +255,45 @@ async function toggleInventoryInlineDetail(fixtureId, btn) {
   }
 }
 
+
 /* ============================================================
  * Inline render helpers
  * ============================================================ */
 
-    function renderInlineSerial(items) {
-      const inUse = items
-        .filter(s => s.status !== "in_stock")
-        .map(s => s.serial_number);
+function renderInlineSerial(items) {
+  const inUse = items
+    .filter(s =>
+      s.existence_status === "in_stock" &&
+      s.usage_status !== "idle"
+    )
+    .map(s => s.serial_number);
 
-      const idle = items
-        .filter(s => s.status === "in_stock")
-        .map(s => s.serial_number);
+  const idle = items
+    .filter(s =>
+      s.existence_status === "in_stock" &&
+      s.usage_status === "idle"
+    )
+    .map(s => s.serial_number);
 
-      return `
+  return `
+    <div>
+      <div class="font-semibold mb-1">序號庫存</div>
+      <div class="grid grid-cols-2 gap-4 text-xs">
         <div>
-          <div class="font-semibold mb-1">序號庫存</div>
-          <div class="grid grid-cols-2 gap-4 text-xs">
-            <div>
-              <span class="text-gray-500">使用中：</span>
-              ${inUse.length ? renderSerialRanges(inUse) : "—"}
-            </div>
-            <div>
-              <span class="text-gray-500">可用：</span>
-              ${idle.length ? renderSerialRanges(idle) : "—"}
-            </div>
-          </div>
+          <span class="text-gray-500">使用中：</span>
+          ${inUse.length ? renderSerialRanges(inUse) : "—"}
         </div>
-      `;
-    }
+        <div>
+          <span class="text-gray-500">可用：</span>
+          ${idle.length ? renderSerialRanges(idle) : "—"}
+        </div>
+      </div>
+    </div>
+  `;
+}
 
 
-
-    function renderInlineDatecode(items) {
+function renderInlineDatecode(items) {
       if (!items.length) {
         return `<div class="text-gray-500">Datecode：—</div>`;
       }
@@ -365,7 +378,6 @@ function renderInlineHistory(items) {
 
 
 
-
 /* ============================================================
  * Init
  * ============================================================ */
@@ -408,6 +420,7 @@ function getHistoryDate(h) {
   );
 }
 
+
 function toggleInvHistoryExpand(btn) {
   const block = btn.closest(".inv-history-block");
   const expanded = block.dataset.expanded === "true";
@@ -448,7 +461,6 @@ function toggleInvSerialExpand(btn, type) {
     btn.innerText = "收合";
   }
 }
-
 
 
 function parseSerial(serial) {
@@ -517,10 +529,10 @@ function compressSerialRanges(serials) {
 }
 
 
-
 function formatSerial(s) {
   return s.prefix + String(s.num).padStart(s.width, "0");
 }
+
 
 function renderSerialRanges(serials) {
   const ranges = compressSerialRanges(serials);
@@ -548,6 +560,7 @@ function renderRecordType(h) {
   }
 }
 
+
 function renderSerialDetail(h) {
   if (h.record_type !== 'batch' && h.record_type !== 'individual') {
     return '-';
@@ -566,8 +579,6 @@ function renderSerialDetail(h) {
 }
 
 
-
-
 function goToSerialViewFromHistory(h) {
   const fixtureId = h.fixture_id;
   const date = getHistoryDate(h); // 你已經有這個
@@ -584,7 +595,6 @@ function goToSerialViewFromHistory(h) {
   // 跳轉
   window.location.href = `/index.html?${params.toString()}`;
 }
-
 
 
 document.addEventListener("DOMContentLoaded", () => {

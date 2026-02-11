@@ -211,8 +211,8 @@ function renderFixtureTable(rows) {
     }
 
     const tr = document.createElement("tr");
+    tr.className = "hover:bg-gray-50 transition";
     tr.innerHTML = `
-      <tr class="hover:bg-gray-50 transition">
         <td class="py-2 pr-4 text-center">
           <span class="text-indigo-600 font-bold hover:underline cursor-pointer"
                 onclick="openFixtureDetail('${id}')">
@@ -251,7 +251,6 @@ function renderFixtureTable(rows) {
             </button>
           </div>
         </td>
-      </tr>
     `;
 
     fxTable.appendChild(tr);
@@ -412,7 +411,9 @@ ${hasTx ? "• 已存在收/退料或使用紀錄\n" : ""}
 
   } catch (err) {
     console.error(err);
-    toast(err?.detail || "報廢治具失敗", "error");
+    const msg = err?.message || err?.detail || "報廢治具失敗";
+    toast(msg, "error");
+
   }
 }
 
@@ -464,22 +465,6 @@ fxPageSizeSelect?.addEventListener("change", () => {
 
 // 保留既有全域（與本檔案無關）
 window.mmOpenModelModal = mmOpenModelModal;
-
-
-/* ============================================================
- * 匯出（舊版 function，保留但不再手動處理 customer）
- * ============================================================ */
-
-async function exportFixtures() {
-  const params = {
-    search: document.getElementById("fixtureSearch")?.value,
-    owner_id: document.getElementById("fixtureOwner")?.value,
-  };
-
-  // v4.x：不自行 fetch、不塞 header
-  window.location.href =
-    apiURL("/fixtures/export") + "?" + new URLSearchParams(params).toString();
-}
 
 
 /* ============================================================
@@ -664,7 +649,7 @@ async function fxImportFixtures(file) {
     const skipped = fixtures.skipped || 0;
     const successRows = fixtures.success_rows || [];
     const skippedRows = fixtures.skipped_rows || [];
-    const errors = Array.isArray(res.errors) ? res.errors : [];
+    const errors = Array.isArray(data.errors) ? data.errors : [];
 
     // ===== 狀態 1：成功 =====
     if (imported > 0) {
