@@ -166,34 +166,43 @@ async function initCustomerHeaderSelect() {
 /* ============================================================
  * 第一次登入：強制選 customer（若多個）
  * ============================================================ */
-function ensureCustomerSelected() {
-  const customers = getAllowedCustomers();
+async function ensureCustomerSelected() {
+  const allowed = getAllowedCustomers();
 
-  // 只有一個 → 自動選
-  if (customers.length === 1 && !window.currentCustomerId) {
-    setCurrentCustomer(customers[0]);
+  if (allowed.length === 1 && !window.currentCustomerId) {
+    setCurrentCustomer(allowed[0]);
     return;
   }
 
-  if (customers.length <= 1) return;
+  if (allowed.length <= 1) return;
   if (window.currentCustomerId) return;
 
   const select = document.getElementById("customerSelect");
   const modal = document.getElementById("customerSelectModal");
   if (!select || !modal) return;
 
-  select.innerHTML =
-    `<option value="" disabled selected>請選擇客戶</option>`;
+  try {
+    const list = await api("/customers?limit=100");
 
-  customers.forEach(id => {
-    const opt = document.createElement("option");
-    opt.value = id;
-    opt.textContent = id;
-    select.appendChild(opt);
-  });
+    select.innerHTML =
+      `<option value="" disabled selected>請選擇客戶</option>`;
 
-  modal.showModal();
+    list
+      .filter(c => allowed.includes(c.id))
+      .forEach(c => {
+        const opt = document.createElement("option");
+        opt.value = c.id;
+        opt.textContent = c.customer_abbr || c.id;   // ✅ 顯示名稱
+        select.appendChild(opt);
+      });
+
+    modal.showModal();
+
+  } catch (err) {
+    console.error("載入客戶失敗", err);
+  }
 }
+
 
 function confirmCustomerSelection() {
   const select = document.getElementById("customerSelect");

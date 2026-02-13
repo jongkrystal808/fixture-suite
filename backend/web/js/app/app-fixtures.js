@@ -1,57 +1,100 @@
 /**
  * 治具資料維護前端控制 (v4.x)
  * 完全對應 index.html 的三段式後台 UI
- *
- * ✔ 查詢 / 分頁
- * ✔ 新增 / 編輯 / 刪除
- * ✔ 對應 fixtureModal（index.html）
- * ✔ skip / limit（customer 由 context/header 決定）
- * ✔ owner 篩選
  */
 
+/* ============================================================
+ * 全域狀態變數
+ * ============================================================ */
+let fxPage = 1;
+let fxPager = null;
 
 /* ============================================================
  * Owners 簡易 API
  * ============================================================ */
-
 async function apiGetOwnersSimple() {
   return api("/owners/simple");
 }
 window.apiGetOwnersSimple = apiGetOwnersSimple;
 
+async function apiListFixtures(params = {}) {
+  const qs = new URLSearchParams(params).toString();
+  return api(`/fixtures?${qs}`);
+}
+window.apiListFixtures = apiListFixtures;
+
+async function apiGetFixture(id) {
+  return api(`/fixtures/${id}`);
+}
+window.apiGetFixture = apiGetFixture;
+
+async function apiCreateFixture(data) {
+  return api("/fixtures", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+async function apiUpdateFixture(id, data) {
+  return api(`/fixtures/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
 
 /* ============================================================
- * 分頁狀態 + DOM
+ * DOM Ready 初始化
  * ============================================================ */
-
-let fxPage = 1;
-let fxPager = null;
-
 document.addEventListener("DOMContentLoaded", () => {
+
+  // 初始化分頁控制器
   fxPager = createPagination({
-    getPage: () => fxPage,
-    setPage: v => fxPage = v,
-    getPageSize: () => Number(fxPageSizeSelect?.value || 10),
+    getPage: () => {
+      return fxPage;
+    },
+    setPage: (v) => {
+      fxPage = v;
+    },
+    getPageSize: () => {
+      const select = document.getElementById("fxPageSize");
+      const val = select ? Number(select.value) : 8;
+      return val || 8;
+    },
     onPageChange: (page) => {
-      fxPage = page;          // ⭐ 關鍵：同步目前頁碼
       loadFixtureList();
     },
     els: {
-      count: fxCount,
-      pageNow: fxPageNow,
-      pageMax: fxPageMax,
+      count: document.getElementById("fxCount"),
+      pageNow: document.getElementById("fxPageNow"),
+      pageMax: document.getElementById("fxPageMax"),
     }
+  });
+
+  // 綁定事件
+  const searchInput = document.getElementById("fxSearch");
+  const ownerFilter = document.getElementById("fxOwnerFilter");
+  const pageSizeSelect = document.getElementById("fxPageSize");
+
+  searchInput?.addEventListener("keydown", e => {
+    if (e.key === "Enter") {
+      fxPage = 1;
+      loadFixtureList();
+    }
+  });
+
+  ownerFilter?.addEventListener("change", () => {
+    fxPage = 1;
+    loadFixtureList();
+  });
+
+  pageSizeSelect?.addEventListener("change", () => {
+    fxPage = 1;
+    loadFixtureList();
   });
 });
 
-
 /* ============================================================
- * 🧭 Admin Sidebar Entry
- * 後台管理 → 治具管理
- *
- * ⚠️ v4.x：
- * - customer gate 由 app-admin.js 處理
- * - 這裡不再自行檢查 customer
+ * Admin Sidebar Entry
  * ============================================================ */
 function loadAdminFixtures() {
   fxPage = 1;
@@ -59,44 +102,20 @@ function loadAdminFixtures() {
 }
 window.loadAdminFixtures = loadAdminFixtures;
 
-
 /* ============================================================
- * DOM references
+ * Customer Ready Hook
  * ============================================================ */
-
-const fxTable = document.getElementById("fxTable");
-const fxCount = document.getElementById("fxCount");
-const fxPageNow = document.getElementById("fxPageNow");
-const fxPageMax = document.getElementById("fxPageMax");
-
-/* 查詢欄位 */
-const fxSearchInput = document.getElementById("fxSearch");
-const fxOwnerFilter = document.getElementById("fxOwnerFilter");
-const fxPageSizeSelect = document.getElementById("fxPageSize");
-
-/* Modal */
-const fixtureModal = document.getElementById("fixtureModal");
-const fmForm = document.getElementById("fixtureForm");
-
-
-/* ============================================================
- * 初始化（v4.x）
- * - 一律等 customer ready
- * ============================================================ */
-
 onCustomerReady(() => {
   loadOwnerDropdown();
   loadFixtureList();
 });
 
-
 /* ============================================================
  * Owner 下拉
  * ============================================================ */
-
 async function loadOwnerDropdown() {
-  if (!fxOwnerFilter) {
-    console.warn("fxOwnerFilter element not found in DOM");
+  const ownerSelect = document.getElementById("fxOwnerFilter");
+  if (!ownerSelect) {
     return;
   }
 
@@ -108,42 +127,56 @@ async function loadOwnerDropdown() {
     return;
   }
 
-  fxOwnerFilter.innerHTML = `<option value="">全部</option>`;
+  ownerSelect.innerHTML = `<option value="">全部</option>`;
 
   owners.forEach(o => {
     const opt = document.createElement("option");
     opt.value = o.id;
     opt.textContent = o.name;
-    fxOwnerFilter.appendChild(opt);
+    ownerSelect.appendChild(opt);
   });
 }
 
-
 /* ============================================================
- * 載入列表（v4.x）
- * - 不再自行帶 customer_id
- * - customer 由 api-config.js → X-Customer-Id
+ * 載入列表
  * ============================================================ */
-
 async function loadFixtureList() {
-  // v4.x：customer 已由 context 保證
-  if (!window.currentCustomerId) return;
 
-  const search = fxSearchInput?.value.trim() ?? "";
-  const owner = fxOwnerFilter?.value || "";
-  const pageSize = Number(fxPageSizeSelect?.value || 10);
+  if (!window.currentCustomerId) {
+    console.warn("currentCustomerId not set");
+    return;
+  }
+
+  // 確保 fxPage 是數字
+  if (typeof fxPage !== "number" || isNaN(fxPage) || fxPage < 1) {
+    fxPage = 1;
+  }
+
+  const searchInput = document.getElementById("fxSearch");
+  const ownerSelect = document.getElementById("fxOwnerFilter");
+  const pageSizeSelect = document.getElementById("fxPageSize");
+
+  const search = searchInput?.value.trim() ?? "";
+  const owner = ownerSelect?.value || "";
+  let pageSize = pageSizeSelect ? Number(pageSizeSelect.value) : 8;
+
+  if (isNaN(pageSize) || pageSize < 1) {
+    pageSize = 8;
+  }
+
+  const skip = (fxPage - 1) * pageSize;
 
   const params = {
-    skip: (fxPage - 1) * pageSize,
+    skip: skip,
     limit: pageSize,
   };
 
   if (search) params.search = search;
   if (owner) params.owner_id = owner;
 
-  const data = await apiListFixtures(params);
+  try {
+    const data = await apiListFixtures(params);
 
-    // ⭐ 關鍵修正：防止頁碼超出最大頁
     const maxPage = Math.max(1, Math.ceil(data.total / pageSize));
 
     if (fxPage > maxPage) {
@@ -155,27 +188,22 @@ async function loadFixtureList() {
     if (fxPager) {
       fxPager.render(data.total);
     }
-
-
-
+  } catch (err) {
+    console.error("載入治具列表失敗", err);
+  }
 }
-
-async function apiListFixtures(params = {}) {
-  const qs = new URLSearchParams(params).toString();
-  return api(`/fixtures?${qs}`);
-}
-window.apiListFixtures = apiListFixtures;
-
-
 
 /* ============================================================
- * 渲染治具維護表格（fixtures）
+ * 渲染表格
  * ============================================================ */
 function renderFixtureTable(rows) {
-  fxTable.innerHTML = "";
+  const table = document.getElementById("fxTable");
+  if (!table) return;
+
+  table.innerHTML = "";
 
   if (!Array.isArray(rows) || rows.length === 0) {
-    fxTable.innerHTML = `
+    table.innerHTML = `
       <tr>
         <td colspan="10" class="text-center py-3 text-gray-400">
           沒有資料
@@ -219,26 +247,19 @@ function renderFixtureTable(rows) {
             ${id}
           </span>
         </td>
-
         <td class="py-2 pr-4 max-w-[200px] truncate text-center" title="${name}">
           ${name}
         </td>
-
         <td class="py-2 pr-4 text-center">${type}</td>
-
         <td class="py-2 pr-4 text-center">
           ${qtyPurchased} / ${qtySupplied} / ${totalQty}
         </td>
-
         <td class="py-2 pr-4 text-center">${storage}</td>
-
         <td class="py-2 pr-4 text-center">${cycleText}</td>
         <td class="py-2 pr-4 text-center">${owner}</td>
-
         <td class="py-2 pr-4 max-w-[200px] truncate text-center" title="${note}">
           ${note}
         </td>
-
         <td class="py-2 pr-4 whitespace-nowrap text-right w-28">
           <div class="flex justify-end gap-2">
             <button class="btn btn-xs btn-outline"
@@ -253,34 +274,38 @@ function renderFixtureTable(rows) {
         </td>
     `;
 
-    fxTable.appendChild(tr);
+    table.appendChild(tr);
   });
 }
-
 
 /* ============================================================
  * Modal：新增 / 編輯
  * ============================================================ */
-
 function openFixtureModal(mode, id = null) {
-  fmForm.reset();
-  fmForm.dataset.mode = mode;
-  fmForm.dataset.id = id || "";
+  const modal = document.getElementById("fixtureModal");
+  const form = document.getElementById("fixtureForm");
+
+  if (!modal || !form) return;
+
+  form.reset();
+  form.dataset.mode = mode;
+  form.dataset.id = id || "";
 
   const title = document.getElementById("fixtureModalTitle");
   const idInput = document.getElementById("fmFixtureId");
 
   if (mode === "create") {
-    title.textContent = "新增治具";
-    idInput.disabled = false;
+    if (title) title.textContent = "新增治具";
+    if (idInput) idInput.disabled = false;
   } else {
-    title.textContent = "編輯治具";
-    idInput.disabled = true;
+    if (title) title.textContent = "編輯治具";
+    if (idInput) idInput.disabled = true;
     loadFixtureDetailToForm(id);
   }
 
-  fixtureModal.style.display = "flex";
+  modal.style.display = "flex";
 }
+window.openFixtureModal = openFixtureModal;
 
 async function loadFixtureDetailToForm(id) {
   try {
@@ -302,50 +327,45 @@ async function loadFixtureDetailToForm(id) {
 }
 
 function closeFixtureModal() {
-  fixtureModal.style.display = "none";
-  fixtureModal.classList.add("hidden");
+  const modal = document.getElementById("fixtureModal");
+  if (modal) {
+    modal.style.display = "none";
+    modal.classList.add("hidden");
+  }
 }
 window.closeFixtureModal = closeFixtureModal;
 
-
 /* ============================================================
- * Modal 送出（v4.x）
- * - 不再自行取得 customer_id
- * - 不再傳 customer_id 給 API
+ * Modal 送出
  * ============================================================ */
-
 async function submitFixtureForm(e) {
   e?.preventDefault();
 
-  // v4.x：customer context 已由外層保證
   if (!window.currentCustomerId) {
     return toast("尚未選擇客戶", "warning");
   }
 
-  const mode = fmForm.dataset.mode;
-  const id = fmForm.dataset.id;
+  const form = document.getElementById("fixtureForm");
+  if (!form) return;
+
+  const mode = form.dataset.mode;
+  const id = form.dataset.id;
   const fixture_id = document.getElementById("fmFixtureId").value.trim();
 
   if (!fixture_id && mode === "create") {
     return toast("治具編號為必填", "warning");
   }
 
-
   const payload = {
-      id: fixture_id, // 只有 create 時會用
-      fixture_name: document.getElementById("fmFixtureName").value.trim(),
-      fixture_type: document.getElementById("fmFixtureType").value.trim(),
-      storage_location: document.getElementById("fmStorage").value.trim(),
-      replacement_cycle: Number(document.getElementById("fmCycle").value),
-      cycle_unit: document.getElementById("fmCycleUnit").value,
-      owner_id: Number(document.getElementById("fmOwnerId").value) || null,
-      note: document.getElementById("fmNote").value.trim(),
-    };
-
-
-  if (mode === "create") {
-    payload.id = fixture_id;
-    }
+    id: fixture_id,
+    fixture_name: document.getElementById("fmFixtureName").value.trim(),
+    fixture_type: document.getElementById("fmFixtureType").value.trim(),
+    storage_location: document.getElementById("fmStorage").value.trim(),
+    replacement_cycle: Number(document.getElementById("fmCycle").value),
+    cycle_unit: document.getElementById("fmCycleUnit").value,
+    owner_id: Number(document.getElementById("fmOwnerId").value) || null,
+    note: document.getElementById("fmNote").value.trim(),
+  };
 
   try {
     if (mode === "create") {
@@ -363,14 +383,11 @@ async function submitFixtureForm(e) {
     toast("治具操作失敗", "error");
   }
 }
-
 window.submitFixtureForm = submitFixtureForm;
 
-
 /* ============================================================
- * 報廢治具（v4.x）
+ * 報廢治具
  * ============================================================ */
-
 async function scrapFixture(id) {
   if (!id || typeof id !== "string") {
     toast("治具資料異常，請重新整理", "error");
@@ -383,7 +400,6 @@ async function scrapFixture(id) {
   }
 
   try {
-    // 1️⃣ 先取得報廢提示資訊
     const info = await api(`/fixtures/${id}/scrap-info`);
 
     const qty = info.in_stock_qty ?? 0;
@@ -401,7 +417,6 @@ ${hasTx ? "• 已存在收/退料或使用紀錄\n" : ""}
 
     if (!confirm(message)) return;
 
-    // 2️⃣ 確認後執行報廢
     await api(`/fixtures/${id}/scrap`, {
       method: "POST",
     });
@@ -413,13 +428,10 @@ ${hasTx ? "• 已存在收/退料或使用紀錄\n" : ""}
     console.error(err);
     const msg = err?.message || err?.detail || "報廢治具失敗";
     toast(msg, "error");
-
   }
 }
-
 window.scrapFixture = scrapFixture;
 
-//還原治具
 async function restoreFixture(id) {
   if (!id) return;
 
@@ -437,85 +449,17 @@ async function restoreFixture(id) {
     toast(err?.detail || "還原治具失敗", "error");
   }
 }
-
 window.restoreFixture = restoreFixture;
 
-
-
 /* ============================================================
- * 綁定查詢 UI（v4.x）
+ * Excel 匯出/匯入
  * ============================================================ */
-
-fxSearchInput?.addEventListener("keydown", e => {
-  if (e.key === "Enter") {
-    fxPage = 1;
-    loadFixtureList();
-  }
-});
-
-fxOwnerFilter?.addEventListener("change", () => {
-  fxPage = 1;
-  loadFixtureList();
-});
-
-fxPageSizeSelect?.addEventListener("change", () => {
-  fxPage = 1;
-  loadFixtureList();
-});
-
-// 保留既有全域（與本檔案無關）
-window.mmOpenModelModal = mmOpenModelModal;
-
-
-/* ============================================================
- * 匯入（舊版 function，v4.x 正確寫法）
- * ============================================================ */
-
-async function importFixtures(input) {
-  const file = input.files[0];
-  if (!file) return;
-
-  const fd = new FormData();
-  fd.append("file", file);
-
-  try {
-    await api("/fixtures/import", {
-      method: "POST",
-      body: fd,
-      rawBody: true,
-    });
-
-    toast("匯入完成");
-    loadFixtureList();
-  } catch (err) {
-    console.error(err);
-    toast("匯入失敗", "error");
-  } finally {
-    input.value = "";
-  }
-}
-
-
-/* ============================================================
- * 下載匯入範本
- * ============================================================ */
-
-function downloadFixtureTemplate() {
-  window.location.href = apiURL("/fixtures/import/template");
-}
-
-
-/* ============================================================
- * v4.x 標準：匯出 Excel
- * ============================================================ */
-
 async function fxExportFixturesXlsx() {
   if (!window.currentCustomerId) {
     return toast("尚未選擇客戶", "warning");
   }
 
   try {
-    // ⭐ 不自行處理 Authorization / customer
     const res = await fetch(apiURL("/fixtures/export"), {
       method: "GET",
       headers: {
@@ -545,13 +489,7 @@ async function fxExportFixturesXlsx() {
     toast("治具匯出失敗", "error");
   }
 }
-
 window.fxExportFixturesXlsx = fxExportFixturesXlsx;
-
-
-/* ============================================================
- * 下載 Excel 匯入範本（v4.x）
- * ============================================================ */
 
 async function fxDownloadFixturesTemplate() {
   if (!window.currentCustomerId) {
@@ -588,26 +526,7 @@ async function fxDownloadFixturesTemplate() {
     toast("下載治具範本失敗", "error");
   }
 }
-
 window.fxDownloadFixturesTemplate = fxDownloadFixturesTemplate;
-
-
-/* ============================================================
- * v4.x 標準：匯入 Excel
- * ============================================================ */
-
-/* ============================================================
- * v4.x 標準：匯入 Excel（Fixtures）
- * - 使用 Import Result Modal 顯示結果
- * - 成功 / 失敗格式統一
- * - customer 由 context/header 決定
- * ============================================================ */
-
-/* ============================================================
- * v4.x 標準：匯入 Excel（Fixtures）
- * - 成功：顯示「N 行成功」
- * - 失敗：逐行顯示錯誤原因
- * ============================================================ */
 
 async function fxImportFixtures(file) {
   if (!file) return;
@@ -637,13 +556,10 @@ async function fxImportFixtures(file) {
 
     const data = await res.json();
 
-    // ❌ 真正失敗（HTTP != 200）
     if (!res.ok) {
       throw { detail: data };
     }
 
-
-    // ===== v4.x fixtures import 正確結構 =====
     const fixtures = data.fixtures || {};
     const imported = fixtures.imported || 0;
     const skipped = fixtures.skipped || 0;
@@ -651,7 +567,6 @@ async function fxImportFixtures(file) {
     const skippedRows = fixtures.skipped_rows || [];
     const errors = Array.isArray(data.errors) ? data.errors : [];
 
-    // ===== 狀態 1：成功 =====
     if (imported > 0) {
       openImportResultModal({
         title: "✅ 治具匯入完成",
@@ -677,7 +592,6 @@ async function fxImportFixtures(file) {
       return;
     }
 
-    // ===== 狀態 2：無有效資料（warning）=====
     openImportResultModal({
       title: "⚠️ 沒有匯入任何治具資料",
       summary: `
@@ -686,11 +600,6 @@ async function fxImportFixtures(file) {
           ${
             skipped > 0
               ? `<div>略過：${skipped} 行（第 ${skippedRows.join("、")} 行）</div>`
-              : ""
-          }
-          ${
-            res.warning
-              ? `<div class="text-gray-500">${res.warning}</div>`
               : ""
           }
         </div>
@@ -714,29 +623,27 @@ async function fxImportFixtures(file) {
   }
 }
 
-
-
 function fxImportFixturesXlsx(file) {
   if (!file) return;
   fxImportFixtures(file);
 }
 window.fxImportFixturesXlsx = fxImportFixturesXlsx;
 
-
-/* ============================================================
- * Import Result Modal（共用）
- * ============================================================ */
-
 function openImportResultModal({ title, summary, errors }) {
-  document.getElementById("importModalTitle").innerText = title || "匯入結果";
-  document.getElementById("importModalSummary").innerHTML = summary || "";
-  document.getElementById("importModalErrors").innerText = errors || "";
+  const modal = document.getElementById("importResultModal");
+  const titleEl = document.getElementById("importModalTitle");
+  const summaryEl = document.getElementById("importModalSummary");
+  const errorsEl = document.getElementById("importModalErrors");
 
-  document.getElementById("importResultModal").classList.remove("hidden");
+  if (titleEl) titleEl.innerText = title || "匯入結果";
+  if (summaryEl) summaryEl.innerHTML = summary || "";
+  if (errorsEl) errorsEl.innerText = errors || "";
+
+  if (modal) modal.classList.remove("hidden");
 }
 
 function closeImportResultModal() {
-  document.getElementById("importResultModal").classList.add("hidden");
+  const modal = document.getElementById("importResultModal");
+  if (modal) modal.classList.add("hidden");
 }
-
 window.closeImportResultModal = closeImportResultModal;

@@ -1,8 +1,8 @@
--- MySQL dump 10.13  Distrib 8.0.43, for Win64 (x86_64)
+-- MySQL dump 10.13  Distrib 8.0.45, for Linux (x86_64)
 --
--- Host: 127.0.0.1    Database: fixture_management_test
+-- Host: localhost    Database: fixture_management_test
 -- ------------------------------------------------------
--- Server version	8.0.44
+-- Server version	8.0.45
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
@@ -70,14 +70,14 @@ DROP TABLE IF EXISTS `fixture_datecode_inventory`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `fixture_datecode_inventory` (
   `id` int NOT NULL AUTO_INCREMENT COMMENT '日期碼庫存ID',
-  `customer_id` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '客戶',
-  `fixture_id` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '治具',
-  `datecode` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '日期碼',
+  `customer_id` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '客戶',
+  `fixture_id` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '治具',
+  `datecode` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '日期碼',
   `in_stock_qty` int NOT NULL COMMENT '可用數量（在庫數量，與 fixtures.in_stock_qty 語意一致）',
   `returned_qty` int DEFAULT NULL COMMENT '已退料數量',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  `source_type` enum('self_purchased','customer_supplied') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'customer_supplied' COMMENT '來源類型（與 fixture_serials 一致）',
+  `source_type` enum('self_purchased','customer_supplied') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'customer_supplied' COMMENT '來源類型（與 fixture_serials 一致）',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_fixture_datecode` (`customer_id`,`fixture_id`,`datecode`),
   KEY `idx_fixture` (`fixture_id`),
@@ -87,7 +87,7 @@ CREATE TABLE `fixture_datecode_inventory` (
   CONSTRAINT `fixture_datecode_inventory_ibfk_1` FOREIGN KEY (`customer_id`) REFERENCES `customers` (`id`) ON DELETE RESTRICT,
   CONSTRAINT `fixture_datecode_inventory_ibfk_2` FOREIGN KEY (`fixture_id`) REFERENCES `fixtures` (`id`) ON DELETE CASCADE,
   CONSTRAINT `chk_returned_non_negative` CHECK ((`returned_qty` >= 0))
-) ENGINE=InnoDB AUTO_INCREMENT=138 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='æ²»å…·æ—¥æœŸç¢¼åº«å­˜ï¼ˆéžåºè™Ÿï¼‰';
+) ENGINE=InnoDB AUTO_INCREMENT=996 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='æ²»å…·æ—¥æœŸç¢¼åº«å­˜ï¼ˆéžåºè™Ÿï¼‰';
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!50003 SET @saved_cs_client      = @@character_set_client */ ;
 /*!50003 SET @saved_cs_results     = @@character_set_results */ ;
@@ -105,7 +105,6 @@ DELIMITER ;;
             SET MESSAGE_TEXT = 'datecode in_stock_qty 不可為 NULL 或負數';
     END IF;
 
-    -- fixture 必須存在
     IF (SELECT COUNT(*) FROM fixtures WHERE id = NEW.fixture_id) = 0 THEN
         SIGNAL SQLSTATE '45000'
             SET MESSAGE_TEXT = '找不到治具 fixture_id';
@@ -152,20 +151,16 @@ DELIMITER ;
 /*!50032 DROP TRIGGER IF EXISTS trg_datecode_inventory_bu_validate */;
 DELIMITER ;;
 /*!50003 CREATE*/ /*!50017 /*!50003 TRIGGER `trg_datecode_inventory_bu_validate` BEFORE UPDATE ON `fixture_datecode_inventory` FOR EACH ROW BEGIN
-    -- 實際庫存不可為負
     IF NEW.in_stock_qty IS NULL OR NEW.in_stock_qty < 0 THEN
         SIGNAL SQLSTATE '45000'
             SET MESSAGE_TEXT = 'datecode in_stock_qty 不可為 NULL 或負數';
     END IF;
 
-    -- returned_qty 僅允許累加，不可為負
     IF NEW.returned_qty IS NOT NULL AND NEW.returned_qty < 0 THEN
         SIGNAL SQLSTATE '45000'
             SET MESSAGE_TEXT = 'datecode returned_qty 不可為負數';
     END IF;
 
-    -- 【方案 2 語意防呆】
-    -- 若 returned_qty 增加，in_stock_qty 必須同步減少
     IF NEW.returned_qty > OLD.returned_qty
         AND NEW.in_stock_qty >= OLD.in_stock_qty THEN
         SIGNAL SQLSTATE '45000'
@@ -189,6 +184,7 @@ DELIMITER ;
 DELIMITER ;;
 /*!50003 CREATE*/ /*!50017 /*!50003 TRIGGER `trg_datecode_inventory_au_sync` AFTER UPDATE ON `fixture_datecode_inventory` FOR EACH ROW BEGIN
     DECLARE delta INT;
+
     SET delta = NEW.in_stock_qty - OLD.in_stock_qty;
 
     UPDATE fixtures
@@ -227,7 +223,7 @@ CREATE TABLE `fixture_datecode_transactions` (
   KEY `idx_fixture_datecode` (`fixture_id`,`datecode`),
   CONSTRAINT `fk_fdt_fixture` FOREIGN KEY (`fixture_id`) REFERENCES `fixtures` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_fdt_transaction` FOREIGN KEY (`transaction_id`) REFERENCES `material_transactions` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=192 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='æ²»å…·æ—¥æœŸç¢¼åº«å­˜ç•°å‹•æ˜Žç´°ï¼ˆéžåºè™Ÿ auditï¼‰';
+) ENGINE=InnoDB AUTO_INCREMENT=1605 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='æ²»å…·æ—¥æœŸç¢¼åº«å­˜ç•°å‹•æ˜Žç´°ï¼ˆéžåºè™Ÿ auditï¼‰';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -267,9 +263,9 @@ DROP TABLE IF EXISTS `fixture_quantity_repairs`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `fixture_quantity_repairs` (
   `id` int NOT NULL AUTO_INCREMENT,
-  `fixture_id` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `customer_id` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `repair_type` enum('auto','manual') COLLATE utf8mb4_unicode_ci DEFAULT 'manual',
+  `fixture_id` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `customer_id` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `repair_type` enum('auto','manual') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'manual',
   `old_in_stock_qty` int DEFAULT NULL,
   `old_deployed_qty` int DEFAULT NULL,
   `old_self_purchased_qty` int DEFAULT NULL,
@@ -280,8 +276,8 @@ CREATE TABLE `fixture_quantity_repairs` (
   `new_customer_supplied_qty` int DEFAULT NULL,
   `diff_in_stock` int DEFAULT NULL,
   `diff_deployed` int DEFAULT NULL,
-  `repair_reason` text COLLATE utf8mb4_unicode_ci,
-  `repaired_by` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `repair_reason` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `repaired_by` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `repaired_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_fixture` (`fixture_id`),
@@ -316,7 +312,7 @@ CREATE TABLE `fixture_requirements` (
   CONSTRAINT `fixture_requirements_ibfk_2` FOREIGN KEY (`model_id`) REFERENCES `machine_models` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fixture_requirements_ibfk_3` FOREIGN KEY (`station_id`) REFERENCES `stations` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fixture_requirements_ibfk_4` FOREIGN KEY (`fixture_id`) REFERENCES `fixtures` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=994 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='治具-機種需求表';
+) ENGINE=InnoDB AUTO_INCREMENT=1413 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='治具-機種需求表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -332,7 +328,7 @@ CREATE TABLE `fixture_serials` (
   `fixture_id` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '治具編號',
   `serial_number` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '序號',
   `source_type` enum('self_purchased','customer_supplied') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '來源類型',
-  `status` enum('in_stock','deployed','maintenance','returned','scrapped') COLLATE utf8mb4_unicode_ci DEFAULT 'in_stock',
+  `status` enum('in_stock','deployed','maintenance','returned','scrapped') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'in_stock',
   `receipt_date` date DEFAULT NULL COMMENT '收料日期',
   `return_date` date DEFAULT NULL COMMENT '退料日期',
   `receipt_transaction_id` int DEFAULT NULL COMMENT '收料異動ID',
@@ -345,6 +341,8 @@ CREATE TABLE `fixture_serials` (
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `deleted_at` timestamp NULL DEFAULT NULL,
+  `existence_status` enum('in_stock','returned','scrapped') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'in_stock' COMMENT '是否仍存在於庫存',
+  `usage_status` enum('idle','deployed','maintenance') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'idle' COMMENT '使用狀態',
   PRIMARY KEY (`id`),
   KEY `idx_customer` (`customer_id`),
   KEY `idx_serial` (`serial_number`),
@@ -365,7 +363,7 @@ CREATE TABLE `fixture_serials` (
   CONSTRAINT `fk_fixture_serials_deployment` FOREIGN KEY (`deployment_id`) REFERENCES `fixture_deployments` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_fixture_serials_receipt_tx` FOREIGN KEY (`receipt_transaction_id`) REFERENCES `material_transactions` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_fixture_serials_return_tx` FOREIGN KEY (`return_transaction_id`) REFERENCES `material_transactions` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=1177 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='序號表';
+) ENGINE=InnoDB AUTO_INCREMENT=4796 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='序號表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!50003 SET @saved_cs_client      = @@character_set_client */ ;
 /*!50003 SET @saved_cs_results     = @@character_set_results */ ;
@@ -406,42 +404,12 @@ DELIMITER ;;
     FROM fixture_serials
     WHERE fixture_id = NEW.fixture_id
       AND serial_number = NEW.serial_number
-      AND status <> 'returned';
+      AND existence_status = 'in_stock';
 
     IF v_exists > 0 THEN
         SIGNAL SQLSTATE '45000'
-            SET MESSAGE_TEXT = '該治具序號尚未退料，不可重複收料';
+            SET MESSAGE_TEXT = '該治具序號仍在庫存中，不可重複收料';
     END IF;
-END */;;
-DELIMITER ;
-/*!50003 SET sql_mode              = @saved_sql_mode */ ;
-/*!50003 SET character_set_client  = @saved_cs_client */ ;
-/*!50003 SET character_set_results = @saved_cs_results */ ;
-/*!50003 SET collation_connection  = @saved_col_connection */ ;
-/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
-/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
-/*!50003 SET @saved_col_connection = @@collation_connection */ ;
-/*!50003 SET character_set_client  = utf8mb4 */ ;
-/*!50003 SET character_set_results = utf8mb4 */ ;
-/*!50003 SET collation_connection  = utf8mb4_0900_ai_ci */ ;
-/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
-/*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
-/*!50032 DROP TRIGGER IF EXISTS trg_fixture_serial_insert */;
-DELIMITER ;;
-/*!50003 CREATE*/ /*!50017 /*!50003 TRIGGER `trg_fixture_serial_insert` AFTER INSERT ON `fixture_serials` FOR EACH ROW BEGIN
-    UPDATE fixtures
-    SET
-        in_stock_qty = in_stock_qty + IF(NEW.status='in_stock',1,0),
-        deployed_qty = deployed_qty + IF(NEW.status='deployed',1,0),
-        maintenance_qty = maintenance_qty + IF(NEW.status='maintenance',1,0),
-        returned_qty = returned_qty + IF(NEW.status='returned',1,0),
-        scrapped_qty = scrapped_qty + IF(NEW.status='scrapped',1,0),
-
-        self_purchased_qty =
-            self_purchased_qty + IF(NEW.source_type='self_purchased' AND NEW.status='in_stock', 1, 0),
-        customer_supplied_qty =
-            customer_supplied_qty + IF(NEW.source_type='customer_supplied' AND NEW.status='in_stock', 1, 0)
-    WHERE id = NEW.fixture_id;
 END */;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
@@ -459,18 +427,20 @@ DELIMITER ;
 /*!50032 DROP TRIGGER IF EXISTS trg_fixture_serials_audit_insert */;
 DELIMITER ;;
 /*!50003 CREATE*/ /*!50017 /*!50003 TRIGGER `trg_fixture_serials_audit_insert` AFTER INSERT ON `fixture_serials` FOR EACH ROW BEGIN
-    INSERT INTO fixture_serials_history(serial_id, action, new_data)
-    VALUES (
-               NEW.id,
-               'INSERT',
-               JSON_OBJECT(
-                       'fixture_id', NEW.fixture_id,
-                       'serial_number', NEW.serial_number,
-                       'status', NEW.status,
-                       'source_type', NEW.source_type,
-                       'created_at', NEW.created_at
-               )
-           );
+    INSERT INTO fixture_serials_history (
+        serial_id, action, new_data
+    ) VALUES (
+                 NEW.id,
+                 'INSERT',
+                 JSON_OBJECT(
+                         'fixture_id', NEW.fixture_id,
+                         'serial_number', NEW.serial_number,
+                         'existence_status', NEW.existence_status,
+                         'usage_status', NEW.usage_status,
+                         'source_type', NEW.source_type,
+                         'created_at', NEW.created_at
+                 )
+             );
 END */;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
@@ -506,22 +476,44 @@ DELIMITER ;
 /*!50003 SET collation_connection  = utf8mb4_0900_ai_ci */ ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+/*!50032 DROP TRIGGER IF EXISTS trg_fixture_serial_usage_existence_validate_upd */;
+DELIMITER ;;
+/*!50003 CREATE*/ /*!50017 /*!50003 TRIGGER `trg_fixture_serial_usage_existence_validate_upd` BEFORE UPDATE ON `fixture_serials` FOR EACH ROW BEGIN
+    IF NEW.existence_status = 'returned'
+        AND NEW.usage_status <> 'idle' THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = '已退料序號不可為 deployed 或 maintenance';
+    END IF;
+
+    IF NEW.existence_status = 'scrapped'
+        AND NEW.usage_status <> 'idle' THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = '已報廢序號不可為 deployed 或 maintenance';
+    END IF;
+END */;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8mb4 */ ;
+/*!50003 SET character_set_results = utf8mb4 */ ;
+/*!50003 SET collation_connection  = utf8mb4_0900_ai_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 /*!50032 DROP TRIGGER IF EXISTS trg_fixture_serial_status_validate_upd */;
 DELIMITER ;;
 /*!50003 CREATE*/ /*!50017 /*!50003 TRIGGER `trg_fixture_serial_status_validate_upd` BEFORE UPDATE ON `fixture_serials` FOR EACH ROW BEGIN
-    /* ❌ 不允許「狀態變更」成 in_stock（只能走收料 INSERT） */
-    IF OLD.status <> NEW.status
-        AND NEW.status = 'in_stock' THEN
-        SIGNAL SQLSTATE '45000'
-            SET MESSAGE_TEXT = '序號狀態不可直接更新為 in_stock，請使用收料流程';
-    END IF;
 
-    /* ❌ 已報廢不可變更 */
-    IF OLD.status = 'scrapped'
-        AND NEW.status <> 'scrapped' THEN
+    IF OLD.existence_status = 'scrapped'
+        AND NEW.existence_status <> 'scrapped' THEN
         SIGNAL SQLSTATE '45000'
             SET MESSAGE_TEXT = '已報廢序號不可變更狀態';
     END IF;
+
 END */;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
@@ -539,27 +531,48 @@ DELIMITER ;
 /*!50032 DROP TRIGGER IF EXISTS trg_fixture_serial_status_sync_au */;
 DELIMITER ;;
 /*!50003 CREATE*/ /*!50017 /*!50003 TRIGGER `trg_fixture_serial_status_sync_au` AFTER UPDATE ON `fixture_serials` FOR EACH ROW BEGIN
-    /* ✅ 只要「離開 in_stock」就一定扣總庫存 + 扣來源別庫存（方案B鐵則） */
-    IF OLD.status = 'in_stock' AND NEW.status <> 'in_stock' THEN
+    IF OLD.existence_status = 'in_stock'
+        AND NEW.existence_status <> 'in_stock' THEN
+
         UPDATE fixtures
         SET
             in_stock_qty = in_stock_qty - 1,
             self_purchased_qty =
-                self_purchased_qty - IF(OLD.source_type='self_purchased', 1, 0),
+                self_purchased_qty - IF(OLD.source_type='self_purchased',1,0),
             customer_supplied_qty =
-                customer_supplied_qty - IF(OLD.source_type='customer_supplied', 1, 0)
+                customer_supplied_qty - IF(OLD.source_type='customer_supplied',1,0)
         WHERE id = OLD.fixture_id;
     END IF;
 
-    /* ✅ 狀態計數（returned/deployed/maintenance/scrapped）
-       ⚠️ 你原本少了 WHERE，會更新全表，這裡補上 */
-    IF OLD.status <> NEW.status THEN
+    IF OLD.existence_status <> 'in_stock'
+        AND NEW.existence_status = 'in_stock'
+        AND OLD.fixture_id = NEW.fixture_id THEN
+
         UPDATE fixtures
         SET
-            returned_qty    = returned_qty    + IF(NEW.status='returned',1,0)    - IF(OLD.status='returned',1,0),
-            deployed_qty    = deployed_qty    + IF(NEW.status='deployed',1,0)    - IF(OLD.status='deployed',1,0),
-            maintenance_qty = maintenance_qty + IF(NEW.status='maintenance',1,0) - IF(OLD.status='maintenance',1,0),
-            scrapped_qty    = scrapped_qty    + IF(NEW.status='scrapped',1,0)    - IF(OLD.status='scrapped',1,0)
+            in_stock_qty = in_stock_qty + 1,
+            self_purchased_qty =
+                self_purchased_qty + IF(NEW.source_type='self_purchased',1,0),
+            customer_supplied_qty =
+                customer_supplied_qty + IF(NEW.source_type='customer_supplied',1,0)
+        WHERE id = NEW.fixture_id;
+    END IF;
+
+    IF OLD.usage_status <> NEW.usage_status
+        AND OLD.existence_status='in_stock'
+        AND NEW.existence_status='in_stock' THEN
+
+        UPDATE fixtures
+        SET
+            deployed_qty =
+                deployed_qty
+                    + IF(NEW.usage_status='deployed',1,0)
+                    - IF(OLD.usage_status='deployed',1,0),
+
+            maintenance_qty =
+                maintenance_qty
+                    + IF(NEW.usage_status='maintenance',1,0)
+                    - IF(OLD.usage_status='maintenance',1,0)
         WHERE id = OLD.fixture_id;
     END IF;
 END */;;
@@ -579,28 +592,31 @@ DELIMITER ;
 /*!50032 DROP TRIGGER IF EXISTS trg_fixture_serials_audit_update */;
 DELIMITER ;;
 /*!50003 CREATE*/ /*!50017 /*!50003 TRIGGER `trg_fixture_serials_audit_update` AFTER UPDATE ON `fixture_serials` FOR EACH ROW BEGIN
-    -- 只在關鍵欄位有變化時寫入（避免 history 爆炸）
-    IF (OLD.status <> NEW.status)
+    IF (OLD.existence_status <> NEW.existence_status)
+        OR (OLD.usage_status <> NEW.usage_status)
         OR (OLD.source_type <> NEW.source_type)
         OR (OLD.fixture_id <> NEW.fixture_id)
     THEN
-        INSERT INTO fixture_serials_history(serial_id, action, old_data, new_data)
-        VALUES (
-                   NEW.id,
-                   'UPDATE',
-                   JSON_OBJECT(
-                           'fixture_id', OLD.fixture_id,
-                           'serial_number', OLD.serial_number,
-                           'status', OLD.status,
-                           'source_type', OLD.source_type
-                   ),
-                   JSON_OBJECT(
-                           'fixture_id', NEW.fixture_id,
-                           'serial_number', NEW.serial_number,
-                           'status', NEW.status,
-                           'source_type', NEW.source_type
-                   )
-               );
+        INSERT INTO fixture_serials_history (
+            serial_id, action, old_data, new_data
+        ) VALUES (
+                     NEW.id,
+                     'UPDATE',
+                     JSON_OBJECT(
+                             'fixture_id', OLD.fixture_id,
+                             'serial_number', OLD.serial_number,
+                             'existence_status', OLD.existence_status,
+                             'usage_status', OLD.usage_status,
+                             'source_type', OLD.source_type
+                     ),
+                     JSON_OBJECT(
+                             'fixture_id', NEW.fixture_id,
+                             'serial_number', NEW.serial_number,
+                             'existence_status', NEW.existence_status,
+                             'usage_status', NEW.usage_status,
+                             'source_type', NEW.source_type
+                     )
+                 );
     END IF;
 END */;;
 DELIMITER ;
@@ -619,17 +635,19 @@ DELIMITER ;
 /*!50032 DROP TRIGGER IF EXISTS trg_fixture_serials_audit_delete */;
 DELIMITER ;;
 /*!50003 CREATE*/ /*!50017 /*!50003 TRIGGER `trg_fixture_serials_audit_delete` AFTER DELETE ON `fixture_serials` FOR EACH ROW BEGIN
-    INSERT INTO fixture_serials_history(serial_id, action, old_data)
-    VALUES (
-               OLD.id,
-               'DELETE',
-               JSON_OBJECT(
-                       'fixture_id', OLD.fixture_id,
-                       'serial_number', OLD.serial_number,
-                       'status', OLD.status,
-                       'source_type', OLD.source_type
-               )
-           );
+    INSERT INTO fixture_serials_history (
+        serial_id, action, old_data
+    ) VALUES (
+                 OLD.id,
+                 'DELETE',
+                 JSON_OBJECT(
+                         'fixture_id', OLD.fixture_id,
+                         'serial_number', OLD.serial_number,
+                         'existence_status', OLD.existence_status,
+                         'usage_status', OLD.usage_status,
+                         'source_type', OLD.source_type
+                 )
+             );
 END */;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
@@ -655,7 +673,7 @@ CREATE TABLE `fixture_serials_history` (
   PRIMARY KEY (`history_id`),
   KEY `idx_fsh_serial_id` (`serial_id`),
   KEY `idx_fsh_changed_at` (`changed_at`)
-) ENGINE=InnoDB AUTO_INCREMENT=612 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4864 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -695,7 +713,7 @@ DROP TABLE IF EXISTS `fixtures`;
 CREATE TABLE `fixtures` (
   `id` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '治具編號 (如: L-3000-STD)',
   `customer_id` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '客戶名稱',
-  `fixture_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '治具名稱',
+  `fixture_name` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '治具名稱',
   `fixture_type` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '治具類型',
   `self_purchased_qty` int DEFAULT '0' COMMENT '目前仍在庫(in_stock)的「自購」治具數量 = serial(in_stock,self) + datecode(in_stock,self)，非歷史累計',
   `customer_supplied_qty` int DEFAULT '0' COMMENT '目前仍在庫(in_stock)的「客供」治具數量 = serial(in_stock,customer) + datecode(in_stock,customer)，非歷史累計',
@@ -714,11 +732,14 @@ CREATE TABLE `fixtures` (
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `deleted_at` timestamp NULL DEFAULT NULL,
+  `is_scrapped` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否已報廢',
+  `scrapped_at` datetime DEFAULT NULL COMMENT '報廢時間',
   PRIMARY KEY (`id`),
   KEY `idx_customer` (`customer_id`),
   KEY `idx_customer_status` (`customer_id`),
   KEY `idx_fixture_type` (`fixture_type`),
   KEY `idx_owner` (`owner_id`),
+  KEY `idx_customer_storage` (`customer_id`,`storage_location`),
   CONSTRAINT `fixtures_ibfk_1` FOREIGN KEY (`customer_id`) REFERENCES `customers` (`id`) ON DELETE RESTRICT,
   CONSTRAINT `fk_fixtures_owner` FOREIGN KEY (`owner_id`) REFERENCES `owners` (`id`) ON DELETE SET NULL,
   CONSTRAINT `chk_fixtures_quantities_non_negative` CHECK (((`in_stock_qty` >= 0) and (`deployed_qty` >= 0) and (`maintenance_qty` >= 0) and (`returned_qty` >= 0) and (`scrapped_qty` >= 0) and (`self_purchased_qty` >= 0) and (`customer_supplied_qty` >= 0)))
@@ -736,12 +757,8 @@ CREATE TABLE `fixtures` (
 DELIMITER ;;
 /*!50003 CREATE*/ /*!50017 /*!50003 TRIGGER `trg_fixtures_audit_update` AFTER UPDATE ON `fixtures` FOR EACH ROW BEGIN
     INSERT INTO fixtures_history (
-        fixture_id,
-        customer_id,
-        fixture_name,
-        change_type,
-        old_values,
-        new_values
+        fixture_id, customer_id, fixture_name,
+        change_type, old_values, new_values
     ) VALUES (
                  NEW.id,
                  NEW.customer_id,
@@ -774,10 +791,10 @@ DROP TABLE IF EXISTS `fixtures_history`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `fixtures_history` (
   `history_id` int NOT NULL AUTO_INCREMENT,
-  `fixture_id` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `customer_id` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `fixture_name` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `change_type` enum('INSERT','UPDATE','DELETE') COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `fixture_id` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `customer_id` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `fixture_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `change_type` enum('INSERT','UPDATE','DELETE') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `changed_by` int DEFAULT NULL,
   `changed_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `old_values` json DEFAULT NULL,
@@ -785,7 +802,7 @@ CREATE TABLE `fixtures_history` (
   PRIMARY KEY (`history_id`),
   KEY `idx_fixture_id` (`fixture_id`),
   KEY `idx_changed_at` (`changed_at`)
-) ENGINE=InnoDB AUTO_INCREMENT=69806 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=122034 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -808,6 +825,14 @@ CREATE TABLE `inventory_snapshots` (
   `total_qty` int DEFAULT '0' COMMENT '總數量',
   `note` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci COMMENT '備註',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `serial_in_stock_qty` int DEFAULT '0' COMMENT 'serial existence_status=in_stock',
+  `serial_available_qty` int DEFAULT '0' COMMENT 'serial in_stock AND usage=idle',
+  `serial_deployed_qty` int DEFAULT '0' COMMENT 'serial in_stock AND usage=deployed',
+  `serial_maintenance_qty` int DEFAULT '0' COMMENT 'serial in_stock AND usage=maintenance',
+  `serial_returned_qty` int DEFAULT '0' COMMENT 'serial existence_status=returned',
+  `serial_scrapped_qty` int DEFAULT '0' COMMENT 'serial existence_status=scrapped',
+  `datecode_in_stock_qty` int DEFAULT '0' COMMENT 'datecode in_stock_qty',
+  `total_available_qty` int DEFAULT '0' COMMENT 'serial_available + datecode',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_customer_fixture_date` (`customer_id`,`fixture_id`,`snapshot_date`),
   KEY `fixture_id` (`fixture_id`),
@@ -828,7 +853,7 @@ DROP TABLE IF EXISTS `machine_models`;
 CREATE TABLE `machine_models` (
   `id` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '機種代碼 (如: EDS-2008-LSFG)',
   `customer_id` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '客戶名稱',
-  `model_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '機種名稱',
+  `model_name` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '機種名稱',
   `note` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci COMMENT '備註',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -847,10 +872,10 @@ DROP TABLE IF EXISTS `material_transaction_items`;
 CREATE TABLE `material_transaction_items` (
   `id` int NOT NULL AUTO_INCREMENT,
   `transaction_id` int NOT NULL,
-  `customer_id` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `fixture_id` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `serial_number` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'individual / batch 使用',
-  `datecode` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'datecode 使用',
+  `customer_id` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `fixture_id` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `serial_number` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'individual / batch 使用',
+  `datecode` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'datecode 使用',
   `quantity` int NOT NULL DEFAULT '1' COMMENT 'datecode 才會 >1',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -860,7 +885,7 @@ CREATE TABLE `material_transaction_items` (
   KEY `idx_fixture` (`fixture_id`),
   KEY `idx_customer_fixture` (`customer_id`,`fixture_id`),
   CONSTRAINT `fk_mti_transaction` FOREIGN KEY (`transaction_id`) REFERENCES `material_transactions` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=1012 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='收退料實際項目（序號 / 日期碼）';
+) ENGINE=InnoDB AUTO_INCREMENT=6386 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='收退料實際項目（序號 / 日期碼）';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -872,12 +897,12 @@ DROP TABLE IF EXISTS `material_transactions`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `material_transactions` (
   `id` int NOT NULL AUTO_INCREMENT COMMENT '異動記錄ID',
-  `transaction_type` enum('receipt','return') COLLATE utf8mb4_unicode_ci NOT NULL,
-  `record_type` enum('individual','batch','datecode') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `transaction_type` enum('receipt','return') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `record_type` enum('individual','batch','datecode') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `quantity` int DEFAULT NULL COMMENT '交易數量（永遠為正數，方向由 transaction_type 判斷）',
   `transaction_date` date NOT NULL COMMENT '異動日期',
   `customer_id` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '客戶名稱 (廠商=客戶)',
-  `order_no` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '僅供參考，不參與任何邏輯',
+  `order_no` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '僅供參考，不參與任何邏輯',
   `fixture_id` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '治具編號',
   `source_type` enum('self_purchased','customer_supplied') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'customer_supplied' COMMENT '來源類型: self_purchased=自購, customer_supplied=客供',
   `operator` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '操作人員',
@@ -895,7 +920,7 @@ CREATE TABLE `material_transactions` (
   CONSTRAINT `material_transactions_ibfk_1` FOREIGN KEY (`customer_id`) REFERENCES `customers` (`id`) ON DELETE RESTRICT,
   CONSTRAINT `material_transactions_ibfk_2` FOREIGN KEY (`fixture_id`) REFERENCES `fixtures` (`id`) ON DELETE RESTRICT,
   CONSTRAINT `chk_material_tx_quantity_positive` CHECK ((`quantity` > 0))
-) ENGINE=InnoDB AUTO_INCREMENT=5238 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='物料異動主表';
+) ENGINE=InnoDB AUTO_INCREMENT=10507 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='物料異動主表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!50003 SET @saved_cs_client      = @@character_set_client */ ;
 /*!50003 SET @saved_cs_results     = @@character_set_results */ ;
@@ -910,25 +935,6 @@ DELIMITER ;;
 /*!50003 CREATE*/ /*!50017 /*!50003 TRIGGER `trg_material_transactions_no_update` BEFORE UPDATE ON `material_transactions` FOR EACH ROW BEGIN
     SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'material_transactions is immutable (UPDATE is forbidden)';
-END */;;
-DELIMITER ;
-/*!50003 SET sql_mode              = @saved_sql_mode */ ;
-/*!50003 SET character_set_client  = @saved_cs_client */ ;
-/*!50003 SET character_set_results = @saved_cs_results */ ;
-/*!50003 SET collation_connection  = @saved_col_connection */ ;
-/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
-/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
-/*!50003 SET @saved_col_connection = @@collation_connection */ ;
-/*!50003 SET character_set_client  = utf8mb4 */ ;
-/*!50003 SET character_set_results = utf8mb4 */ ;
-/*!50003 SET collation_connection  = utf8mb4_0900_ai_ci */ ;
-/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
-/*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
-/*!50032 DROP TRIGGER IF EXISTS trg_material_transactions_no_delete */;
-DELIMITER ;;
-/*!50003 CREATE*/ /*!50017 /*!50003 TRIGGER `trg_material_transactions_no_delete` BEFORE DELETE ON `material_transactions` FOR EACH ROW BEGIN
-    SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'material_transactions is immutable (DELETE is forbidden)';
 END */;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
@@ -958,7 +964,7 @@ CREATE TABLE `model_stations` (
   CONSTRAINT `model_stations_ibfk_1` FOREIGN KEY (`customer_id`) REFERENCES `customers` (`id`) ON DELETE RESTRICT,
   CONSTRAINT `model_stations_ibfk_2` FOREIGN KEY (`model_id`) REFERENCES `machine_models` (`id`) ON DELETE CASCADE,
   CONSTRAINT `model_stations_ibfk_3` FOREIGN KEY (`station_id`) REFERENCES `stations` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=219 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='機種-站點關聯表';
+) ENGINE=InnoDB AUTO_INCREMENT=571 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='機種-站點關聯表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -970,10 +976,10 @@ DROP TABLE IF EXISTS `owners`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `owners` (
   `id` int NOT NULL AUTO_INCREMENT,
-  `customer_id` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'NULL = 跨客戶共用',
+  `customer_id` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'NULL = 跨客戶共用',
   `primary_user_id` int NOT NULL COMMENT '主負責人 (users.id)',
   `secondary_user_id` int DEFAULT NULL COMMENT '副負責人 (users.id)',
-  `note` text COLLATE utf8mb4_unicode_ci,
+  `note` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `is_active` tinyint(1) DEFAULT '1',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -995,12 +1001,12 @@ DROP TABLE IF EXISTS `replacement_logs`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `replacement_logs` (
   `id` int NOT NULL AUTO_INCREMENT COMMENT '更換事件 ID',
-  `customer_id` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '客戶 ID',
-  `fixture_id` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '治具 ID',
-  `serial_number` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '序號（record_level = serial）',
-  `record_level` enum('fixture','serial') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'fixture' COMMENT '事件層級（與 usage_logs 對齊）',
-  `operator` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '操作人員（與 usage_logs.operator 對齊）',
-  `note` text COLLATE utf8mb4_unicode_ci COMMENT '事件備註（可含 individual / batch 語意）',
+  `customer_id` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '客戶 ID',
+  `fixture_id` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '治具 ID',
+  `serial_number` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '序號（record_level = serial）',
+  `record_level` enum('fixture','serial') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'fixture' COMMENT '事件層級（與 usage_logs 對齊）',
+  `operator` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '操作人員（與 usage_logs.operator 對齊）',
+  `note` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci COMMENT '事件備註（可含 individual / batch 語意）',
   `occurred_at` date NOT NULL COMMENT '事件發生日期（YYYY-MM-DD）',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '建立時間',
   PRIMARY KEY (`id`),
@@ -1067,17 +1073,17 @@ DROP TABLE IF EXISTS `trigger_error_logs`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `trigger_error_logs` (
   `id` int NOT NULL AUTO_INCREMENT,
-  `trigger_name` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Trigger 名稱',
-  `table_name` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '觸發的資料表',
-  `error_sqlstate` char(5) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'SQL 狀態碼',
-  `error_message` text COLLATE utf8mb4_unicode_ci COMMENT '錯誤訊息',
+  `trigger_name` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Trigger 名稱',
+  `table_name` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '觸發的資料表',
+  `error_sqlstate` char(5) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'SQL 狀態碼',
+  `error_message` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci COMMENT '錯誤訊息',
   `context_data` json DEFAULT NULL COMMENT '觸發時的上下文資料',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '發生時間',
   PRIMARY KEY (`id`),
   KEY `idx_trigger_name` (`trigger_name`),
   KEY `idx_table_name` (`table_name`),
   KEY `idx_created_at` (`created_at`)
-) ENGINE=InnoDB AUTO_INCREMENT=106 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Trigger 錯誤日誌表';
+) ENGINE=InnoDB AUTO_INCREMENT=203 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Trigger 錯誤日誌表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1130,7 +1136,8 @@ DELIMITER ;;
 /*!50003 CREATE*/ /*!50017 /*!50003 TRIGGER `trg_update_serial_usage` AFTER INSERT ON `usage_logs` FOR EACH ROW BEGIN
     IF NEW.serial_number IS NOT NULL THEN
         UPDATE fixture_serials
-        SET total_uses    = total_uses + NEW.use_count,
+        SET
+            total_uses    = total_uses + NEW.use_count,
             last_use_date = CURRENT_DATE,
             updated_at    = CURRENT_TIMESTAMP
         WHERE serial_number = NEW.serial_number
@@ -1153,7 +1160,7 @@ DROP TABLE IF EXISTS `user_customers`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `user_customers` (
   `user_id` int NOT NULL COMMENT '使用者 ID',
-  `customer_id` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '客戶代碼',
+  `customer_id` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '客戶代碼',
   PRIMARY KEY (`user_id`,`customer_id`),
   CONSTRAINT `fk_user_customers_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='使用者可使用的客戶清單（多對多）';
@@ -1233,6 +1240,24 @@ SET @saved_cs_client     = @@character_set_client;
  1 AS `actual_deployed`,
  1 AS `diff_in_stock`,
  1 AS `diff_deployed`*/;
+SET character_set_client = @saved_cs_client;
+
+--
+-- Temporary view structure for view `v_invalid_fixture_serial_status`
+--
+
+DROP TABLE IF EXISTS `v_invalid_fixture_serial_status`;
+/*!50001 DROP VIEW IF EXISTS `v_invalid_fixture_serial_status`*/;
+SET @saved_cs_client     = @@character_set_client;
+/*!50503 SET character_set_client = utf8mb4 */;
+/*!50001 CREATE VIEW `v_invalid_fixture_serial_status` AS SELECT 
+ 1 AS `serial_id`,
+ 1 AS `customer_id`,
+ 1 AS `fixture_id`,
+ 1 AS `serial_number`,
+ 1 AS `existence_status`,
+ 1 AS `usage_status`,
+ 1 AS `updated_at`*/;
 SET character_set_client = @saved_cs_client;
 
 --
@@ -1364,6 +1389,23 @@ SET @saved_cs_client     = @@character_set_client;
 SET character_set_client = @saved_cs_client;
 
 --
+-- Temporary view structure for view `view_fixture_quantity_mismatch_v6`
+--
+
+DROP TABLE IF EXISTS `view_fixture_quantity_mismatch_v6`;
+/*!50001 DROP VIEW IF EXISTS `view_fixture_quantity_mismatch_v6`*/;
+SET @saved_cs_client     = @@character_set_client;
+/*!50503 SET character_set_client = utf8mb4 */;
+/*!50001 CREATE VIEW `view_fixture_quantity_mismatch_v6` AS SELECT 
+ 1 AS `fixture_id`,
+ 1 AS `customer_id`,
+ 1 AS `fixture_name`,
+ 1 AS `expected_in_stock_qty`,
+ 1 AS `actual_in_stock_qty`,
+ 1 AS `diff_in_stock_qty`*/;
+SET character_set_client = @saved_cs_client;
+
+--
 -- Temporary view structure for view `view_fixture_serials`
 --
 
@@ -1375,7 +1417,8 @@ SET @saved_cs_client     = @@character_set_client;
  1 AS `customer_id`,
  1 AS `fixture_id`,
  1 AS `serial_number`,
- 1 AS `status`*/;
+ 1 AS `existence_status`,
+ 1 AS `usage_status`*/;
 SET character_set_client = @saved_cs_client;
 
 --
@@ -1387,24 +1430,37 @@ DROP TABLE IF EXISTS `view_fixture_status`;
 SET @saved_cs_client     = @@character_set_client;
 /*!50503 SET character_set_client = utf8mb4 */;
 /*!50001 CREATE VIEW `view_fixture_status` AS SELECT 
+ 1 AS `customer_id`,
+ 1 AS `fixture_id`,
+ 1 AS `fixture_name`,
+ 1 AS `in_stock_qty`,
+ 1 AS `customer_supplied_qty`,
+ 1 AS `self_purchased_qty`,
+ 1 AS `returned_qty`,
+ 1 AS `deployed_qty`,
+ 1 AS `maintenance_qty`,
+ 1 AS `scrapped_qty`*/;
+SET character_set_client = @saved_cs_client;
+
+--
+-- Temporary view structure for view `view_inventory_mismatch_v6`
+--
+
+DROP TABLE IF EXISTS `view_inventory_mismatch_v6`;
+/*!50001 DROP VIEW IF EXISTS `view_inventory_mismatch_v6`*/;
+SET @saved_cs_client     = @@character_set_client;
+/*!50503 SET character_set_client = utf8mb4 */;
+/*!50001 CREATE VIEW `view_inventory_mismatch_v6` AS SELECT 
  1 AS `fixture_id`,
  1 AS `customer_id`,
  1 AS `fixture_name`,
- 1 AS `fixture_type`,
- 1 AS `in_stock_qty`,
- 1 AS `deployed_qty`,
- 1 AS `maintenance_qty`,
- 1 AS `returned_qty`,
- 1 AS `scrapped_qty`,
- 1 AS `self_purchased_qty`,
- 1 AS `customer_supplied_qty`,
- 1 AS `total_qty`,
- 1 AS `storage_location`,
- 1 AS `replacement_cycle`,
- 1 AS `cycle_unit`,
- 1 AS `last_replacement_date`,
- 1 AS `owner_id`,
- 1 AS `note`*/;
+ 1 AS `serial_in_stock`,
+ 1 AS `serial_deployed`,
+ 1 AS `datecode_in_stock`,
+ 1 AS `cache_in_stock`,
+ 1 AS `cache_deployed`,
+ 1 AS `diff_in_stock`,
+ 1 AS `diff_deployed`*/;
 SET character_set_client = @saved_cs_client;
 
 --
@@ -1432,7 +1488,8 @@ SET @saved_cs_client     = @@character_set_client;
  1 AS `serial_number`,
  1 AS `datecode`,
  1 AS `item_quantity`,
- 1 AS `serial_status`,
+ 1 AS `serial_existence_status`,
+ 1 AS `serial_usage_status`,
  1 AS `hover_item_text`*/;
 SET character_set_client = @saved_cs_client;
 
@@ -1469,7 +1526,9 @@ SET @saved_cs_client     = @@character_set_client;
  1 AS `fixture_id`,
  1 AS `fixture_name`,
  1 AS `source_type`,
- 1 AS `status`,
+ 1 AS `existence_status`,
+ 1 AS `usage_status`,
+ 1 AS `is_available`,
  1 AS `receipt_date`,
  1 AS `return_date`,
  1 AS `note`,
@@ -1525,7 +1584,7 @@ DELIMITER ;
 --
 -- Dumping routines for database 'fixture_management_test'
 --
-/*!50003 DROP PROCEDURE IF EXISTS `sp_create_daily_snapshot_v4` */;
+/*!50003 DROP PROCEDURE IF EXISTS `sp_create_daily_snapshot` */;
 /*!50003 SET @saved_cs_client      = @@character_set_client */ ;
 /*!50003 SET @saved_cs_results     = @@character_set_results */ ;
 /*!50003 SET @saved_col_connection = @@collation_connection */ ;
@@ -1535,25 +1594,20 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
-CREATE PROCEDURE `sp_create_daily_snapshot_v4`(
-    IN p_snapshot_date DATE,
-    IN p_customer_id   VARCHAR(50)
-)
+CREATE PROCEDURE `sp_create_daily_snapshot`(IN p_snapshot_date date, IN p_customer_id varchar(50))
 BEGIN
     /*
-      DAILY INVENTORY SNAPSHOT (v4.x FINAL)
+      DAILY INVENTORY SNAPSHOT (v6 FINAL)
 
       Snapshot 粒度：
         customer_id + fixture_id + snapshot_date
 
-      欄位定義：
-        in_stock_qty = serial in_stock
-        total_qty    = serial in_stock + datecode available
-
-      特性：
-        - 僅 SELECT fixtures / fixture_datecode_inventory
-        - 不碰 ledger、不觸發 trigger
+      設計原則：
+        - serial 狀態：以 fixture_serials 為唯一真相
+        - datecode：來自 fixture_datecode_inventory
+        - 不使用 fixtures cache
         - 可重跑（ON DUPLICATE KEY UPDATE）
+        - 不觸發任何 ledger / trigger
     */
 
     -- =====================================================
@@ -1561,64 +1615,113 @@ BEGIN
     -- =====================================================
     IF p_customer_id IS NULL OR p_customer_id = '' THEN
         SIGNAL SQLSTATE '45000'
-SET MESSAGE_TEXT = 'customer_id is required';
-END IF;
+            SET MESSAGE_TEXT = 'customer_id is required';
+    END IF;
 
-IF p_snapshot_date IS NULL THEN
+    IF p_snapshot_date IS NULL THEN
         SIGNAL SQLSTATE '45000'
-SET MESSAGE_TEXT = 'snapshot_date is required';
-END IF;
+            SET MESSAGE_TEXT = 'snapshot_date is required';
+    END IF;
 
     -- =====================================================
     -- Snapshot
     -- =====================================================
-INSERT INTO inventory_snapshots (
-    customer_id,
-    fixture_id,
-    snapshot_date,
-
-    in_stock_qty,
-    deployed_qty,
-    maintenance_qty,
-    scrapped_qty,
-    returned_qty,
-    total_qty
-)
-SELECT
-    f.customer_id,
-    f.id,
-    p_snapshot_date,
-
-    -- serial available
-    f.in_stock_qty,
-
-    -- serial-only states
-    f.deployed_qty,
-    f.maintenance_qty,
-    f.scrapped_qty,
-    f.returned_qty,
-
-    -- serial + datecode
-    f.in_stock_qty + IFNULL(dc.datecode_available_qty, 0) AS total_qty
-
-FROM fixtures f
-         LEFT JOIN (
-    SELECT
+    INSERT INTO inventory_snapshots (
+        customer_id,
         fixture_id,
-        SUM(in_stock_qty) AS datecode_available_qty
-    FROM fixture_datecode_inventory
-    GROUP BY fixture_id
-) dc
-                   ON dc.fixture_id = f.id
-WHERE f.customer_id = p_customer_id
+        snapshot_date,
 
-ON DUPLICATE KEY UPDATE
-                     in_stock_qty    = VALUES(in_stock_qty),
-                     deployed_qty    = VALUES(deployed_qty),
-                     maintenance_qty = VALUES(maintenance_qty),
-                     scrapped_qty    = VALUES(scrapped_qty),
-                     returned_qty    = VALUES(returned_qty),
-                     total_qty       = VALUES(total_qty);
+        -- serial 狀態
+        serial_in_stock_qty,
+        serial_available_qty,
+        serial_deployed_qty,
+        serial_maintenance_qty,
+        serial_returned_qty,
+        serial_scrapped_qty,
+
+        -- datecode
+        datecode_in_stock_qty,
+
+        -- 彙總
+        total_available_qty
+    )
+    SELECT
+        f.customer_id,
+        f.id AS fixture_id,
+        p_snapshot_date,
+
+        -- =================================================
+        -- serial 狀態（existence / usage）
+        -- =================================================
+        IFNULL(ss.serial_in_stock_qty, 0)        AS serial_in_stock_qty,
+        IFNULL(ss.serial_available_qty, 0)       AS serial_available_qty,
+        IFNULL(ss.serial_deployed_qty, 0)        AS serial_deployed_qty,
+        IFNULL(ss.serial_maintenance_qty, 0)     AS serial_maintenance_qty,
+        IFNULL(ss.serial_returned_qty, 0)        AS serial_returned_qty,
+        IFNULL(ss.serial_scrapped_qty, 0)        AS serial_scrapped_qty,
+
+        -- =================================================
+        -- datecode
+        -- =================================================
+        IFNULL(dc.datecode_in_stock_qty, 0)      AS datecode_in_stock_qty,
+
+        -- =================================================
+        -- total available
+        -- =================================================
+        IFNULL(ss.serial_available_qty, 0)
+            + IFNULL(dc.datecode_in_stock_qty, 0)
+            AS total_available_qty
+
+    FROM fixtures f
+
+             -- -----------------------------------------------------
+             -- serial 聚合（唯一真相）
+             -- -----------------------------------------------------
+             LEFT JOIN (
+        SELECT
+            customer_id,
+            fixture_id,
+
+            SUM(existence_status = 'in_stock')                                   AS serial_in_stock_qty,
+            SUM(existence_status = 'in_stock' AND usage_status = 'idle')        AS serial_available_qty,
+            SUM(existence_status = 'in_stock' AND usage_status = 'deployed')    AS serial_deployed_qty,
+            SUM(existence_status = 'in_stock' AND usage_status = 'maintenance') AS serial_maintenance_qty,
+            SUM(existence_status = 'returned')                                   AS serial_returned_qty,
+            SUM(existence_status = 'scrapped')                                   AS serial_scrapped_qty
+
+        FROM fixture_serials
+        WHERE customer_id = p_customer_id
+        GROUP BY customer_id, fixture_id
+    ) ss
+                       ON ss.customer_id = f.customer_id
+                           AND ss.fixture_id  = f.id
+
+        -- -----------------------------------------------------
+        -- datecode 聚合
+        -- -----------------------------------------------------
+             LEFT JOIN (
+        SELECT
+            customer_id,
+            fixture_id,
+            SUM(in_stock_qty) AS datecode_in_stock_qty
+        FROM fixture_datecode_inventory
+        GROUP BY customer_id, fixture_id
+    ) dc
+                       ON dc.customer_id = f.customer_id
+                           AND dc.fixture_id  = f.id
+
+    WHERE f.customer_id = p_customer_id
+      AND f.deleted_at IS NULL
+
+    ON DUPLICATE KEY UPDATE
+                         serial_in_stock_qty        = VALUES(serial_in_stock_qty),
+                         serial_available_qty       = VALUES(serial_available_qty),
+                         serial_deployed_qty        = VALUES(serial_deployed_qty),
+                         serial_maintenance_qty     = VALUES(serial_maintenance_qty),
+                         serial_returned_qty        = VALUES(serial_returned_qty),
+                         serial_scrapped_qty        = VALUES(serial_scrapped_qty),
+                         datecode_in_stock_qty      = VALUES(datecode_in_stock_qty),
+                         total_available_qty        = VALUES(total_available_qty);
 
 END ;;
 DELIMITER ;
@@ -1636,34 +1739,33 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
-CREATE PROCEDURE `sp_insert_usage_log`(
-    IN  p_customer_id     VARCHAR(50),
-    IN  p_fixture_id      VARCHAR(50),
-    IN  p_record_level    ENUM('fixture','serial'),
-    IN  p_serial_number   VARCHAR(100),
-    IN  p_station_id      VARCHAR(50),
-    IN  p_model_id        VARCHAR(50),
-    IN  p_use_count       INT,
-    IN  p_operator        VARCHAR(100),
-    IN  p_note            TEXT,
-    OUT o_inserted_count  INT,
-    OUT o_message         VARCHAR(255)
-)
+CREATE PROCEDURE `sp_insert_usage_log`(IN p_customer_id varchar(50), IN p_fixture_id varchar(50),
+                                                             IN p_record_level varchar(20),
+                                                             IN p_serial_number varchar(100),
+                                                             IN p_station_id varchar(50), IN p_model_id varchar(50),
+                                                             IN p_use_count int, IN p_operator varchar(100),
+                                                             IN p_note text, OUT o_inserted_count int,
+                                                             OUT o_message varchar(255))
 proc: BEGIN
-    DECLARE v_now DATETIME DEFAULT NOW();
+    DECLARE v_now   DATETIME DEFAULT NOW();
+    DECLARE v_exist VARCHAR(20);
+    DECLARE v_usage VARCHAR(20);
+    DECLARE v_msg   VARCHAR(255);
 
     SET o_inserted_count = 0;
     SET o_message = NULL;
 
-    /* basic validation */
+    -- =====================================================
+    -- Guard
+    -- =====================================================
     IF p_use_count IS NULL OR p_use_count <= 0 THEN
-        SET o_message = 'use_count must be > 0';
-        LEAVE proc;
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'use_count must be > 0';
     END IF;
 
-    /* ===============================
-     * fixture-level usage
-     * =============================== */
+    -- =====================================================
+    -- fixture-level usage（僅統計，不影響 serial 狀態）
+    -- =====================================================
     IF p_record_level = 'fixture' THEN
 
         INSERT INTO usage_logs (
@@ -1714,16 +1816,37 @@ proc: BEGIN
         LEAVE proc;
     END IF;
 
-    /* ===============================
-     * serial-level usage
-     * =============================== */
+    -- =====================================================
+    -- serial-level usage（狀態敏感）
+    -- =====================================================
     IF p_record_level = 'serial' THEN
 
         IF p_serial_number IS NULL OR p_serial_number = '' THEN
-            SET o_message = 'serial_number is required for serial record';
-            LEAVE proc;
+            SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'serial_number is required for serial usage';
         END IF;
 
+        -- 鎖定並檢查序號狀態
+        SELECT existence_status, usage_status
+        INTO v_exist, v_usage
+        FROM fixture_serials
+        WHERE customer_id   = p_customer_id
+          AND fixture_id    = p_fixture_id
+          AND serial_number = p_serial_number
+            FOR UPDATE;
+
+        IF v_exist IS NULL THEN
+            SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'serial not found';
+        END IF;
+
+        IF NOT (v_exist = 'in_stock' AND v_usage = 'idle') THEN
+            SET v_msg = CONCAT('serial not available: ', v_exist, '/', v_usage);
+            SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = v_msg;
+        END IF;
+
+        -- 1️⃣ 寫 usage log
         INSERT INTO usage_logs (
             customer_id,
             fixture_id,
@@ -1748,6 +1871,19 @@ proc: BEGIN
                      v_now
                  );
 
+        -- 2️⃣ 更新 serial 狀態（進入 deployed）
+        UPDATE fixture_serials
+        SET
+            usage_status       = 'deployed',
+            current_station_id = p_station_id,
+            last_use_date      = DATE(v_now),
+            total_uses         = total_uses + p_use_count,
+            updated_at         = v_now
+        WHERE customer_id   = p_customer_id
+          AND fixture_id    = p_fixture_id
+          AND serial_number = p_serial_number;
+
+        -- 3️⃣ fixture usage summary
         INSERT INTO fixture_usage_summary (
             customer_id,
             fixture_id,
@@ -1767,6 +1903,7 @@ proc: BEGIN
                              last_used_at    = GREATEST(last_used_at, VALUES(last_used_at)),
                              updated_at      = v_now;
 
+        -- 4️⃣ serial usage summary
         INSERT INTO serial_usage_summary (
             customer_id,
             fixture_id,
@@ -1789,11 +1926,14 @@ proc: BEGIN
                              updated_at      = v_now;
 
         SET o_inserted_count = 1;
-        SET o_message = 'serial usage inserted';
+        SET o_message = 'serial usage inserted and deployed';
         LEAVE proc;
     END IF;
 
-    SET o_message = CONCAT('unknown record_level: ', p_record_level);
+    -- ✅ 修正：SIGNAL 不直接 CONCAT
+    SET v_msg = CONCAT('unknown record_level: ', p_record_level);
+    SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = v_msg;
 
 END ;;
 DELIMITER ;
@@ -1812,85 +1952,70 @@ DELIMITER ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
 CREATE PROCEDURE `sp_material_receipt_v6`(
-    IN p_customer_id varchar(50),
-    IN p_fixture_id varchar(50),
-    IN p_order_no varchar(100),
-    IN p_operator varchar(100),
-    IN p_note text,
-    IN p_created_by int,
-    IN p_record_type enum ('batch', 'individual', 'datecode'),
-    IN p_source_type enum ('self_purchased', 'customer_supplied'),
-    IN p_serials_csv text,
-    IN p_datecode varchar(50),
-    IN p_quantity int,
-    OUT o_transaction_id int,
-    OUT o_message varchar(100)
+    IN p_customer_id VARCHAR(50),
+    IN p_fixture_id VARCHAR(50),
+    IN p_order_no VARCHAR(100),
+    IN p_operator VARCHAR(100),
+    IN p_note TEXT,
+    IN p_created_by INT,
+    IN p_record_type ENUM ('batch','individual','datecode'),
+    IN p_source_type ENUM ('self_purchased','customer_supplied'),
+    IN p_serials_csv TEXT,
+    IN p_datecode VARCHAR(50),
+    IN p_quantity INT,
+    OUT o_transaction_id INT,
+    OUT o_message VARCHAR(100)
 )
 BEGIN
-    /* =========================================================
-     * 0 所有 DECLARE（一定要在最前面）
-     * ========================================================= */
+
     DECLARE v_transaction_id INT DEFAULT NULL;
     DECLARE v_qty INT DEFAULT 0;
 
-    /* serial 計數用 */
     DECLARE v_tmp TEXT;
     DECLARE v_pos INT DEFAULT 0;
     DECLARE v_serial VARCHAR(100);
 
-    /* =========================================================
-     *  全域錯誤處理（只能在所有 DECLARE 之後）
-     * ========================================================= */
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
         BEGIN
             ROLLBACK;
             RESIGNAL;
         END;
 
-    /* =========================================================
-     * 1 初始化 OUT 參數
-     * ========================================================= */
     SET o_transaction_id = NULL;
     SET o_message = NULL;
 
     /* =========================================================
-     * 2 基本參數驗證（不可寫 DB）
-     * ========================================================= */
+       1️⃣ 基本驗證
+    ========================================================= */
+
     IF p_record_type NOT IN ('batch','individual','datecode') THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'record_type 不合法';
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='record_type 不合法';
     END IF;
 
     IF p_source_type NOT IN ('self_purchased','customer_supplied') THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'source_type 不合法';
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='source_type 不合法';
     END IF;
 
     /* =========================================================
-     * 3 record_type 驗證 + quantity 計算（validate-first）
-     * ========================================================= */
+       2️⃣ 計算 quantity
+    ========================================================= */
+
     IF p_record_type = 'datecode' THEN
 
-        IF p_datecode IS NULL OR TRIM(p_datecode) = '' THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'datecode 模式需要 datecode';
+        IF p_datecode IS NULL OR TRIM(p_datecode)='' THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='datecode 必填';
         END IF;
 
-        IF p_quantity IS NULL OR p_quantity <= 0 THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'datecode 模式需要 quantity > 0';
-        END IF;
-
-        IF p_serials_csv IS NOT NULL AND TRIM(p_serials_csv) <> '' THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'datecode 模式不可傳入 serials';
+        IF p_quantity IS NULL OR p_quantity<=0 THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='quantity 必須 > 0';
         END IF;
 
         SET v_qty = p_quantity;
 
-        CALL sp_validate_datecode_can_receipt(
-                p_datecode,
-                p_quantity
-             );
-
     ELSE
-        IF p_serials_csv IS NULL OR TRIM(p_serials_csv) = '' THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'serial 模式需要 serials_csv';
+
+        IF p_serials_csv IS NULL OR TRIM(p_serials_csv)='' THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='serials_csv 必填';
         END IF;
 
         SET v_tmp = p_serials_csv;
@@ -1904,36 +2029,28 @@ BEGIN
                     SET v_serial = TRIM(v_tmp);
                     SET v_tmp = '';
                 ELSE
-                    SET v_serial = TRIM(SUBSTRING(v_tmp, 1, v_pos - 1));
-                    SET v_tmp = SUBSTRING(v_tmp, v_pos + 1);
+                    SET v_serial = TRIM(SUBSTRING(v_tmp,1,v_pos-1));
+                    SET v_tmp = SUBSTRING(v_tmp,v_pos+1);
                 END IF;
 
-                IF v_serial = '' THEN
-                    ITERATE serial_count_loop;
+                IF v_serial <> '' THEN
+                    SET v_qty = v_qty + 1;
                 END IF;
 
-                SET v_qty = v_qty + 1;
             END WHILE;
 
         IF v_qty <= 0 THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'serials_csv 解析後沒有有效序號';
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='沒有有效序號';
         END IF;
 
-        CALL sp_validate_serials_can_receipt(
-                p_customer_id,
-                p_fixture_id,
-                p_serials_csv
-             );
     END IF;
 
     /* =========================================================
-     * 4 開始交易（到這裡才允許寫 DB）
-     * ========================================================= */
+       3️⃣ 開始交易
+    ========================================================= */
+
     START TRANSACTION;
 
-    /* =========================================================
-     * 5 INSERT immutable ledger
-     * ========================================================= */
     INSERT INTO material_transactions (
         transaction_type,
         record_type,
@@ -1946,25 +2063,27 @@ BEGIN
         operator,
         note,
         created_by
-    ) VALUES (
-                 'receipt',
-                 p_record_type,
-                 v_qty,
-                 CURRENT_DATE,
-                 p_customer_id,
-                 p_order_no,
-                 p_fixture_id,
-                 p_source_type,
-                 p_operator,
-                 p_note,
-                 p_created_by
-             );
+    )
+    VALUES (
+               'receipt',
+               p_record_type,
+               v_qty,
+               CURRENT_DATE,
+               p_customer_id,
+               p_order_no,
+               p_fixture_id,
+               p_source_type,
+               p_operator,
+               p_note,
+               p_created_by
+           );
 
     SET v_transaction_id = LAST_INSERT_ID();
 
     /* =========================================================
-     * 6 寫入實體資料
-     * ========================================================= */
+       4️⃣ 實體寫入
+    ========================================================= */
+
     IF p_record_type = 'datecode' THEN
 
         INSERT INTO fixture_datecode_inventory (
@@ -1973,13 +2092,14 @@ BEGIN
             datecode,
             in_stock_qty,
             source_type
-        ) VALUES (
-                     p_customer_id,
-                     p_fixture_id,
-                     p_datecode,
-                     p_quantity,
-                     p_source_type
-                 )
+        )
+        VALUES (
+                   p_customer_id,
+                   p_fixture_id,
+                   p_datecode,
+                   p_quantity,
+                   p_source_type
+               )
         ON DUPLICATE KEY UPDATE
             in_stock_qty = in_stock_qty + VALUES(in_stock_qty);
 
@@ -1989,43 +2109,37 @@ BEGIN
             fixture_id,
             datecode,
             quantity
-        ) VALUES (
-                     v_transaction_id,
-                     p_customer_id,
-                     p_fixture_id,
-                     p_datecode,
-                     p_quantity
-                 );
-
-        /* =========================================================
-         * ★補齊：datecode audit（讓 view / 報表拿得到 datecode）
-         * ========================================================= */
-        INSERT INTO fixture_datecode_transactions (
-            transaction_id,
-            customer_id,
-            fixture_id,
-            datecode,
-            transaction_type,
-            quantity
-        ) VALUES (
-                     v_transaction_id,
-                     p_customer_id,
-                     p_fixture_id,
-                     p_datecode,
-                     'receipt',
-                     p_quantity
-                 );
+        )
+        VALUES (
+                   v_transaction_id,
+                   p_customer_id,
+                   p_fixture_id,
+                   p_datecode,
+                   p_quantity
+               );
 
     ELSE
+
+        /* serial receipt 必須強制設定狀態 */
         CALL sp_receipt_fixture_serials(
                 p_customer_id,
                 p_fixture_id,
                 p_serials_csv,
                 v_transaction_id
              );
+
     END IF;
 
     COMMIT;
+
+    /* =========================================================
+       5️⃣ rebuild cache
+    ========================================================= */
+
+    CALL sp_rebuild_fixture_quantities_v2(
+            p_customer_id,
+            p_fixture_id
+         );
 
     SET o_transaction_id = v_transaction_id;
     SET o_message = 'OK';
@@ -2047,230 +2161,244 @@ DELIMITER ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
 CREATE PROCEDURE `sp_material_return_v6`(
-    IN p_customer_id varchar(50),
-    IN p_fixture_id varchar(50),
-    IN p_order_no varchar(100),
-    IN p_operator varchar(100),
-    IN p_note text,
-    IN p_created_by int,
-    IN p_record_type enum ('batch', 'individual', 'datecode'),
-    IN p_source_type enum ('self_purchased', 'customer_supplied'),
-    IN p_serials_csv text,
-    IN p_datecode varchar(50),
-    IN p_quantity int,
-    OUT o_transaction_id int,
-    OUT o_message varchar(100)
+    IN p_customer_id VARCHAR(50),
+    IN p_fixture_id  VARCHAR(50),
+    IN p_order_no    VARCHAR(100),
+    IN p_operator    VARCHAR(100),
+    IN p_note        TEXT,
+    IN p_created_by  INT,
+    IN p_record_type ENUM ('batch','individual','datecode'),
+    IN p_source_type ENUM ('self_purchased','customer_supplied'),
+    IN p_serials_csv TEXT,
+    IN p_datecode    VARCHAR(50),
+    IN p_quantity    INT,
+    OUT o_transaction_id INT,
+    OUT o_message VARCHAR(100)
 )
 BEGIN
     /* =========================================================
      * 0. DECLARE（順序不可動）
      * ========================================================= */
     DECLARE v_transaction_id INT DEFAULT NULL;
-    DECLARE v_qty INT DEFAULT 0;
+DECLARE v_qty INT DEFAULT 0;
 
-    DECLARE v_tmp TEXT;
-    DECLARE v_pos INT DEFAULT 0;
-    DECLARE v_serial VARCHAR(100);
+DECLARE v_tmp TEXT;
+DECLARE v_pos INT DEFAULT 0;
+DECLARE v_serial VARCHAR(100);
 
     /* =========================================================
      * 全域錯誤處理
      * ========================================================= */
-    DECLARE EXIT HANDLER FOR SQLEXCEPTION
-        BEGIN
-            ROLLBACK;
-            RESIGNAL;
-        END;
+DECLARE EXIT HANDLER FOR SQLEXCEPTION
+BEGIN
+ROLLBACK;
+RESIGNAL;
+END;
 
     /* =========================================================
      * 1. 初始化 OUT
      * ========================================================= */
-    SET o_transaction_id = NULL;
-    SET o_message = NULL;
+SET o_transaction_id = NULL;
+SET o_message = NULL;
 
-    /* =========================================================
-     * 2. 基本參數驗證
-     * ========================================================= */
-    IF p_record_type NOT IN ('batch','individual','datecode') THEN
+/* =========================================================
+ * 2. 基本參數驗證
+ * ========================================================= */
+IF p_record_type NOT IN ('batch','individual','datecode') THEN
         SIGNAL SQLSTATE '45000'
-            SET MESSAGE_TEXT = 'record_type 不合法';
-    END IF;
+SET MESSAGE_TEXT = 'record_type 不合法';
+END IF;
 
-    IF p_source_type NOT IN ('self_purchased','customer_supplied') THEN
+IF p_source_type NOT IN ('self_purchased','customer_supplied') THEN
         SIGNAL SQLSTATE '45000'
-            SET MESSAGE_TEXT = 'source_type 不合法';
-    END IF;
+SET MESSAGE_TEXT = 'source_type 不合法';
+END IF;
 
     /* =========================================================
      * 3. record_type 驗證 + 數量計算（validate-first）
      * ========================================================= */
-    IF p_record_type = 'datecode' THEN
+IF p_record_type = 'datecode' THEN
 
         IF p_datecode IS NULL OR TRIM(p_datecode) = '' THEN
             SIGNAL SQLSTATE '45000'
-                SET MESSAGE_TEXT = 'datecode 模式需要 datecode';
-        END IF;
+SET MESSAGE_TEXT = 'datecode 模式需要 datecode';
+END IF;
 
-        IF p_quantity IS NULL OR p_quantity <= 0 THEN
+IF p_quantity IS NULL OR p_quantity <= 0 THEN
             SIGNAL SQLSTATE '45000'
-                SET MESSAGE_TEXT = 'datecode 模式需要 quantity > 0';
-        END IF;
+SET MESSAGE_TEXT = 'datecode 模式需要 quantity > 0';
+END IF;
 
-        IF p_serials_csv IS NOT NULL AND TRIM(p_serials_csv) <> '' THEN
+IF p_serials_csv IS NOT NULL AND TRIM(p_serials_csv) <> '' THEN
             SIGNAL SQLSTATE '45000'
-                SET MESSAGE_TEXT = 'datecode 模式不可傳入 serials';
-        END IF;
+SET MESSAGE_TEXT = 'datecode 模式不可傳入 serials';
+END IF;
 
-        SET v_qty = p_quantity;
+SET v_qty = p_quantity;
 
-        CALL sp_validate_datecode_can_return(
-                p_customer_id,
-                p_fixture_id,
-                p_datecode,
-                p_source_type,
-                p_quantity
-             );
+CALL sp_validate_datecode_can_return(
+        p_customer_id,
+        p_fixture_id,
+        p_datecode,
+        p_source_type,
+        p_quantity
+     );
 
-    ELSE
+ELSE
+
         IF p_serials_csv IS NULL OR TRIM(p_serials_csv) = '' THEN
             SIGNAL SQLSTATE '45000'
-                SET MESSAGE_TEXT = 'serial 模式需要 serials_csv';
-        END IF;
+SET MESSAGE_TEXT = 'serial 模式需要 serials_csv';
+END IF;
 
-        SET v_tmp = p_serials_csv;
-        SET v_qty = 0;
+SET v_tmp = p_serials_csv;
+SET v_qty = 0;
 
-        serial_count_loop:
+serial_count_loop:
         WHILE v_tmp IS NOT NULL AND LENGTH(v_tmp) > 0 DO
-                SET v_pos = LOCATE(',', v_tmp);
+SET v_pos = LOCATE(',', v_tmp);
 
-                IF v_pos = 0 THEN
-                    SET v_serial = TRIM(v_tmp);
-                    SET v_tmp = '';
-                ELSE
-                    SET v_serial = TRIM(SUBSTRING(v_tmp, 1, v_pos - 1));
-                    SET v_tmp = SUBSTRING(v_tmp, v_pos + 1);
-                END IF;
+IF v_pos = 0 THEN
+SET v_serial = TRIM(v_tmp);
+SET v_tmp = '';
+ELSE
+SET v_serial = TRIM(SUBSTRING(v_tmp, 1, v_pos - 1));
+SET v_tmp = SUBSTRING(v_tmp, v_pos + 1);
+END IF;
 
-                IF v_serial = '' THEN
-                    ITERATE serial_count_loop;
-                END IF;
+IF v_serial = '' THEN
+                ITERATE serial_count_loop;
+END IF;
 
-                SET v_qty = v_qty + 1;
-            END WHILE;
+SET v_qty = v_qty + 1;
+END WHILE;
 
-        IF v_qty <= 0 THEN
+IF v_qty <= 0 THEN
             SIGNAL SQLSTATE '45000'
-                SET MESSAGE_TEXT = 'serials_csv 解析後沒有有效序號';
-        END IF;
+SET MESSAGE_TEXT = 'serials_csv 解析後沒有有效序號';
+END IF;
 
-        CALL sp_validate_serials_can_return(
-                p_customer_id,
-                p_fixture_id,
-                p_serials_csv
-             );
-    END IF;
+CALL sp_validate_serials_can_return(
+        p_customer_id,
+        p_fixture_id,
+        p_serials_csv
+     );
+
+END IF;
 
     /* =========================================================
      * 4. 開始交易
      * ========================================================= */
-    START TRANSACTION;
+START TRANSACTION;
 
-    /* =========================================================
-     * 5. INSERT immutable ledger
-     * ========================================================= */
-    INSERT INTO material_transactions (
-        transaction_type,
-        record_type,
-        quantity,
-        transaction_date,
-        customer_id,
-        order_no,
-        fixture_id,
-        source_type,
-        operator,
-        note,
-        created_by
-    ) VALUES (
-                 'return',
-                 p_record_type,
-                 v_qty,
-                 CURRENT_DATE,
-                 p_customer_id,
-                 p_order_no,
-                 p_fixture_id,
-                 p_source_type,
-                 p_operator,
-                 p_note,
-                 p_created_by
-             );
+/* =========================================================
+ * 5. INSERT immutable ledger
+ * ========================================================= */
+INSERT INTO material_transactions (
+    transaction_type,
+    record_type,
+    quantity,
+    transaction_date,
+    customer_id,
+    order_no,
+    fixture_id,
+    source_type,
+    operator,
+    note,
+    created_by
+) VALUES (
+             'return',
+             p_record_type,
+             v_qty,
+             CURRENT_DATE,
+             p_customer_id,
+             p_order_no,
+             p_fixture_id,
+             p_source_type,
+             p_operator,
+             p_note,
+             p_created_by
+         );
 
-    SET v_transaction_id = LAST_INSERT_ID();
+SET v_transaction_id = LAST_INSERT_ID();
 
-    /* =========================================================
-     * 6. 實體資料異動（方案 2 核心）
-     * ========================================================= */
-    IF p_record_type = 'datecode' THEN
+/* =========================================================
+ * 6. 實體資料異動（v6 真相）
+ * ========================================================= */
+IF p_record_type = 'datecode' THEN
 
-        UPDATE fixture_datecode_inventory
-        SET
-            in_stock_qty = in_stock_qty - v_qty,
-            returned_qty = IFNULL(returned_qty, 0) + v_qty
-        WHERE customer_id = p_customer_id
-          AND fixture_id  = p_fixture_id
-          AND datecode    = p_datecode
-          AND source_type = p_source_type;
+        /* 防止扣到負數：in_stock_qty 必須足夠 */
+UPDATE fixture_datecode_inventory
+SET
+    in_stock_qty = in_stock_qty - v_qty,
+    returned_qty = IFNULL(returned_qty, 0) + v_qty,
+    updated_at   = NOW()
+WHERE customer_id = p_customer_id
+  AND fixture_id  = p_fixture_id
+  AND datecode    = p_datecode
+  AND source_type = p_source_type
+  AND in_stock_qty >= v_qty;
 
-        IF ROW_COUNT() = 0 THEN
+IF ROW_COUNT() = 0 THEN
             SIGNAL SQLSTATE '45000'
-                SET MESSAGE_TEXT = '找不到 datecode 庫存列，無法退料';
-        END IF;
+SET MESSAGE_TEXT = 'datecode 庫存不足或找不到對應列，無法退料';
+END IF;
 
-        INSERT INTO material_transaction_items (
-            transaction_id,
-            customer_id,
-            fixture_id,
-            datecode,
-            quantity
-        ) VALUES (
-                     v_transaction_id,
-                     p_customer_id,
-                     p_fixture_id,
-                     p_datecode,
-                     v_qty
-                 );
+INSERT INTO material_transaction_items (
+    transaction_id,
+    customer_id,
+    fixture_id,
+    datecode,
+    quantity
+) VALUES (
+             v_transaction_id,
+             p_customer_id,
+             p_fixture_id,
+             p_datecode,
+             v_qty
+         );
 
-        /* =========================================================
-         * ★補齊：datecode audit（給 view / 查詢用）
-         * ========================================================= */
-        INSERT INTO fixture_datecode_transactions (
-            transaction_id,
-            customer_id,
-            fixture_id,
-            datecode,
-            transaction_type,
-            quantity
-        ) VALUES (
-                     v_transaction_id,
-                     p_customer_id,
-                     p_fixture_id,
-                     p_datecode,
-                     'return',
-                     v_qty
-                 );
+INSERT INTO fixture_datecode_transactions (
+    transaction_id,
+    customer_id,
+    fixture_id,
+    datecode,
+    transaction_type,
+    quantity
+) VALUES (
+             v_transaction_id,
+             p_customer_id,
+             p_fixture_id,
+             p_datecode,
+             'return',
+             v_qty
+         );
 
-    ELSE
-        CALL sp_return_fixture_serials(
-                p_customer_id,
-                p_fixture_id,
-                p_serials_csv,
-                v_transaction_id
-             );
-    END IF;
+ELSE
 
-    COMMIT;
+        /* ✅ 序號退料：必須更新 fixture_serials.existence_status='returned' */
+CALL sp_return_fixture_serials(
+        p_customer_id,
+        p_fixture_id,
+        p_serials_csv,
+        v_transaction_id
+     );
 
-    SET o_transaction_id = v_transaction_id;
-    SET o_message = 'OK';
+END IF;
+
+COMMIT;
+
+/* =========================================================
+ * 7. 退料後同步 cache
+ * ========================================================= */
+CALL sp_rebuild_fixture_quantities_v2(
+        p_customer_id,
+        p_fixture_id
+     );
+
+SET o_transaction_id = v_transaction_id;
+SET o_message = 'OK';
+
 END ;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
@@ -2287,11 +2415,7 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
-CREATE PROCEDURE `sp_material_transactions_count`(
-    IN p_customer_id VARCHAR(50),
-    IN p_date_from DATE,
-    IN p_date_to DATE
-)
+CREATE PROCEDURE `sp_material_transactions_count`(IN p_customer_id varchar(50), IN p_date_from date, IN p_date_to date)
 BEGIN
     SELECT COUNT(*) AS total_count
     FROM material_transactions t
@@ -2315,13 +2439,9 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
-CREATE PROCEDURE `sp_material_transactions_page`(
-    IN p_customer_id VARCHAR(50),
-    IN p_date_from DATE,
-    IN p_date_to DATE,
-    IN p_page INT,
-    IN p_page_size INT
-)
+CREATE PROCEDURE `sp_material_transactions_page`(IN p_customer_id varchar(50),
+                                                                       IN p_date_from date, IN p_date_to date,
+                                                                       IN p_page int, IN p_page_size int)
 BEGIN
     DECLARE v_offset INT;
 
@@ -2352,56 +2472,6 @@ BEGIN
       AND (p_date_to   IS NULL OR t.transaction_date <= p_date_to)
     ORDER BY t.transaction_date DESC, t.id DESC
     LIMIT p_page_size OFFSET v_offset;
-END ;;
-DELIMITER ;
-/*!50003 SET sql_mode              = @saved_sql_mode */ ;
-/*!50003 SET character_set_client  = @saved_cs_client */ ;
-/*!50003 SET character_set_results = @saved_cs_results */ ;
-/*!50003 SET collation_connection  = @saved_col_connection */ ;
-/*!50003 DROP PROCEDURE IF EXISTS `sp_rebuild_all_fixtures` */;
-/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
-/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
-/*!50003 SET @saved_col_connection = @@collation_connection */ ;
-/*!50003 SET character_set_client  = utf8mb4 */ ;
-/*!50003 SET character_set_results = utf8mb4 */ ;
-/*!50003 SET collation_connection  = utf8mb4_0900_ai_ci */ ;
-/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
-/*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
-DELIMITER ;;
-CREATE PROCEDURE `sp_rebuild_all_fixtures`(
-    IN p_repaired_by VARCHAR(100)
-)
-BEGIN
-    DECLARE done INT DEFAULT FALSE;
-    DECLARE v_fixture_id VARCHAR(50);
-    DECLARE v_customer_id VARCHAR(50);
-    DECLARE v_count INT DEFAULT 0;
-
-    DECLARE cur CURSOR FOR
-        SELECT id, customer_id FROM fixtures;
-
-    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
-
-    OPEN cur;
-
-    read_loop: LOOP
-        FETCH cur INTO v_fixture_id, v_customer_id;
-        IF done THEN
-            LEAVE read_loop;
-        END IF;
-
-        CALL sp_rebuild_fixture_quantities(
-                v_fixture_id,
-                v_customer_id,
-                p_repaired_by
-             );
-
-        SET v_count = v_count + 1;
-    END LOOP;
-
-    CLOSE cur;
-
-    SELECT CONCAT('已修復 ', v_count, ' 個治具') AS message;
 END ;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
@@ -2453,95 +2523,6 @@ DELIMITER ;
 /*!50003 SET character_set_client  = @saved_cs_client */ ;
 /*!50003 SET character_set_results = @saved_cs_results */ ;
 /*!50003 SET collation_connection  = @saved_col_connection */ ;
-/*!50003 DROP PROCEDURE IF EXISTS `sp_rebuild_fixture_quantities` */;
-/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
-/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
-/*!50003 SET @saved_col_connection = @@collation_connection */ ;
-/*!50003 SET character_set_client  = utf8mb4 */ ;
-/*!50003 SET character_set_results = utf8mb4 */ ;
-/*!50003 SET collation_connection  = utf8mb4_0900_ai_ci */ ;
-/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
-/*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
-DELIMITER ;;
-CREATE PROCEDURE `sp_rebuild_fixture_quantities`()
-BEGIN
-    DECLARE done INT DEFAULT 0;
-    DECLARE v_fixture_id VARCHAR(50);
-
-    DECLARE v_in_stock INT;
-    DECLARE v_deployed INT;
-    DECLARE v_maintenance INT;
-    DECLARE v_returned INT;
-    DECLARE v_scrapped INT;
-
-    DECLARE v_self INT;
-    DECLARE v_customer INT;
-
-    DECLARE cur CURSOR FOR
-        SELECT id FROM fixtures WHERE deleted_at IS NULL;
-
-    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = 1;
-
-    OPEN cur;
-
-    read_loop:
-    LOOP
-        FETCH cur INTO v_fixture_id;
-        IF done = 1 THEN
-            LEAVE read_loop;
-        END IF;
-
-        /* serial（只算 in_stock） */
-        SELECT
-            SUM(status = 'in_stock'),
-            SUM(status = 'deployed'),
-            SUM(status = 'maintenance'),
-            SUM(status = 'returned'),
-            SUM(status = 'scrapped'),
-            SUM(status = 'in_stock' AND source_type = 'self_purchased'),
-            SUM(status = 'in_stock' AND source_type = 'customer_supplied')
-        INTO
-            v_in_stock,
-            v_deployed,
-            v_maintenance,
-            v_returned,
-            v_scrapped,
-            v_self,
-            v_customer
-        FROM fixture_serials
-        WHERE fixture_id = v_fixture_id;
-
-        /* datecode（只算 in_stock_qty） */
-        SELECT
-            IFNULL(SUM(in_stock_qty), 0),
-            IFNULL(SUM(CASE WHEN source_type='self_purchased' THEN in_stock_qty END), 0),
-            IFNULL(SUM(CASE WHEN source_type='customer_supplied' THEN in_stock_qty END), 0)
-        INTO
-            @dc_in_stock,
-            @dc_self,
-            @dc_customer
-        FROM fixture_datecode_inventory
-        WHERE fixture_id = v_fixture_id;
-
-        UPDATE fixtures
-        SET
-            in_stock_qty          = IFNULL(v_in_stock,0) + IFNULL(@dc_in_stock,0),
-            self_purchased_qty    = IFNULL(v_self,0) + IFNULL(@dc_self,0),
-            customer_supplied_qty = IFNULL(v_customer,0) + IFNULL(@dc_customer,0),
-            deployed_qty          = IFNULL(v_deployed,0),
-            maintenance_qty       = IFNULL(v_maintenance,0),
-            returned_qty          = IFNULL(v_returned,0),
-            scrapped_qty          = IFNULL(v_scrapped,0)
-        WHERE id = v_fixture_id;
-    END LOOP;
-
-    CLOSE cur;
-END ;;
-DELIMITER ;
-/*!50003 SET sql_mode              = @saved_sql_mode */ ;
-/*!50003 SET character_set_client  = @saved_cs_client */ ;
-/*!50003 SET character_set_results = @saved_cs_results */ ;
-/*!50003 SET collation_connection  = @saved_col_connection */ ;
 /*!50003 DROP PROCEDURE IF EXISTS `sp_rebuild_fixture_quantities_v2` */;
 /*!50003 SET @saved_cs_client      = @@character_set_client */ ;
 /*!50003 SET @saved_cs_results     = @@character_set_results */ ;
@@ -2557,75 +2538,123 @@ CREATE PROCEDURE `sp_rebuild_fixture_quantities_v2`(
     IN p_fixture_id  VARCHAR(50)
 )
 BEGIN
-    /* ===============================
-     * serial 統計
-     * =============================== */
-    DECLARE v_in_stock_serial INT DEFAULT 0;
-    DECLARE v_deployed INT DEFAULT 0;
-    DECLARE v_maintenance INT DEFAULT 0;
-    DECLARE v_returned INT DEFAULT 0;
-    DECLARE v_scrapped INT DEFAULT 0;
+    /* =========================================================
+     * v6 rebuild 原則：
+     * - serial：以 existence_status / usage_status 為唯一真相
+     * - datecode：以 fixture_datecode_inventory 為唯一真相
+     * - fixtures 僅為 cache，這裡是唯一寫入點
+     * ========================================================= */
 
-    DECLARE v_self_serial INT DEFAULT 0;
-    DECLARE v_customer_serial INT DEFAULT 0;
+    /* ---------- serial 統計 ---------- */
+    DECLARE v_serial_in_stock        INT DEFAULT 0;
+    DECLARE v_serial_available       INT DEFAULT 0;
+    DECLARE v_serial_deployed        INT DEFAULT 0;
+    DECLARE v_serial_maintenance     INT DEFAULT 0;
+    DECLARE v_serial_returned        INT DEFAULT 0;
+    DECLARE v_serial_scrapped        INT DEFAULT 0;
 
-    /* ===============================
-     * datecode 統計
-     * =============================== */
-    DECLARE v_dc_in_stock INT DEFAULT 0;
-    DECLARE v_dc_self INT DEFAULT 0;
-    DECLARE v_dc_customer INT DEFAULT 0;
+    DECLARE v_serial_self_in_stock   INT DEFAULT 0;
+    DECLARE v_serial_cust_in_stock   INT DEFAULT 0;
 
-    /* ---------- serial ---------- */
+    /* ---------- datecode 統計 ---------- */
+    DECLARE v_dc_in_stock            INT DEFAULT 0;
+    DECLARE v_dc_returned            INT DEFAULT 0;
+    DECLARE v_dc_self_in_stock       INT DEFAULT 0;
+    DECLARE v_dc_cust_in_stock       INT DEFAULT 0;
+
+    /* =========================================================
+     * 1️⃣ Serial rebuild
+     * ========================================================= */
     SELECT
-        SUM(fs.status = 'in_stock'),
-        SUM(fs.status = 'deployed'),
-        SUM(fs.status = 'maintenance'),
-        SUM(fs.status = 'returned'),
-        SUM(fs.status = 'scrapped'),
-        SUM(fs.status = 'in_stock' AND fs.source_type = 'self_purchased'),
-        SUM(fs.status = 'in_stock' AND fs.source_type = 'customer_supplied')
+        IFNULL(SUM(fs.existence_status = 'in_stock'), 0),
+        IFNULL(SUM(fs.existence_status = 'returned'), 0),
+        IFNULL(SUM(fs.existence_status = 'scrapped'), 0),
+
+        IFNULL(SUM(fs.existence_status = 'in_stock' AND fs.usage_status = 'deployed'), 0),
+        IFNULL(SUM(fs.existence_status = 'in_stock' AND fs.usage_status = 'maintenance'), 0),
+        IFNULL(SUM(fs.existence_status = 'in_stock' AND fs.usage_status = 'idle'), 0),
+
+        IFNULL(SUM(fs.existence_status = 'in_stock' AND fs.source_type = 'self_purchased'), 0),
+        IFNULL(SUM(fs.existence_status = 'in_stock' AND fs.source_type = 'customer_supplied'), 0)
+
     INTO
-        v_in_stock_serial,
-        v_deployed,
-        v_maintenance,
-        v_returned,
-        v_scrapped,
-        v_self_serial,
-        v_customer_serial
+        v_serial_in_stock,
+        v_serial_returned,
+        v_serial_scrapped,
+        v_serial_deployed,
+        v_serial_maintenance,
+        v_serial_available,
+        v_serial_self_in_stock,
+        v_serial_cust_in_stock
+
     FROM fixture_serials fs
     WHERE fs.customer_id = p_customer_id
       AND fs.fixture_id  = p_fixture_id
       AND fs.deleted_at IS NULL;
 
-    /* ---------- datecode ---------- */
+
+    /* =========================================================
+     * 2️⃣ Datecode rebuild（修正重點：加 returned_qty）
+     * ========================================================= */
     SELECT
         IFNULL(SUM(in_stock_qty), 0),
-        IFNULL(SUM(CASE WHEN source_type='self_purchased' THEN in_stock_qty END), 0),
-        IFNULL(SUM(CASE WHEN source_type='customer_supplied' THEN in_stock_qty END), 0)
+        IFNULL(SUM(returned_qty), 0),
+
+        IFNULL(SUM(
+                       CASE WHEN source_type = 'self_purchased'
+                                THEN in_stock_qty ELSE 0 END
+               ), 0),
+
+        IFNULL(SUM(
+                       CASE WHEN source_type = 'customer_supplied'
+                                THEN in_stock_qty ELSE 0 END
+               ), 0)
+
     INTO
         v_dc_in_stock,
-        v_dc_self,
-        v_dc_customer
+        v_dc_returned,
+        v_dc_self_in_stock,
+        v_dc_cust_in_stock
+
     FROM fixture_datecode_inventory
     WHERE customer_id = p_customer_id
       AND fixture_id  = p_fixture_id;
 
-    /* ===============================
-     * 回寫 fixtures（唯一寫入點）
-     * =============================== */
+
+    /* =========================================================
+     * 3️⃣ 回寫 fixtures cache（已包含 datecode returned）
+     * ========================================================= */
     UPDATE fixtures
     SET
-        in_stock_qty          = v_in_stock_serial + v_dc_in_stock,
-        self_purchased_qty    = v_self_serial     + v_dc_self,
-        customer_supplied_qty = v_customer_serial + v_dc_customer,
+        /* 總庫存（serial + datecode） */
+        in_stock_qty =
+            IFNULL(v_serial_in_stock,0)
+                + IFNULL(v_dc_in_stock,0),
 
-        deployed_qty          = v_deployed,
-        maintenance_qty       = v_maintenance,
-        returned_qty          = v_returned,
-        scrapped_qty          = v_scrapped
+        /* 來源別 */
+        self_purchased_qty =
+            IFNULL(v_serial_self_in_stock,0)
+                + IFNULL(v_dc_self_in_stock,0),
+
+        customer_supplied_qty =
+            IFNULL(v_serial_cust_in_stock,0)
+                + IFNULL(v_dc_cust_in_stock,0),
+
+        /* serial 使用狀態 */
+        deployed_qty    = IFNULL(v_serial_deployed,0),
+        maintenance_qty = IFNULL(v_serial_maintenance,0),
+
+        /*  existence（修正關鍵） */
+        returned_qty =
+            IFNULL(v_serial_returned,0)
+                + IFNULL(v_dc_returned,0),
+
+        scrapped_qty =
+            IFNULL(v_serial_scrapped,0)
+
     WHERE id = p_fixture_id
       AND customer_id = p_customer_id;
+
 END ;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
@@ -2643,74 +2672,148 @@ DELIMITER ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
 CREATE PROCEDURE `sp_receipt_fixture_serials`(
-    IN p_customer_id    VARCHAR(50),
-    IN p_fixture_id     VARCHAR(50),
-    IN p_serials_csv    TEXT,
+    IN p_customer_id VARCHAR(50),
+    IN p_fixture_id VARCHAR(50),
+    IN p_serials_csv TEXT,
     IN p_transaction_id INT
 )
 BEGIN
-    DECLARE v_serial VARCHAR(100);
-    DECLARE v_pos INT DEFAULT 0;
-    DECLARE v_exists INT;
-    DECLARE v_tx_date DATE;
-    DECLARE v_source_type ENUM('self_purchased','customer_supplied');
 
-    /* 取得交易主表（唯一可信來源） */
+    DECLARE v_serial       VARCHAR(100);
+    DECLARE v_pos          INT DEFAULT 0;
+    DECLARE v_tmp          TEXT;
+    DECLARE v_tx_date      DATE;
+    DECLARE v_source_type  VARCHAR(30);
+    DECLARE v_exist        VARCHAR(20);
+    DECLARE v_usage        VARCHAR(20);
+    DECLARE v_msg          TEXT;
+
+    /* =========================================================
+       0️⃣ 交易主表（唯一可信來源）
+    ========================================================= */
     SELECT
-        transaction_date,
-        source_type
+        t.transaction_date,
+        t.source_type
     INTO
         v_tx_date,
         v_source_type
-    FROM material_transactions
-    WHERE id = p_transaction_id
-      AND customer_id = p_customer_id
-      AND fixture_id  = p_fixture_id
-      AND transaction_type = 'receipt'
+    FROM material_transactions t
+    WHERE t.id = p_transaction_id
+      AND t.customer_id = p_customer_id
+      AND t.fixture_id  = p_fixture_id
+      AND t.transaction_type = 'receipt'
         FOR UPDATE;
 
     IF v_tx_date IS NULL THEN
         SIGNAL SQLSTATE '45000'
-            SET MESSAGE_TEXT = '收料交易不存在';
+            SET MESSAGE_TEXT = '收料交易不存在或不匹配';
     END IF;
 
-    serial_loop:
-    WHILE p_serials_csv IS NOT NULL AND LENGTH(p_serials_csv) > 0 DO
+    SET v_tmp = p_serials_csv;
 
-            SET v_pos = LOCATE(',', p_serials_csv);
+    /* =========================================================
+       1️⃣ 逐筆處理
+    ========================================================= */
+    serial_loop:
+    WHILE v_tmp IS NOT NULL AND LENGTH(v_tmp) > 0 DO
+
+            SET v_pos = LOCATE(',', v_tmp);
 
             IF v_pos = 0 THEN
-                SET v_serial = TRIM(p_serials_csv);
-                SET p_serials_csv = '';
+                SET v_serial = TRIM(v_tmp);
+                SET v_tmp = '';
             ELSE
-                SET v_serial = TRIM(SUBSTRING(p_serials_csv, 1, v_pos - 1));
-                SET p_serials_csv = SUBSTRING(p_serials_csv, v_pos + 1);
+                SET v_serial = TRIM(SUBSTRING(v_tmp,1,v_pos-1));
+                SET v_tmp = SUBSTRING(v_tmp,v_pos+1);
             END IF;
 
             IF v_serial = '' THEN
                 ITERATE serial_loop;
             END IF;
 
-            /* 新增序號（所有驗證交給 trigger） */
-            INSERT INTO fixture_serials (
-                customer_id,
-                fixture_id,
-                serial_number,
-                source_type,
-                status,
-                receipt_date,
-                receipt_transaction_id
-            ) VALUES (
-                         p_customer_id,
-                         p_fixture_id,
-                         v_serial,
-                         v_source_type,
-                         'in_stock',
-                         v_tx_date,
-                         p_transaction_id
-                     );
+            /* =====================================================
+               2️⃣ 查詢是否已存在
+            ===================================================== */
+            SET v_exist = NULL;
+            SET v_usage = NULL;
 
-            /* 寫入交易明細 */
+            SELECT existence_status, usage_status
+            INTO v_exist, v_usage
+            FROM fixture_serials
+            WHERE customer_id   = p_customer_id
+              AND fixture_id    = p_fixture_id
+              AND serial_number = v_serial
+              AND deleted_at IS NULL
+            LIMIT 1
+            FOR UPDATE;
+
+            /* =====================================================
+               3️⃣ 狀態判斷邏輯（v6 正式版）
+            ===================================================== */
+
+            IF v_exist IS NOT NULL THEN
+
+                /* 已存在且還在庫 → 禁止 */
+                IF v_exist = 'in_stock' THEN
+                    SET v_msg = CONCAT('序號已在庫中，禁止重複收料: ', v_serial);
+                    SIGNAL SQLSTATE '45000'
+                        SET MESSAGE_TEXT = v_msg;
+                END IF;
+
+                /* 已報廢 → 禁止 */
+                IF v_exist = 'scrapped' THEN
+                    SET v_msg = CONCAT('序號已報廢，不可再收料: ', v_serial);
+                    SIGNAL SQLSTATE '45000'
+                        SET MESSAGE_TEXT = v_msg;
+                END IF;
+
+                /* 已退料 → 允許重新收料（復活） */
+                IF v_exist = 'returned' THEN
+
+                    UPDATE fixture_serials
+                    SET
+                        existence_status        = 'in_stock',
+                        usage_status            = 'idle',
+                        receipt_date            = v_tx_date,
+                        receipt_transaction_id  = p_transaction_id,
+                        source_type             = v_source_type,
+                        updated_at              = NOW()
+                    WHERE customer_id   = p_customer_id
+                      AND fixture_id    = p_fixture_id
+                      AND serial_number = v_serial;
+
+                END IF;
+
+            ELSE
+
+                /* =====================================================
+                   4️⃣ 新序號 → 正常 INSERT
+                ===================================================== */
+                INSERT INTO fixture_serials (
+                    customer_id,
+                    fixture_id,
+                    serial_number,
+                    source_type,
+                    existence_status,
+                    usage_status,
+                    receipt_date,
+                    receipt_transaction_id
+                ) VALUES (
+                             p_customer_id,
+                             p_fixture_id,
+                             v_serial,
+                             v_source_type,
+                             'in_stock',
+                             'idle',
+                             v_tx_date,
+                             p_transaction_id
+                         );
+
+            END IF;
+
+            /* =====================================================
+               5️⃣ 寫入交易明細
+            ===================================================== */
             INSERT INTO material_transaction_items (
                 transaction_id,
                 customer_id,
@@ -2724,6 +2827,7 @@ BEGIN
                      );
 
         END WHILE;
+
 END ;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
@@ -2740,17 +2844,29 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
-CREATE PROCEDURE `sp_restore_fixture`(
-    IN p_fixture_id VARCHAR(50)
-)
+CREATE PROCEDURE `sp_restore_fixture`(IN p_customer_id varchar(50), IN p_fixture_id varchar(50))
 BEGIN
+    /* ===============================
+     * 1) 還原 fixture（限本客戶）
+     * =============================== */
     UPDATE fixtures
     SET deleted_at = NULL
-    WHERE id = p_fixture_id;
+    WHERE id = p_fixture_id
+      AND customer_id = p_customer_id;
 
+    IF ROW_COUNT() = 0 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = '找不到可還原的 fixture（或客戶不匹配）';
+    END IF;
+
+    /* ===============================
+     * 2) 還原 serial（僅限仍存在者）
+     * =============================== */
     UPDATE fixture_serials
     SET deleted_at = NULL
-    WHERE fixture_id = p_fixture_id;
+    WHERE customer_id = p_customer_id
+      AND fixture_id  = p_fixture_id
+      AND existence_status = 'in_stock';
 END ;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
@@ -2768,79 +2884,96 @@ DELIMITER ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
 CREATE PROCEDURE `sp_return_fixture_serials`(
-    IN p_customer_id    VARCHAR(50),
-    IN p_fixture_id     VARCHAR(50),
-    IN p_serials_csv    TEXT,
+    IN p_customer_id VARCHAR(50),
+    IN p_fixture_id VARCHAR(50),
+    IN p_serials_csv TEXT,
     IN p_transaction_id INT
 )
 BEGIN
     DECLARE v_serial VARCHAR(100);
     DECLARE v_pos INT DEFAULT 0;
-    DECLARE v_exists INT;
-    DECLARE v_msg TEXT;
     DECLARE v_tx_date DATE;
+    DECLARE v_exists_id VARCHAR(50);
+    DECLARE v_msg TEXT;
+    DECLARE v_tmp TEXT;
 
-    /* 取得交易日期（若不存在直接錯） */
-    SELECT transaction_date
+    /* =========================================================
+     * 0) 驗證交易主表（唯一可信來源）
+     * ========================================================= */
+    SELECT t.transaction_date
     INTO v_tx_date
-    FROM material_transactions
-    WHERE id = p_transaction_id
-      AND customer_id = p_customer_id
-      AND fixture_id  = p_fixture_id
-      AND transaction_type = 'return'
+    FROM material_transactions t
+    WHERE t.id = p_transaction_id
+      AND t.customer_id = p_customer_id
+      AND t.fixture_id  = p_fixture_id
+      AND t.transaction_type = 'return'
         FOR UPDATE;
 
     IF v_tx_date IS NULL THEN
-        SET v_msg = '退料交易不存在';
         SIGNAL SQLSTATE '45000'
-            SET MESSAGE_TEXT = v_msg;
+            SET MESSAGE_TEXT = '退料交易不存在或不匹配';
     END IF;
 
-    serial_loop:
-    WHILE p_serials_csv IS NOT NULL AND LENGTH(p_serials_csv) > 0 DO
+    SET v_tmp = p_serials_csv;
 
-            SET v_pos = LOCATE(',', p_serials_csv);
+    /* =========================================================
+     * 1) CSV 逐筆處理
+     * ========================================================= */
+    serial_loop:
+    WHILE v_tmp IS NOT NULL AND LENGTH(v_tmp) > 0 DO
+
+            SET v_pos = LOCATE(',', v_tmp);
 
             IF v_pos = 0 THEN
-                SET v_serial = TRIM(p_serials_csv);
-                SET p_serials_csv = '';
+                SET v_serial = TRIM(v_tmp);
+                SET v_tmp = '';
             ELSE
-                SET v_serial = TRIM(SUBSTRING(p_serials_csv, 1, v_pos - 1));
-                SET p_serials_csv = SUBSTRING(p_serials_csv, v_pos + 1);
+                SET v_serial = TRIM(SUBSTRING(v_tmp, 1, v_pos - 1));
+                SET v_tmp = SUBSTRING(v_tmp, v_pos + 1);
             END IF;
 
             IF v_serial = '' THEN
                 ITERATE serial_loop;
             END IF;
 
-            /* 驗證：序號必須存在且在庫 */
-            SELECT COUNT(*)
-            INTO v_exists
-            FROM fixture_serials
-            WHERE customer_id   = p_customer_id
-              AND fixture_id    = p_fixture_id
-              AND serial_number = v_serial
-              AND status        = 'in_stock'
-                FOR UPDATE;
+            /* =====================================================
+             * 2) 驗證 serial（只檢查 existence）
+             * ===================================================== */
+            SET v_exists_id = NULL;
 
-            IF v_exists = 0 THEN
-                SET v_msg = CONCAT('序號不存在或不在庫，無法退料: ', v_serial);
+            SELECT fs.id
+            INTO v_exists_id
+            FROM fixture_serials fs
+            WHERE fs.customer_id   = p_customer_id
+              AND fs.fixture_id    = p_fixture_id
+              AND fs.serial_number = v_serial
+              AND fs.deleted_at IS NULL
+              AND fs.existence_status = 'in_stock'
+            LIMIT 1
+            FOR UPDATE;
+
+            IF v_exists_id IS NULL THEN
+                SET v_msg = CONCAT('序號不存在或已退/報廢: ', v_serial);
                 SIGNAL SQLSTATE '45000'
                     SET MESSAGE_TEXT = v_msg;
             END IF;
 
-            /* 更新狀態 */
+            /* =====================================================
+             * 3) 更新 serial 狀態
+             * ===================================================== */
             UPDATE fixture_serials
             SET
-                status = 'returned',
-                return_date = v_tx_date,
-                return_transaction_id = p_transaction_id
-            WHERE customer_id   = p_customer_id
-              AND fixture_id    = p_fixture_id
-              AND serial_number = v_serial
-              AND status        = 'in_stock';
+                existence_status      = 'returned',
+                usage_status          = 'idle',
+                current_station_id    = NULL,
+                return_date           = v_tx_date,
+                return_transaction_id = p_transaction_id,
+                updated_at            = NOW()
+            WHERE id = v_exists_id;
 
-            /* 寫入交易明細 */
+            /* =====================================================
+             * 4) 寫入交易明細
+             * ===================================================== */
             INSERT INTO material_transaction_items (
                 transaction_id,
                 customer_id,
@@ -2854,6 +2987,7 @@ BEGIN
                      );
 
         END WHILE;
+
 END ;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
@@ -2910,17 +3044,66 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
-CREATE PROCEDURE `sp_soft_delete_fixture`(
-    IN p_fixture_id VARCHAR(50)
-)
+CREATE PROCEDURE `sp_soft_delete_fixture`(IN p_customer_id varchar(50), IN p_fixture_id varchar(50))
 BEGIN
+    /* ===============================
+     * 1) soft delete fixture（限本客戶）
+     * =============================== */
     UPDATE fixtures
     SET deleted_at = NOW()
-    WHERE id = p_fixture_id;
+    WHERE id = p_fixture_id
+      AND customer_id = p_customer_id;
 
+    IF ROW_COUNT() = 0 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = '找不到可刪除的 fixture（或客戶不匹配）';
+    END IF;
+
+    /* ===============================
+     * 2) soft delete serial（僅限仍存在者）
+     * =============================== */
     UPDATE fixture_serials
     SET deleted_at = NOW()
-    WHERE fixture_id = p_fixture_id;
+    WHERE customer_id = p_customer_id
+      AND fixture_id  = p_fixture_id
+      AND existence_status = 'in_stock';
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `sp_sync_model_stations_from_requirements` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8mb4 */ ;
+/*!50003 SET character_set_results = utf8mb4 */ ;
+/*!50003 SET collation_connection  = utf8mb4_0900_ai_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE PROCEDURE `sp_sync_model_stations_from_requirements`(
+    IN p_customer_id VARCHAR(50)
+)
+BEGIN
+    INSERT INTO model_stations (
+        customer_id,
+        model_id,
+        station_id,
+        note
+    )
+    SELECT DISTINCT
+        fr.customer_id,
+        fr.model_id,
+        fr.station_id,
+        '由 fixture_requirements 同步建立'
+    FROM fixture_requirements fr
+             LEFT JOIN model_stations ms
+                       ON ms.model_id = fr.model_id
+                           AND ms.station_id = fr.station_id
+    WHERE fr.customer_id = p_customer_id
+      AND ms.id IS NULL;
 END ;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
@@ -2937,10 +3120,7 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
-CREATE PROCEDURE `sp_validate_datecode_can_receipt`(
-    IN p_datecode VARCHAR(50),
-    IN p_quantity INT
-)
+CREATE PROCEDURE `sp_validate_datecode_can_receipt`(IN p_datecode varchar(50), IN p_quantity int)
 BEGIN
     IF p_datecode IS NULL OR p_datecode = '' THEN
         SIGNAL SQLSTATE '45000'
@@ -2967,13 +3147,11 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
-CREATE PROCEDURE `sp_validate_datecode_can_return`(
-    IN p_customer_id VARCHAR(50),
-    IN p_fixture_id  VARCHAR(50),
-    IN p_datecode    VARCHAR(50),
-    IN p_source_type ENUM('self_purchased','customer_supplied'),
-    IN p_quantity    INT
-)
+CREATE PROCEDURE `sp_validate_datecode_can_return`(IN p_customer_id varchar(50),
+                                                                         IN p_fixture_id varchar(50),
+                                                                         IN p_datecode varchar(50),
+                                                                         IN p_source_type enum ('self_purchased', 'customer_supplied'),
+                                                                         IN p_quantity int)
 BEGIN
     DECLARE v_stock INT DEFAULT NULL;
 
@@ -3017,7 +3195,7 @@ DELIMITER ;
 DELIMITER ;;
 CREATE PROCEDURE `sp_validate_fixture_quantities`()
 BEGIN
-    -- 驗證序號數量一致性
+    
     CREATE TEMPORARY TABLE IF NOT EXISTS temp_validation_results (
                                                                      fixture_id VARCHAR(50),
                                                                      customer_id VARCHAR(50),
@@ -3028,10 +3206,10 @@ BEGIN
                                                                      difference INT
     );
 
-    -- 清空臨時表
+    
     TRUNCATE TABLE temp_validation_results;
 
-    -- 檢查 in_stock_qty
+    
     INSERT INTO temp_validation_results
     SELECT
         f.id,
@@ -3051,7 +3229,7 @@ BEGIN
     GROUP BY f.id, f.customer_id, f.fixture_name, f.in_stock_qty
     HAVING difference != 0;
 
-    -- 檢查 deployed_qty
+    
     INSERT INTO temp_validation_results
     SELECT
         f.id,
@@ -3066,7 +3244,7 @@ BEGIN
     GROUP BY f.id, f.customer_id, f.fixture_name, f.deployed_qty
     HAVING difference != 0;
 
-    -- 檢查 self_purchased_qty
+    
     INSERT INTO temp_validation_results
     SELECT
         f.id,
@@ -3088,10 +3266,10 @@ BEGIN
     GROUP BY f.id, f.customer_id, f.fixture_name, f.self_purchased_qty
     HAVING difference != 0;
 
-    -- 輸出結果
+    
     SELECT * FROM temp_validation_results;
 
-    -- 如果有問題，記錄到日誌
+    
     IF EXISTS (SELECT 1 FROM temp_validation_results) THEN
         INSERT INTO trigger_error_logs (
             trigger_name,
@@ -3129,7 +3307,7 @@ DELIMITER ;
 DELIMITER ;;
 CREATE PROCEDURE `sp_validate_inventory_consistency`()
 BEGIN
-    -- 檢查序號數量
+    
     SELECT
         f.id,
         f.customer_id,
@@ -3144,7 +3322,7 @@ BEGIN
         f.in_stock_qty != actual_in_stock OR
         f.deployed_qty != actual_deployed;
 
-    -- 檢查日期碼數量
+    
     SELECT
         f.id,
         f.in_stock_qty AS fixture_in_stock,
@@ -3171,21 +3349,26 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
-CREATE PROCEDURE `sp_validate_serials_can_receipt`(
-    IN p_customer_id VARCHAR(50),
-    IN p_fixture_id  VARCHAR(50),
-    IN p_serials_csv TEXT
-)
+CREATE PROCEDURE `sp_validate_serials_can_receipt`(IN p_customer_id varchar(50),
+                                                                         IN p_fixture_id varchar(50),
+                                                                         IN p_serials_csv text)
 BEGIN
     DECLARE v_serial VARCHAR(100);
     DECLARE v_pos INT DEFAULT 0;
     DECLARE v_exists INT;
     DECLARE v_msg TEXT;
 
-    IF p_serials_csv IS NULL OR p_serials_csv = '' THEN
+    IF p_serials_csv IS NULL OR TRIM(p_serials_csv) = '' THEN
         SIGNAL SQLSTATE '45000'
             SET MESSAGE_TEXT = 'serial 模式需要 serials_csv';
     END IF;
+
+    /* =========================================================
+     * v6 語意說明：
+     * - serial 只要「曾存在於系統中」，即不可再次收料
+     * - 包含 soft delete / returned / scrapped
+     * - 併發保護由 receipt SP + UNIQUE constraint 負責
+     * ========================================================= */
 
     serial_loop:
     WHILE LENGTH(p_serials_csv) > 0 DO
@@ -3204,7 +3387,6 @@ BEGIN
                 ITERATE serial_loop;
             END IF;
 
-            /* 關鍵修正：只要存在過，就不可再 INSERT */
             SELECT COUNT(*)
             INTO v_exists
             FROM fixture_serials
@@ -3214,9 +3396,9 @@ BEGIN
 
             IF v_exists > 0 THEN
                 SET v_msg = CONCAT(
-                        '序號已存在，不可重複收料: ', v_serial
+                        '序號曾存在於系統中，不可再次收料: ',
+                        v_serial
                             );
-
                 SIGNAL SQLSTATE '45000'
                     SET MESSAGE_TEXT = v_msg;
             END IF;
@@ -3238,27 +3420,33 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
-CREATE PROCEDURE `sp_validate_serials_can_return`(
-    IN p_customer_id VARCHAR(50),
-    IN p_fixture_id  VARCHAR(50),
-    IN p_serials_csv TEXT
-)
+CREATE PROCEDURE `sp_validate_serials_can_return`(IN p_customer_id varchar(50),
+                                                                        IN p_fixture_id varchar(50),
+                                                                        IN p_serials_csv text)
 BEGIN
-    DECLARE v_csv   TEXT;
+    DECLARE v_csv    TEXT;
     DECLARE v_serial VARCHAR(100);
-    DECLARE v_pos INT DEFAULT 0;
+    DECLARE v_pos    INT DEFAULT 0;
     DECLARE v_exists INT DEFAULT 0;
-    DECLARE v_msg TEXT;
+    DECLARE v_msg    TEXT;
 
     IF p_serials_csv IS NULL OR TRIM(p_serials_csv) = '' THEN
         SIGNAL SQLSTATE '45000'
             SET MESSAGE_TEXT = 'serial 模式需要 serials_csv';
     END IF;
 
-    -- ✅ IN 參數不要直接改，用 local copy
     SET v_csv = p_serials_csv;
 
-    serial_loop: WHILE v_csv IS NOT NULL AND LENGTH(v_csv) > 0 DO
+    /* =========================================================
+     * v6 規則：
+     * - serial 必須存在
+     * - existence_status = in_stock
+     * - usage_status IN ('idle','maintenance')
+     * ========================================================= */
+
+    serial_loop:
+    WHILE v_csv IS NOT NULL AND LENGTH(v_csv) > 0 DO
+
             SET v_pos = LOCATE(',', v_csv);
 
             IF v_pos = 0 THEN
@@ -3276,17 +3464,22 @@ BEGIN
             SELECT COUNT(*)
             INTO v_exists
             FROM fixture_serials
-            WHERE customer_id   = p_customer_id
-              AND fixture_id    = p_fixture_id
-              AND serial_number = v_serial
-              AND status        = 'in_stock';
+            WHERE customer_id        = p_customer_id
+              AND fixture_id         = p_fixture_id
+              AND serial_number      = v_serial
+              AND deleted_at IS NULL
+              AND existence_status   = 'in_stock'
+              AND usage_status      IN ('idle','maintenance');
 
             IF v_exists = 0 THEN
-                -- ✅ 先組字串，再 SIGNAL（避開 SIGNAL 表達式老坑）
-                SET v_msg = CONCAT('序號不存在或不在庫，無法退料: ', v_serial);
+                SET v_msg = CONCAT(
+                        '序號不存在或狀態不允許退料: ',
+                        v_serial
+                            );
                 SIGNAL SQLSTATE '45000'
                     SET MESSAGE_TEXT = v_msg;
             END IF;
+
         END WHILE;
 END ;;
 DELIMITER ;
@@ -3327,6 +3520,24 @@ DELIMITER ;
 /*!50001 CREATE ALGORITHM=UNDEFINED */
 /*!50013 SQL SECURITY DEFINER */
 /*!50001 VIEW `v_inconsistent_fixtures` AS select `f`.`id` AS `fixture_id`,`f`.`customer_id` AS `customer_id`,`f`.`fixture_name` AS `fixture_name`,`f`.`in_stock_qty` AS `trigger_in_stock`,`f`.`deployed_qty` AS `trigger_deployed`,(count((case when (`fs`.`status` = 'in_stock') then 1 end)) + ifnull(sum(`fdi`.`in_stock_qty`),0)) AS `actual_in_stock`,count((case when (`fs`.`status` = 'deployed') then 1 end)) AS `actual_deployed`,(`f`.`in_stock_qty` - (count((case when (`fs`.`status` = 'in_stock') then 1 end)) + ifnull(sum(`fdi`.`in_stock_qty`),0))) AS `diff_in_stock`,(`f`.`deployed_qty` - count((case when (`fs`.`status` = 'deployed') then 1 end))) AS `diff_deployed` from ((`fixtures` `f` left join `fixture_serials` `fs` on((`fs`.`fixture_id` = `f`.`id`))) left join `fixture_datecode_inventory` `fdi` on((`fdi`.`fixture_id` = `f`.`id`))) group by `f`.`id`,`f`.`customer_id`,`f`.`fixture_name`,`f`.`in_stock_qty`,`f`.`deployed_qty` having ((`diff_in_stock` <> 0) or (`diff_deployed` <> 0)) */;
+/*!50001 SET character_set_client      = @saved_cs_client */;
+/*!50001 SET character_set_results     = @saved_cs_results */;
+/*!50001 SET collation_connection      = @saved_col_connection */;
+
+--
+-- Final view structure for view `v_invalid_fixture_serial_status`
+--
+
+/*!50001 DROP VIEW IF EXISTS `v_invalid_fixture_serial_status`*/;
+/*!50001 SET @saved_cs_client          = @@character_set_client */;
+/*!50001 SET @saved_cs_results         = @@character_set_results */;
+/*!50001 SET @saved_col_connection     = @@collation_connection */;
+/*!50001 SET character_set_client      = utf8mb4 */;
+/*!50001 SET character_set_results     = utf8mb4 */;
+/*!50001 SET collation_connection      = utf8mb4_0900_ai_ci */;
+/*!50001 CREATE ALGORITHM=UNDEFINED */
+/*!50013 SQL SECURITY DEFINER */
+/*!50001 VIEW `v_invalid_fixture_serial_status` AS select `fixture_serials`.`id` AS `serial_id`,`fixture_serials`.`customer_id` AS `customer_id`,`fixture_serials`.`fixture_id` AS `fixture_id`,`fixture_serials`.`serial_number` AS `serial_number`,`fixture_serials`.`existence_status` AS `existence_status`,`fixture_serials`.`usage_status` AS `usage_status`,`fixture_serials`.`updated_at` AS `updated_at` from `fixture_serials` where (((`fixture_serials`.`existence_status` in ('returned','scrapped')) and (`fixture_serials`.`usage_status` <> 'idle')) or ((`fixture_serials`.`existence_status` <> 'in_stock') and (`fixture_serials`.`usage_status` in ('deployed','maintenance')))) */;
 /*!50001 SET character_set_client      = @saved_cs_client */;
 /*!50001 SET character_set_results     = @saved_cs_results */;
 /*!50001 SET collation_connection      = @saved_col_connection */;
@@ -3440,6 +3651,24 @@ DELIMITER ;
 /*!50001 SET collation_connection      = @saved_col_connection */;
 
 --
+-- Final view structure for view `view_fixture_quantity_mismatch_v6`
+--
+
+/*!50001 DROP VIEW IF EXISTS `view_fixture_quantity_mismatch_v6`*/;
+/*!50001 SET @saved_cs_client          = @@character_set_client */;
+/*!50001 SET @saved_cs_results         = @@character_set_results */;
+/*!50001 SET @saved_col_connection     = @@collation_connection */;
+/*!50001 SET character_set_client      = utf8mb4 */;
+/*!50001 SET character_set_results     = utf8mb4 */;
+/*!50001 SET collation_connection      = utf8mb4_0900_ai_ci */;
+/*!50001 CREATE ALGORITHM=UNDEFINED */
+/*!50013 SQL SECURITY DEFINER */
+/*!50001 VIEW `view_fixture_quantity_mismatch_v6` AS select `f`.`id` AS `fixture_id`,`f`.`customer_id` AS `customer_id`,`f`.`fixture_name` AS `fixture_name`,(sum((`fs`.`existence_status` = 'in_stock')) + ifnull(sum(`fdi`.`in_stock_qty`),0)) AS `expected_in_stock_qty`,`f`.`in_stock_qty` AS `actual_in_stock_qty`,(`f`.`in_stock_qty` - (sum((`fs`.`existence_status` = 'in_stock')) + ifnull(sum(`fdi`.`in_stock_qty`),0))) AS `diff_in_stock_qty` from ((`fixtures` `f` left join `fixture_serials` `fs` on(((`fs`.`fixture_id` = `f`.`id`) and (`fs`.`customer_id` = `f`.`customer_id`) and (`fs`.`deleted_at` is null)))) left join `fixture_datecode_inventory` `fdi` on(((`fdi`.`fixture_id` = `f`.`id`) and (`fdi`.`customer_id` = `f`.`customer_id`)))) group by `f`.`id`,`f`.`customer_id`,`f`.`fixture_name`,`f`.`in_stock_qty` having (`diff_in_stock_qty` <> 0) */;
+/*!50001 SET character_set_client      = @saved_cs_client */;
+/*!50001 SET character_set_results     = @saved_cs_results */;
+/*!50001 SET collation_connection      = @saved_col_connection */;
+
+--
 -- Final view structure for view `view_fixture_serials`
 --
 
@@ -3452,7 +3681,7 @@ DELIMITER ;
 /*!50001 SET collation_connection      = utf8mb4_0900_ai_ci */;
 /*!50001 CREATE ALGORITHM=UNDEFINED */
 /*!50013 SQL SECURITY DEFINER */
-/*!50001 VIEW `view_fixture_serials` AS select `fixture_serials`.`customer_id` AS `customer_id`,`fixture_serials`.`fixture_id` AS `fixture_id`,`fixture_serials`.`serial_number` AS `serial_number`,`fixture_serials`.`status` AS `status` from `fixture_serials` */;
+/*!50001 VIEW `view_fixture_serials` AS select `fs`.`customer_id` AS `customer_id`,`fs`.`fixture_id` AS `fixture_id`,`fs`.`serial_number` AS `serial_number`,`fs`.`existence_status` AS `existence_status`,`fs`.`usage_status` AS `usage_status` from `fixture_serials` `fs` */;
 /*!50001 SET character_set_client      = @saved_cs_client */;
 /*!50001 SET character_set_results     = @saved_cs_results */;
 /*!50001 SET collation_connection      = @saved_col_connection */;
@@ -3470,7 +3699,25 @@ DELIMITER ;
 /*!50001 SET collation_connection      = utf8mb4_0900_ai_ci */;
 /*!50001 CREATE ALGORITHM=UNDEFINED */
 /*!50013 SQL SECURITY DEFINER */
-/*!50001 VIEW `view_fixture_status` AS select `f`.`id` AS `fixture_id`,`f`.`customer_id` AS `customer_id`,`f`.`fixture_name` AS `fixture_name`,`f`.`fixture_type` AS `fixture_type`,`f`.`in_stock_qty` AS `in_stock_qty`,`f`.`deployed_qty` AS `deployed_qty`,`f`.`maintenance_qty` AS `maintenance_qty`,`f`.`returned_qty` AS `returned_qty`,`f`.`scrapped_qty` AS `scrapped_qty`,`f`.`self_purchased_qty` AS `self_purchased_qty`,`f`.`customer_supplied_qty` AS `customer_supplied_qty`,((((`f`.`in_stock_qty` + `f`.`deployed_qty`) + `f`.`maintenance_qty`) + `f`.`returned_qty`) + `f`.`scrapped_qty`) AS `total_qty`,`f`.`storage_location` AS `storage_location`,`f`.`replacement_cycle` AS `replacement_cycle`,`f`.`cycle_unit` AS `cycle_unit`,`f`.`last_replacement_date` AS `last_replacement_date`,`f`.`owner_id` AS `owner_id`,`f`.`note` AS `note` from `fixtures` `f` where (`f`.`deleted_at` is null) */;
+/*!50001 VIEW `view_fixture_status` AS select `f`.`customer_id` AS `customer_id`,`f`.`id` AS `fixture_id`,`f`.`fixture_name` AS `fixture_name`,`f`.`in_stock_qty` AS `in_stock_qty`,`f`.`customer_supplied_qty` AS `customer_supplied_qty`,`f`.`self_purchased_qty` AS `self_purchased_qty`,`f`.`returned_qty` AS `returned_qty`,`f`.`deployed_qty` AS `deployed_qty`,`f`.`maintenance_qty` AS `maintenance_qty`,`f`.`scrapped_qty` AS `scrapped_qty` from `fixtures` `f` where (`f`.`is_scrapped` = 0) */;
+/*!50001 SET character_set_client      = @saved_cs_client */;
+/*!50001 SET character_set_results     = @saved_cs_results */;
+/*!50001 SET collation_connection      = @saved_col_connection */;
+
+--
+-- Final view structure for view `view_inventory_mismatch_v6`
+--
+
+/*!50001 DROP VIEW IF EXISTS `view_inventory_mismatch_v6`*/;
+/*!50001 SET @saved_cs_client          = @@character_set_client */;
+/*!50001 SET @saved_cs_results         = @@character_set_results */;
+/*!50001 SET @saved_col_connection     = @@collation_connection */;
+/*!50001 SET character_set_client      = utf8mb4 */;
+/*!50001 SET character_set_results     = utf8mb4 */;
+/*!50001 SET collation_connection      = utf8mb4_0900_ai_ci */;
+/*!50001 CREATE ALGORITHM=UNDEFINED */
+/*!50013 SQL SECURITY DEFINER */
+/*!50001 VIEW `view_inventory_mismatch_v6` AS select `f`.`id` AS `fixture_id`,`f`.`customer_id` AS `customer_id`,`f`.`fixture_name` AS `fixture_name`,sum((`fs`.`existence_status` = 'in_stock')) AS `serial_in_stock`,sum(((`fs`.`existence_status` = 'in_stock') and (`fs`.`usage_status` = 'deployed'))) AS `serial_deployed`,ifnull(sum(`fdi`.`in_stock_qty`),0) AS `datecode_in_stock`,`f`.`in_stock_qty` AS `cache_in_stock`,`f`.`deployed_qty` AS `cache_deployed`,(`f`.`in_stock_qty` - (sum((`fs`.`existence_status` = 'in_stock')) + ifnull(sum(`fdi`.`in_stock_qty`),0))) AS `diff_in_stock`,(`f`.`deployed_qty` - sum(((`fs`.`existence_status` = 'in_stock') and (`fs`.`usage_status` = 'deployed')))) AS `diff_deployed` from ((`fixtures` `f` left join `fixture_serials` `fs` on(((`fs`.`fixture_id` = `f`.`id`) and (`fs`.`customer_id` = `f`.`customer_id`) and (`fs`.`deleted_at` is null)))) left join `fixture_datecode_inventory` `fdi` on(((`fdi`.`fixture_id` = `f`.`id`) and (`fdi`.`customer_id` = `f`.`customer_id`)))) group by `f`.`id`,`f`.`customer_id`,`f`.`fixture_name`,`f`.`in_stock_qty`,`f`.`deployed_qty` having ((`diff_in_stock` <> 0) or (`diff_deployed` <> 0)) */;
 /*!50001 SET character_set_client      = @saved_cs_client */;
 /*!50001 SET character_set_results     = @saved_cs_results */;
 /*!50001 SET collation_connection      = @saved_col_connection */;
@@ -3488,7 +3735,7 @@ DELIMITER ;
 /*!50001 SET collation_connection      = utf8mb4_0900_ai_ci */;
 /*!50001 CREATE ALGORITHM=UNDEFINED */
 /*!50013 SQL SECURITY DEFINER */
-/*!50001 VIEW `view_material_transaction_details` AS select `t`.`id` AS `transaction_id`,`t`.`transaction_type` AS `transaction_type`,`t`.`record_type` AS `record_type`,`t`.`transaction_date` AS `transaction_date`,`t`.`customer_id` AS `customer_id`,`t`.`fixture_id` AS `fixture_id`,`t`.`order_no` AS `order_no`,`t`.`source_type` AS `source_type`,`t`.`operator` AS `operator`,`t`.`note` AS `note`,`t`.`quantity` AS `total_quantity`,`t`.`created_at` AS `created_at`,`i`.`id` AS `item_id`,`i`.`serial_number` AS `serial_number`,`i`.`datecode` AS `datecode`,`i`.`quantity` AS `item_quantity`,`fs`.`status` AS `serial_status`,(case when (`t`.`record_type` in ('individual','batch')) then concat('序號：',`i`.`serial_number`) when (`t`.`record_type` = 'datecode') then concat('Datecode：',`i`.`datecode`,' × ',`i`.`quantity`) else NULL end) AS `hover_item_text` from ((`material_transactions` `t` left join `material_transaction_items` `i` on((`i`.`transaction_id` = `t`.`id`))) left join `fixture_serials` `fs` on(((`fs`.`serial_number` = `i`.`serial_number`) and (`fs`.`fixture_id` = `t`.`fixture_id`) and (`fs`.`customer_id` = `t`.`customer_id`)))) */;
+/*!50001 VIEW `view_material_transaction_details` AS select `t`.`id` AS `transaction_id`,`t`.`transaction_type` AS `transaction_type`,`t`.`record_type` AS `record_type`,`t`.`transaction_date` AS `transaction_date`,`t`.`customer_id` AS `customer_id`,`t`.`fixture_id` AS `fixture_id`,`t`.`order_no` AS `order_no`,`t`.`source_type` AS `source_type`,`t`.`operator` AS `operator`,`t`.`note` AS `note`,`t`.`quantity` AS `total_quantity`,`t`.`created_at` AS `created_at`,`i`.`id` AS `item_id`,`i`.`serial_number` AS `serial_number`,`i`.`datecode` AS `datecode`,`i`.`quantity` AS `item_quantity`,`fs`.`existence_status` AS `serial_existence_status`,`fs`.`usage_status` AS `serial_usage_status`,(case when (`t`.`record_type` in ('individual','batch')) then concat('序號：',`i`.`serial_number`) when (`t`.`record_type` = 'datecode') then concat('Datecode：',`i`.`datecode`,' × ',`i`.`quantity`) else NULL end) AS `hover_item_text` from ((`material_transactions` `t` left join `material_transaction_items` `i` on((`i`.`transaction_id` = `t`.`id`))) left join `fixture_serials` `fs` on(((`fs`.`serial_number` = `i`.`serial_number`) and (`fs`.`fixture_id` = `t`.`fixture_id`) and (`fs`.`customer_id` = `t`.`customer_id`)))) */;
 /*!50001 SET character_set_client      = @saved_cs_client */;
 /*!50001 SET character_set_results     = @saved_cs_results */;
 /*!50001 SET collation_connection      = @saved_col_connection */;
@@ -3524,7 +3771,7 @@ DELIMITER ;
 /*!50001 SET collation_connection      = utf8mb4_0900_ai_ci */;
 /*!50001 CREATE ALGORITHM=UNDEFINED */
 /*!50013 SQL SECURITY DEFINER */
-/*!50001 VIEW `view_serial_status` AS select `fs`.`id` AS `serial_id`,`fs`.`customer_id` AS `customer_id`,`fs`.`serial_number` AS `serial_number`,`fs`.`fixture_id` AS `fixture_id`,`f`.`fixture_name` AS `fixture_name`,`fs`.`source_type` AS `source_type`,`fs`.`status` AS `status`,`fs`.`receipt_date` AS `receipt_date`,`fs`.`return_date` AS `return_date`,`fs`.`note` AS `note`,`fs`.`created_at` AS `created_at`,`fs`.`updated_at` AS `updated_at` from (`fixture_serials` `fs` join `fixtures` `f` on((`f`.`id` = `fs`.`fixture_id`))) */;
+/*!50001 VIEW `view_serial_status` AS select `fs`.`id` AS `serial_id`,`fs`.`customer_id` AS `customer_id`,`fs`.`serial_number` AS `serial_number`,`fs`.`fixture_id` AS `fixture_id`,`f`.`fixture_name` AS `fixture_name`,`fs`.`source_type` AS `source_type`,`fs`.`existence_status` AS `existence_status`,`fs`.`usage_status` AS `usage_status`,(case when ((`fs`.`existence_status` = 'in_stock') and (`fs`.`usage_status` = 'idle')) then 1 else 0 end) AS `is_available`,`fs`.`receipt_date` AS `receipt_date`,`fs`.`return_date` AS `return_date`,`fs`.`note` AS `note`,`fs`.`created_at` AS `created_at`,`fs`.`updated_at` AS `updated_at` from (`fixture_serials` `fs` join `fixtures` `f` on(((`f`.`id` = `fs`.`fixture_id`) and (`f`.`customer_id` = `fs`.`customer_id`)))) */;
 /*!50001 SET character_set_client      = @saved_cs_client */;
 /*!50001 SET character_set_results     = @saved_cs_results */;
 /*!50001 SET collation_connection      = @saved_col_connection */;
@@ -3556,4 +3803,4 @@ DELIMITER ;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-02-04 16:13:58
+-- Dump completed on 2026-02-13 10:06:41

@@ -391,88 +391,53 @@ def list_inventory_overview(
     limit: int = Query(20, ge=1),
 ):
 
-    base_where = "f.customer_id = %s AND f.is_scrapped = 0"
-    base_params = [customer_id]
+    where = ["f.customer_id = %s", "f.is_scrapped = 0"]
+    params = [customer_id]
 
     if keyword:
-        base_where += " AND (f.id LIKE %s OR f.fixture_name LIKE %s)"
-        base_params += [f"%{keyword}%", f"%{keyword}%"]
+        where.append("(f.id LIKE %s OR f.fixture_name LIKE %s)")
+        params.extend([f"%{keyword}%", f"%{keyword}%"])
 
-    # --------------------------------------------------
-    # 主查詢（不加 HAVING）
-    # --------------------------------------------------
-    base_sql = f"""
+    if hide_zero:
+        where.append("f.in_stock_qty > 0")
+
+    where_sql = " AND ".join(where)
+
+    # -----------------------------
+    # total
+    # -----------------------------
+    total_sql = f"""
+        SELECT COUNT(*) AS cnt
+        FROM fixtures f
+        WHERE {where_sql}
+    """
+    total = db.execute_one(total_sql, tuple(params))["cnt"]
+
+    # -----------------------------
+    # data
+    # -----------------------------
+    data_sql = f"""
         SELECT
             f.id AS fixture_id,
             f.fixture_name,
 
-            COALESCE(s.serial_in_stock, 0) AS serial_in_stock,
-            COALESCE(s.serial_available, 0) AS serial_available,
-            COALESCE(s.serial_deployed, 0) AS serial_deployed,
-            COALESCE(s.serial_returned, 0) AS serial_returned,
+            f.in_stock_qty,
+            f.customer_supplied_qty,
+            f.self_purchased_qty,
+            f.returned_qty,
 
-            COALESCE(d.datecode_in_stock, 0) AS datecode_in_stock,
-            COALESCE(d.datecode_returned, 0) AS datecode_returned,
-            COALESCE(d.datecode_self_in_stock, 0) AS datecode_self_in_stock,
-            COALESCE(d.datecode_customer_in_stock, 0) AS datecode_customer_in_stock
+            f.deployed_qty,
+            f.maintenance_qty,
+            f.scrapped_qty
 
         FROM fixtures f
-
-        LEFT JOIN (
-            SELECT
-                fixture_id,
-                SUM(CASE WHEN existence_status='in_stock' THEN 1 ELSE 0 END) AS serial_in_stock,
-                SUM(CASE WHEN existence_status='in_stock' AND usage_status='idle' THEN 1 ELSE 0 END) AS serial_available,
-                SUM(CASE WHEN existence_status='in_stock' AND usage_status='deployed' THEN 1 ELSE 0 END) AS serial_deployed,
-                SUM(CASE WHEN existence_status='returned' THEN 1 ELSE 0 END) AS serial_returned
-            FROM fixture_serials
-            WHERE customer_id = %s
-            GROUP BY fixture_id
-        ) s ON s.fixture_id = f.id
-
-        LEFT JOIN (
-            SELECT
-                fixture_id,
-                SUM(in_stock_qty) AS datecode_in_stock,
-                SUM(returned_qty) AS datecode_returned,
-                SUM(CASE WHEN source_type='self' THEN in_stock_qty ELSE 0 END) AS datecode_self_in_stock,
-                SUM(CASE WHEN source_type='customer' THEN in_stock_qty ELSE 0 END) AS datecode_customer_in_stock
-            FROM fixture_datecode_inventory
-            WHERE customer_id = %s
-            GROUP BY fixture_id
-        ) d ON d.fixture_id = f.id
-
-        WHERE {base_where}
+        WHERE {where_sql}
+        ORDER BY f.id
+        LIMIT %s OFFSET %s
     """
 
-    params = [
-        customer_id,
-        customer_id,
-        *base_params
-    ]
-
-    # --------------------------------------------------
-    # hide_zero → 用外層包 SELECT
-    # --------------------------------------------------
-    final_sql = f"SELECT * FROM ({base_sql}) AS inv"
-
-    if hide_zero:
-        final_sql += """
-            WHERE (serial_in_stock + datecode_in_stock) > 0
-        """
-
-    # --------------------------------------------------
-    # total
-    # --------------------------------------------------
-    count_sql = f"SELECT COUNT(*) AS cnt FROM ({final_sql}) AS sub"
-    total = db.execute_one(count_sql, tuple(params))["cnt"]
-
-    # --------------------------------------------------
-    # 分頁
-    # --------------------------------------------------
-    final_sql += " ORDER BY fixture_id LIMIT %s OFFSET %s"
     rows = db.execute_query(
-        final_sql,
+        data_sql,
         tuple(params + [limit, skip])
     ) or []
 

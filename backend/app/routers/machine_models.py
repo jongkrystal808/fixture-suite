@@ -239,7 +239,17 @@ async def create_model(
         (data.id, customer_id, data.model_name, data.note)
     )
 
-    return await get_model(data.id, admin)
+    # ✅ 正確重新查詢（不要再 call get_model）
+    row = db.execute_query(
+        """
+        SELECT *
+        FROM machine_models
+        WHERE id = %s AND customer_id = %s
+        """,
+        (data.id, customer_id)
+    )
+
+    return ModelResponse(**row[0])
 
 
 # ============================================================

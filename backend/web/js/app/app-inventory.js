@@ -112,46 +112,49 @@ async function loadInventoryOverview(page = 1) {
 
 
     tbody.innerHTML = items.map(row => {
-    const fixtureId = row.id || row.fixture_id || "-";
+      const fixtureId = row.id || row.fixture_id || "-";
 
+      const inStock   = row.in_stock_qty ?? 0;
+      const supplied  = row.customer_supplied_qty ?? 0;
+      const purchased = row.self_purchased_qty ?? 0;
+      const returned  = row.returned_qty ?? 0;
 
-  return `
-    <tr class="hover:bg-gray-50">
-      <td class="px-3 py-2 font-mono whitespace-nowrap">
-        ${escapeHtml(fixtureId)}
-      </td>
-
-      <td class="px-3 py-2 break-all">
-        ${escapeHtml(row.fixture_name || "-")}
-      </td>
-
-        <td class="px-3 py-2 text-right">
-          ${(row.serial_in_stock ?? 0) + (row.datecode_in_stock ?? 0)}
-        </td>
-        
-        <td class="px-3 py-2 text-right">
-          ${row.serial_available ?? 0}
-        </td>
-        
-        <td class="px-3 py-2 text-right">
-          ${row.serial_deployed ?? 0}
-        </td>
-        
-        <td class="px-3 py-2 text-right">
-          ${row.serial_returned ?? 0}
-        </td>
-
-
-      <td class="px-3 py-2 text-center whitespace-nowrap">
-        <button
-          class="btn btn-ghost btn-sm"
-          onclick="toggleInventoryInlineDetail('${fixtureId}', this)">
-          查看
-        </button>
-      </td>
-    </tr>
-  `;
-}).join("");
+      return `
+        <tr class="hover:bg-gray-50">
+          <td class="px-3 py-2 font-mono whitespace-nowrap">
+            ${escapeHtml(fixtureId)}
+          </td>
+    
+          <td class="px-3 py-2 break-all">
+            ${escapeHtml(row.fixture_name || "-")}
+          </td>
+    
+          <td class="px-3 py-2 text-right">
+            ${inStock}
+          </td>
+    
+          <td class="px-3 py-2 text-right">
+            ${supplied}
+          </td>
+    
+          <td class="px-3 py-2 text-right">
+            ${purchased}
+          </td>
+    
+          <td class="px-3 py-2 text-right">
+            ${returned}
+          </td>
+    
+          <td class="px-3 py-2 text-center whitespace-nowrap">
+            <button
+              class="btn btn-ghost btn-sm"
+              onclick="toggleInventoryInlineDetail('${fixtureId}', this)">
+              查看
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join("");
 
     inventoryPager?.render(invTotal);
   } catch (err) {

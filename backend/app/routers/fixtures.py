@@ -346,8 +346,6 @@ async def create_fixture(
                 customer_id,
                 fixture_name,
                 fixture_type,
-                self_purchased_qty,
-                customer_supplied_qty,
                 in_stock_qty,
                 deployed_qty,
                 maintenance_qty,
@@ -360,7 +358,6 @@ async def create_fixture(
                 note
             ) VALUES (
                 %s, %s, %s, %s,
-                %s, %s,
                 %s, %s, %s, %s, %s,
                 %s,
                 %s, %s,
@@ -374,8 +371,6 @@ async def create_fixture(
             customer_id,
             data.fixture_name,
             data.fixture_type,
-            data.self_purchased_qty or 0,
-            data.customer_supplied_qty or 0,
 
             # 初始化數量（v4.x 建立時統一 0）
             0,  # in_stock_qty

@@ -24,70 +24,6 @@ router = APIRouter(
 
 
 # ============================================================
-# 治具壽命狀態（v4.x 核心 Stats API）
-# ============================================================
-@router.get(
-    "/fixture-lifespan",
-    summary="治具壽命狀態（依使用次數）"
-)
-async def get_fixture_lifespan(
-    fixture_id: Optional[str] = Query(default=None),
-    status: Optional[str] = Query(
-        default=None,
-        description="normal | warning | expired | no_cycle"
-    ),
-    skip: int = Query(default=0),
-    limit: int = Query(default=20),
-
-    customer_id: str = Depends(get_current_customer_id),
-    user=Depends(get_current_user),
-):
-    base_sql = """
-        FROM view_fixture_lifespan_status
-        WHERE customer_id = %s
-    """
-    params = [customer_id]
-
-    if fixture_id:
-        base_sql += " AND fixture_id = %s"
-        params.append(fixture_id)
-
-    if status:
-        base_sql += " AND lifespan_status = %s"
-        params.append(status)
-
-    # 1️⃣ 先算 total（不加 LIMIT）
-    count_sql = "SELECT COUNT(*) AS cnt " + base_sql
-    total = db.execute_query(count_sql, tuple(params))[0]["cnt"]
-
-    # 2️⃣ 再取分頁資料
-    data_sql = """
-        SELECT
-            customer_id,
-            fixture_id,
-            fixture_name,
-            cycle_unit,
-            replacement_cycle,
-            total_uses,
-            usage_ratio,
-            remaining_uses,
-            lifespan_status
-    """ + base_sql + """
-        ORDER BY (usage_ratio IS NULL), usage_ratio DESC
-        LIMIT %s OFFSET %s
-    """
-    data_params = params + [limit, skip]
-
-    rows = db.execute_query(data_sql, tuple(data_params))
-
-    return {
-        "total": total,
-        "items": rows
-    }
-
-
-
-# ============================================================
 # 序號狀態（View）
 # ============================================================
 
@@ -115,168 +51,76 @@ async def get_serial_status(
 # 6. 儀表板 Dashboard（Event-based + State Summary）
 # ============================================================
 
-@router.get("/dashboard", summary="儀表板資料（v4.x FINAL）")
-async def get_dashboard_stats(
+# ============================================================
+# Dashboard（Minimal v3）
+# ============================================================
+
+@router.get("/dashboard", summary="Dashboard 今日統計（Minimal）")
+async def get_dashboard_minimal(
     customer_id: str = Depends(get_current_customer_id),
     user=Depends(get_current_user),
 ):
     """
-    Dashboard 設計原則：
-    - Event-based：今天發生了什麼（收 / 退）
-    - State-based：目前整體狀態（治具總覽，來自 View）
-    - 不進行前端推算
+    僅回傳：
+    - 今日收料總數
+    - 今日退料總數
+    - 即將更換治具數量
     """
 
     # ========================================================
-    # 1️⃣ 今日收料（Event-based）
+    # 1️⃣ 今日收料總數
     # ========================================================
-    today_in_items = db.execute_query(
+    receipt_rows = db.execute_query(
         """
-        SELECT
-            t.fixture_id,
-            SUM(
-                CASE
-                    WHEN t.record_type = 'datecode'
-                        THEN COALESCE(fd.quantity, 0)
-
-                    WHEN t.record_type = 'batch'
-                        THEN COALESCE(mi.cnt, 0)
-
-                    WHEN t.record_type = 'individual'
-                        THEN 1
-
-                    ELSE 0
-                END
-            ) AS qty
-        FROM material_transactions t
-        LEFT JOIN (
-            SELECT transaction_id, COUNT(*) AS cnt
-            FROM material_transaction_items
-            GROUP BY transaction_id
-        ) mi ON mi.transaction_id = t.id
-        LEFT JOIN fixture_datecode_transactions fd
-               ON fd.transaction_id = t.id
-              AND fd.transaction_type = 'receipt'
-        WHERE t.customer_id = %s
-          AND t.transaction_type = 'receipt'
-          AND t.transaction_date >= CURDATE()
-          AND t.transaction_date < CURDATE() + INTERVAL 1 DAY
-        GROUP BY t.fixture_id
+        SELECT COUNT(*) AS cnt
+        FROM material_transactions
+        WHERE customer_id = %s
+          AND transaction_type = 'receipt'
+          AND transaction_date >= CURDATE()
+          AND transaction_date < CURDATE() + INTERVAL 1 DAY
         """,
         (customer_id,)
     )
 
-    today_in_total = sum((r.get("qty") or 0) for r in today_in_items)
+    receipt_count = receipt_rows[0]["cnt"] if receipt_rows else 0
 
     # ========================================================
-    # 2️⃣ 今日退料（Event-based）
+    # 2️⃣ 今日退料總數
     # ========================================================
-    today_out_items = db.execute_query(
+    return_rows = db.execute_query(
         """
-        SELECT
-            t.fixture_id,
-            SUM(
-                CASE
-                    WHEN t.record_type = 'datecode'
-                        THEN COALESCE(fd.quantity, 0)
-
-                    WHEN t.record_type = 'batch'
-                        THEN COALESCE(mi.cnt, 0)
-
-                    WHEN t.record_type = 'individual'
-                        THEN 1
-
-                    ELSE 0
-                END
-            ) AS qty
-        FROM material_transactions t
-        LEFT JOIN (
-            SELECT transaction_id, COUNT(*) AS cnt
-            FROM material_transaction_items
-            GROUP BY transaction_id
-        ) mi ON mi.transaction_id = t.id
-        LEFT JOIN fixture_datecode_transactions fd
-               ON fd.transaction_id = t.id
-              AND fd.transaction_type = 'return'
-        WHERE t.customer_id = %s
-          AND t.transaction_type = 'return'
-          AND t.transaction_date >= CURDATE()
-          AND t.transaction_date < CURDATE() + INTERVAL 1 DAY
-        GROUP BY t.fixture_id
+        SELECT COUNT(*) AS cnt
+        FROM material_transactions
+        WHERE customer_id = %s
+          AND transaction_type = 'return'
+          AND transaction_date >= CURDATE()
+          AND transaction_date < CURDATE() + INTERVAL 1 DAY
         """,
         (customer_id,)
     )
 
-    today_out_total = sum((r.get("qty") or 0) for r in today_out_items)
+    return_count = return_rows[0]["cnt"] if return_rows else 0
 
     # ========================================================
-    # 3️⃣ 即將更換治具（State-based View，允許不存在）
+    # 3️⃣ 即將更換數量
     # ========================================================
     try:
-        upcoming_replacements = db.execute_query(
+        replacement_rows = db.execute_query(
             """
-            SELECT
-                fixture_id,
-                fixture_name,
-                usage_ratio
+            SELECT COUNT(*) AS cnt
             FROM view_upcoming_fixture_replacements
             WHERE customer_id = %s
               AND usage_ratio >= 0.8
-            ORDER BY usage_ratio DESC
-            LIMIT 20
             """,
             (customer_id,)
         )
+        replacement_count = replacement_rows[0]["cnt"]
     except Exception:
-        # view 尚未建立或暫時不可用時，不影響 Dashboard
-        upcoming_replacements = []
+        replacement_count = 0
 
-    # ========================================================
-    # 4️⃣ 治具整體狀態總覽（State-based View）
-    # ========================================================
-    fixture_summary_rows = db.execute_query(
-        """
-        SELECT
-            total_fixtures,
-            fixtures_in_stock,
-            fixtures_deployed,
-            fixtures_maintenance,
-            fixtures_scrapped
-        FROM view_fixture_dashboard_stats
-        WHERE customer_id = %s
-        """,
-        (customer_id,)
-    )
-
-    fixture_summary = (
-        fixture_summary_rows[0]
-        if fixture_summary_rows
-        else {
-            "total_fixtures": 0,
-            "fixtures_in_stock": 0,
-            "fixtures_deployed": 0,
-            "fixtures_maintenance": 0,
-            "fixtures_scrapped": 0,
-        }
-    )
-
-    # ========================================================
-    # Response（前端可直接使用）
-    # ========================================================
     return {
-        # Event-based
-        "today_in": {
-            "total": today_in_total,
-            "items": today_in_items,
-        },
-        "today_out": {
-            "total": today_out_total,
-            "items": today_out_items,
-        },
-
-        # State-based
-        "fixture_summary": fixture_summary,
-
-        # Mixed（State view + rule）
-        "upcoming_replacements": upcoming_replacements,
+        "receipt_count": receipt_count,
+        "return_count": return_count,
+        "replacement_count": replacement_count,
     }
+
