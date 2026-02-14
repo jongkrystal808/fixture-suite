@@ -15,27 +15,11 @@
   <link rel="stylesheet" href="/css/app-main.css">
 </head>
 
-<!-- =========================
-     Import Result Modal
-========================= -->
-<div id="importResultModal" class="hidden">
-  <div class="import-modal-backdrop"></div>
-  <div class="import-modal">
-    <h3 id="importModalTitle">匯入結果</h3>
-
-    <div class="import-modal-summary" id="importModalSummary"></div>
-
-    <pre class="import-modal-errors" id="importModalErrors"></pre>
-
-    <div class="import-modal-actions">
-      <button type="button" onclick="closeImportResultModal()">確認</button>
-    </div>
-  </div>
-</div>
-
 <body class="bg-gray-50 text-gray-900">
         <!-- 登入介面 -->
-      <div id="loginModal" class="modal-backdrop">
+      <div id="loginModal"
+     class="fixed inset-0 bg-black/40 hidden flex items-center justify-center z-50">
+
         <div class="modal space-y-4">
           <div class="flex items-center justify-between">
             <h3 class="font-semibold text-lg">登入</h3>
@@ -58,7 +42,10 @@
       </div>
 
         <!-- 客戶選擇視窗 -->
-        <dialog id="customerSelectModal" class="modal">
+        <div id="customerSelectModal"
+             class="fixed inset-0 bg-black/40 hidden flex items-center justify-center z-50">
+          <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-md space-y-4">
+
           <div class="modal-box space-y-4">
             <h3 class="font-semibold text-lg">請選擇客戶</h3>
 
@@ -70,7 +57,9 @@
               <button class="btn" onclick="confirmCustomerSelection()">確認</button>
             </div>
           </div>
-        </dialog>
+          </div>
+        </div>
+
 
           <!-- 頂部導覽 -->
             <header class="sticky top-0 z-40 bg-white/80 backdrop-blur border-b border-gray-200">
@@ -108,7 +97,7 @@
               <main class="mx-auto max-w-7xl p-4 md:p-6 space-y-6">
                 <!-- 功能分頁 -->
                 <nav class="grid grid-cols-2 md:grid-cols-7 gap-2">
-                  <button data-tab="dashboard" class="tab tab-active">儀表板</button>
+                  <button data-tab="dashboard" class="tab tab-active">首頁</button>
                   <button data-tab="transactions"  class="tab">收/退料</button>
                   <button data-tab="query"    class="tab">治具/機種查詢</button>
                   <button data-tab="logs"     class="tab">使用/更換記錄</button>
@@ -119,41 +108,94 @@
                 <div id="activeTabBanner" class="card px-4 py-3 flex items-center justify-between">
                   <div class="flex items-center gap-3">
                     <div class="h-8 w-1.5 rounded-full bg-gray-900"></div>
-                    <div class="section-title" id="activeTabTitle">儀表板</div>
+                    <div class="section-title" id="activeTabTitle">首頁</div>
                   </div>
                 </div>
 
+
                 <!-- ============================================================= -->
-                <!-- 儀表板 Dashboard -->
+                <!-- 首頁 Dashboard -->
                 <!-- ============================================================= -->
                 <section id="tab-dashboard" class="space-y-6">
-                  <!-- 統計卡片 -->
-                  <div class="grid md:grid-cols-3 gap-4">
-                    <div class="card p-5">
-                      <div class="flex items-center justify-between">
-                        <h3 class="font-semibold">今日收料</h3>
-                        <span class="pill border-green-300 text-green-700 bg-green-50">即時</span>
+
+                  <!-- ===== 首頁三欄版型 ===== -->
+                  <div class="home-grid grid md:grid-cols-3 gap-6">
+
+                    <!-- 左欄 -->
+                    <div class="home-column space-y-6">
+
+                      <div class="home-card card p-5">
+                        <div class="flex items-center justify-between">
+                          <h3 class="font-semibold">今日收料</h3>
+                          <span class="pill border-green-300 text-green-700 bg-green-50">即時</span>
+                        </div>
+                        <p class="text-3xl font-bold mt-2" id="todayIn">0</p>
+                        <div class="mt-3 space-y-2" id="todayInList"></div>
                       </div>
-                      <p class="text-3xl font-bold mt-2" id="todayIn">0</p>
-                      <div class="mt-3 space-y-2" id="todayInList"></div>
-                    </div>
-                    <div class="card p-5">
-                      <div class="flex items-center justify-between">
-                        <h3 class="font-semibold">今日退料</h3>
-                        <span class="pill border-blue-300 text-blue-700 bg-blue-50">即時</span>
+
+                      <div class="home-card card p-5">
+                        <div class="flex items-center justify-between">
+                          <h3 class="font-semibold">今日退料</h3>
+                          <span class="pill border-blue-300 text-blue-700 bg-blue-50">即時</span>
+                        </div>
+                        <p class="text-3xl font-bold mt-2" id="todayOut">0</p>
+                        <div class="mt-3 space-y-2" id="todayOutList"></div>
                       </div>
-                      <p class="text-3xl font-bold mt-2" id="todayOut">0</p>
-                      <div class="mt-3 space-y-2" id="todayOutList"></div>
+
                     </div>
-                    <div class="card p-5">
-                      <div class="flex items-center justify-between">
-                        <h3 class="font-semibold">即將更換治具</h3>
-                      </div>
-                      <div class="mt-3 space-y-2 max-h-40 overflow-auto" id="upcomingList"></div>
+
+
+                    <!-- 中欄 -->
+                    <div class="home-column space-y-6 md:border-l md:border-gray-200 md:pl-6">
+
+
+                      <div class="home-card card p-5 cursor-pointer hover-card-green transition"
+                             onclick="location.hash='transactions/register'">
+                          <h3 class="font-semibold text-lg">收 / 退料</h3>
+                          <p class="text-sm text-gray-600 leading-relaxed">
+                            登記 | 查詢 | 庫存檢視
+                          </p>
+                        </div>
+
+
+                      <div class="home-card card p-5 cursor-pointer hover-card-pink transition"
+                             onclick="location.hash='logs/usage'">
+                          <h3 class="font-semibold text-lg">使用 / 更換治具</h3>
+                          <p class="text-sm text-gray-600 leading-relaxed">
+                            登記 | 查詢
+                          </p>
+                        </div>
+
                     </div>
+
+
+                    <!-- 右欄 -->
+                    <div class="home-column space-y-6">
+
+                      <div class="home-card card p-5 cursor-pointer hover-card-purple transition"
+                             onclick="location.hash='query/fixtures'">
+                          <h3 class="font-semibold text-lg">治具 / 機種資訊</h3>
+                          <p class="text-sm text-gray-600 leading-relaxed">
+                              治具: 基本資訊 | 使用記錄 | 更換記錄查詢<br>
+                              機種: 基本資訊 | 最大開站數
+                          </p>
+                        </div>
+
+                      <div class="home-card card p-5 cursor-pointer hover-card-yellow transition"
+                             onclick="location.hash='admin/fixture_mt'">
+                          <h3 class="font-semibold text-lg">後台資訊管理</h3>
+                          <p class="text-sm text-gray-600 leading-relaxed">
+                            治具資訊管理 | 機種資訊管理 <br>站點資訊管理 | 負責人資訊管理
+                          </p>
+                        </div>
+
+
+                    </div>
+
                   </div>
 
                 </section>
+
 
 
                 <!-- ============================================================= -->
@@ -992,14 +1034,16 @@
 
                             <!-- 使用次數 -->
                             <div class="field">
-                              <label class="text-base font-semibold">使用次數 *</label>
-                              <input
-                                id="usageAddCount"
-                                type="number"
-                                class="input"
-                                value="1"
-                                min="1"
-                              />
+                              <label id="usageAddCountLabel" class="text-base font-semibold">
+                                  使用值 *
+                                </label>
+                                <input
+                                  id="usageAddCount"
+                                  type="number"
+                                  class="input"
+                                  value="1"
+                                  min="1"
+                                />
                             </div>
 
                             <!-- 操作人員 -->
@@ -1972,7 +2016,7 @@
 
 
                 <!-- 序號履歷 Drawer -->
-                    <div id="serialDetailOverlay" class="hidden fixed inset-0 bg-black bg-opacity-50 z-40"></div>
+                    <div id="serialDetailOverlay" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50"></div>
                     <div id="serialDetailDrawer"
                          class="fixed top-0 right-0 h-full w-full md:w-2/3 lg:w-1/2 bg-white shadow-xl z-50 transform translate-x-full transition-transform duration-300 overflow-y-auto">
 
@@ -2226,6 +2270,24 @@
             <script src="/js/app/app-serials.js"></script>
             <script src="/js/api/api-inventory.js"></script>
             <script src="/js/app/app-inventory.js"></script>
+
+        <!-- =========================
+             Import Result Modal
+        ========================= -->
+        <div id="importResultModal" class="hidden">
+          <div class="import-modal-backdrop"></div>
+          <div class="import-modal">
+            <h3 id="importModalTitle">匯入結果</h3>
+
+            <div class="import-modal-summary" id="importModalSummary"></div>
+
+            <pre class="import-modal-errors" id="importModalErrors"></pre>
+
+            <div class="import-modal-actions">
+              <button type="button" onclick="closeImportResultModal()">確認</button>
+            </div>
+          </div>
+        </div>
 
   </body>
 </html>

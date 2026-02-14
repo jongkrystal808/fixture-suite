@@ -355,59 +355,153 @@ async function apiImportTransactionsXlsx(file) {
 window.apiImportTransactionsXlsx = apiImportTransactionsXlsx;
 
 // ============================================================
-// 下載匯入範本
+// 下載匯入範本（v6 企業專業版）
 // ============================================================
 function downloadTransactionTemplate() {
-  const template = [
-    {
-      transaction_type: '*[必填]receipt',
-      fixture_id: '*[必填]C-00001',
-      order_no: '25123456',
-      record_type: '*[必填]batch',
-      source_type: '*[必填]customer_supplied',
-      serial_start: 'SN001',
-      serial_end: 'SN100',
-      serials: '',
-      datecode: '',
-      quantity: '',
-      note: '批量收料範例'
-    },
-    {
-      transaction_type: '*[必填]return',
-      fixture_id: '*[必填]L-00018',
-      order_no: '25123457',
-      record_type: '*[必填]individual',
-      source_type: '*[必填]self_purchased',
-      serial_start: '',
-      serial_end: '',
-      serials: 'SN010,SN011,SN012',
-      datecode: '',
-      quantity: '',
-      note: '個別退料範例'
-    },
-    {
-      transaction_type: '*[必填]receipt',
-      fixture_id: '*[必填]L-00020',
-      order_no: '25123458',
-      record_type: '*[必填]datecode',
-      source_type: '*[必填]customer_supplied',
-      serial_start: '',
-      serial_end: '',
-      serials: '',
-      datecode: '2024W12',
-      quantity: 50,
-      note: 'Datecode 收料範例'
-    }
+
+  const wb = XLSX.utils.book_new();
+
+  const headerStyle = {
+    font: { bold: true },
+    fill: { fgColor: { rgb: "FFFF99" } }
+  };
+
+  // ==========================================================
+  // SERIAL SHEET
+  // ==========================================================
+  const serialHeaders = [
+    "transaction_type *",
+    "fixture_id *",
+    "order_no",
+    "record_type *",
+    "source_type *",
+    "serial_start",
+    "serial_end",
+    "serials",
+    "note"
   ];
 
-  const ws = XLSX.utils.json_to_sheet(template);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Transactions');
-  XLSX.writeFile(wb, 'transaction_template.xlsx');
+  const serialData = [
+    serialHeaders,
+    [
+      "receipt",
+      "C-00001",
+      "25123456",
+      "batch",
+      "customer_supplied",
+      "SN001",
+      "SN100",
+      "",
+      "批量收料範例"
+    ],
+    [
+      "return",
+      "L-00018",
+      "25123457",
+      "individual",
+      "self_purchased",
+      "",
+      "",
+      "SN010,SN011,SN012",
+      "個別退料範例"
+    ]
+  ];
 
+  const wsSerial = XLSX.utils.aoa_to_sheet(serialData);
+
+  // 必填欄位樣式
+  ["A1","B1","D1","E1"].forEach(cell => {
+    if (wsSerial[cell]) wsSerial[cell].s = headerStyle;
+  });
+
+  // 自動欄寬
+  wsSerial["!cols"] = serialHeaders.map(h => ({
+    wch: Math.max(h.length + 2, 18)
+  }));
+
+  // 凍結第一列
+  wsSerial["!freeze"] = { xSplit: 0, ySplit: 1 };
+
+  // ==========================================================
+  // DATECODE SHEET
+  // ==========================================================
+  const dateHeaders = [
+    "transaction_type *",
+    "fixture_id *",
+    "order_no",
+    "source_type *",
+    "datecode *",
+    "quantity *",
+    "note"
+  ];
+
+  const dateData = [
+    dateHeaders,
+    [
+      "receipt",
+      "L-00020",
+      "25123458",
+      "customer_supplied",
+      "2024W12",
+      50,
+      "Datecode 收料範例"
+    ]
+  ];
+
+  const wsDate = XLSX.utils.aoa_to_sheet(dateData);
+
+  ["A1","B1","D1","E1","F1"].forEach(cell => {
+    if (wsDate[cell]) wsDate[cell].s = headerStyle;
+  });
+
+  wsDate["!cols"] = dateHeaders.map(h => ({
+    wch: Math.max(h.length + 2, 18)
+  }));
+
+  wsDate["!freeze"] = { xSplit: 0, ySplit: 1 };
+
+  // ==========================================================
+  // INSTRUCTIONS SHEET
+  // ==========================================================
+  const instructionData = [
+    ["治具交易匯入說明（v6）"],
+    [""],
+    ["匯入前請將示例刪除"],
+    ["【必填欄位】"],
+    ["所有標示 * 的欄位為必填"],
+
+    [""],
+    ["【序號收料】"],
+    ["1. transaction_type-交易方式：receipt-收料 或 return-退料"],
+    ["2. record_type-收料方式：batch-批量 / individual-個別"],
+    ["3. batch-批量 使用 serial_start ~ serial_end"],
+    ["4. individual 使用 serials（逗號分隔）"],
+    ["5. batch 上限 2000 筆"],
+    [""],
+    ["【Datecode_Transactions】"],
+    ["1. datecode + quantity-數量 必填"],
+    ["2. quantity 必須為整數"],
+    [""],
+    ["⚠ 請勿修改 Sheet 名稱"],
+    ["⚠ 請勿刪除表頭列"]
+  ];
+
+  const wsInstruction = XLSX.utils.aoa_to_sheet(instructionData);
+
+  wsInstruction["!cols"] = [{ wch: 50 }];
+
+  // ==========================================================
+  // 加入 Workbook
+  // ==========================================================
+  XLSX.utils.book_append_sheet(wb, wsSerial, "Serial_Transactions");
+  XLSX.utils.book_append_sheet(wb, wsDate, "Datecode_Transactions");
+  XLSX.utils.book_append_sheet(wb, wsInstruction, "Instructions");
+
+  XLSX.writeFile(wb, "transaction_template_v6.xlsx");
 }
 
 window.downloadTransactionTemplate = downloadTransactionTemplate;
+
 
 function showImportResultModal(result) {
   const modal = document.getElementById("importResultModal");

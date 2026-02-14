@@ -22,6 +22,7 @@ onUserReady(() => {
 async function loadDashboard() {
   try {
     const data = await apiGetDashboardStats();
+     console.log("DASHBOARD DATA:", data);
 
     /* ===============================
      * 1️⃣ 今日收料

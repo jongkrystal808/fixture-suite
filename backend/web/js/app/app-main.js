@@ -6,11 +6,11 @@ window.__activeOverlayCloser = null;
   const TAB_CONFIG = {
     dashboard: {
       sectionId: "tab-dashboard",
-      title: "儀表板"
+      title: "首頁"
     },
     transactions: {
       sectionId: "tab-transactions",
-      title: "收料 / 退料登記"
+      title: "收料 / 退料"
     },
     query: {
       sectionId: "tab-query",

@@ -1,5 +1,5 @@
 """
-統計與儀表板 API (v4.x)
+統計與儀表板 API (v6)
 
 設計原則：
 - Dashboard：Event-based（即時事件）
@@ -8,7 +8,6 @@
 """
 
 from fastapi import APIRouter, Depends, Query
-from datetime import date
 from typing import Optional
 
 from backend.app.dependencies import (
@@ -48,23 +47,22 @@ async def get_serial_status(
 
 
 # ============================================================
-# 6. 儀表板 Dashboard（Event-based + State Summary）
+# Dashboard（Event-based）
 # ============================================================
 
-# ============================================================
-# Dashboard（Minimal v3）
-# ============================================================
-
-@router.get("/dashboard", summary="Dashboard 今日統計（Minimal）")
-async def get_dashboard_minimal(
+@router.get("/dashboard", summary="Dashboard 今日統計（v6 format）")
+async def get_dashboard(
     customer_id: str = Depends(get_current_customer_id),
     user=Depends(get_current_user),
 ):
     """
-    僅回傳：
-    - 今日收料總數
-    - 今日退料總數
-    - 即將更換治具數量
+    回傳格式：
+    {
+        today_in: { total, items },
+        today_out: { total, items },
+        upcoming_replacements: [],
+        fixture_summary: {}
+    }
     """
 
     # ========================================================
@@ -76,13 +74,31 @@ async def get_dashboard_minimal(
         FROM material_transactions
         WHERE customer_id = %s
           AND transaction_type = 'receipt'
-          AND transaction_date >= CURDATE()
-          AND transaction_date < CURDATE() + INTERVAL 1 DAY
+          AND DATE(transaction_date) = CURDATE()
         """,
         (customer_id,)
     )
 
     receipt_count = receipt_rows[0]["cnt"] if receipt_rows else 0
+
+    # ========================================================
+    # 1️⃣ 今日收料明細（依治具分組）
+    # ========================================================
+    receipt_items = db.execute_query(
+        """
+        SELECT mti.fixture_id,
+               SUM(mti.quantity) AS qty
+        FROM material_transactions mt
+        JOIN material_transaction_items mti
+          ON mt.id = mti.transaction_id
+        WHERE mt.customer_id = %s
+          AND mt.transaction_type = 'receipt'
+          AND DATE(mt.transaction_date) = CURDATE()
+        GROUP BY mti.fixture_id
+        ORDER BY qty DESC
+        """,
+        (customer_id,)
+    ) or []
 
     # ========================================================
     # 2️⃣ 今日退料總數
@@ -93,8 +109,7 @@ async def get_dashboard_minimal(
         FROM material_transactions
         WHERE customer_id = %s
           AND transaction_type = 'return'
-          AND transaction_date >= CURDATE()
-          AND transaction_date < CURDATE() + INTERVAL 1 DAY
+          AND DATE(transaction_date) = CURDATE()
         """,
         (customer_id,)
     )
@@ -102,25 +117,52 @@ async def get_dashboard_minimal(
     return_count = return_rows[0]["cnt"] if return_rows else 0
 
     # ========================================================
-    # 3️⃣ 即將更換數量
+    # 2️⃣ 今日退料明細（依治具分組）
+    # ========================================================
+    return_items = db.execute_query(
+        """
+        SELECT mti.fixture_id,
+               SUM(mti.quantity) AS quantity
+        FROM material_transactions mt
+        JOIN material_transaction_items mti
+          ON mt.id = mti.transaction_id
+        WHERE mt.customer_id = %s
+          AND mt.transaction_type = 'return'
+          AND DATE(mt.transaction_date) = CURDATE()
+        GROUP BY mti.fixture_id
+        ORDER BY quantity DESC
+        """,
+        (customer_id,)
+    ) or []
+
+    # ========================================================
+    # 3️⃣ 即將更換治具
     # ========================================================
     try:
-        replacement_rows = db.execute_query(
+        upcoming = db.execute_query(
             """
-            SELECT COUNT(*) AS cnt
+            SELECT fixture_id, fixture_name, usage_ratio
             FROM view_upcoming_fixture_replacements
             WHERE customer_id = %s
               AND usage_ratio >= 0.8
             """,
             (customer_id,)
-        )
-        replacement_count = replacement_rows[0]["cnt"]
+        ) or []
     except Exception:
-        replacement_count = 0
+        upcoming = []
 
+    # ========================================================
+    # 4️⃣ 回傳 v6 格式
+    # ========================================================
     return {
-        "receipt_count": receipt_count,
-        "return_count": return_count,
-        "replacement_count": replacement_count,
+        "today_in": {
+            "total": receipt_count,
+            "items": receipt_items
+        },
+        "today_out": {
+            "total": return_count,
+            "items": return_items
+        },
+        "upcoming_replacements": upcoming,
+        "fixture_summary": {}
     }
-

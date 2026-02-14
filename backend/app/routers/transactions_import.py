@@ -1,4 +1,4 @@
-# backend/app/routers/transactions_import.py
+# /backend/app/routers/transactions_import.py
 
 """
 交易 Excel 匯入 Router（收 / 退 合併版 v6｜SAFE）
@@ -7,6 +7,8 @@
 - validate-first，不留下失敗交易
 - ✅ datecode 完全不讀 serials（避免 NaN -> "nan"）
 - ✅ batch 支援 serial_start ~ serial_end 區間展開
+- ✅ 支援雙 Sheet：Serial_Transactions / Datecode_Transactions
+- ✅ 支援「上方說明區」：自動偵測表頭列
 """
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
@@ -14,6 +16,7 @@ import pandas as pd
 from io import BytesIO
 import pymysql
 import re
+from typing import Optional
 
 from backend.app.database import db
 from backend.app.dependencies import get_current_user, get_current_customer_id
@@ -22,6 +25,13 @@ router = APIRouter(
     prefix="/transactions",
     tags=["Transactions Import"]
 )
+
+# ============================================================
+# Config
+# ============================================================
+MAX_BATCH_SIZE = 2000
+WARNING_BATCH_SIZE = 1000  # 超過此數量只警告，不阻擋
+
 
 # ============================================================
 # Helper（共用）
@@ -59,13 +69,30 @@ def normalize_record_type(val) -> str:
     raise ValueError("record_type 不合法（允許：batch / individual / datecode）")
 
 
-def read_str_optional(val):
+def read_str_optional(val) -> Optional[str]:
     if val is None:
         return None
     if isinstance(val, float) and pd.isna(val):
         return None
     s = str(val).strip()
     return s or None
+
+
+def normalize_order_no(val):
+    if val is None:
+        return None
+    if isinstance(val, float) and pd.isna(val):
+        return None
+
+    s = str(val).strip()
+    if not s:
+        return None
+
+    # Excel 常見 25123456.0
+    if s.endswith(".0"):
+        s = s[:-2]
+
+    return s
 
 
 # ============================================================
@@ -105,16 +132,16 @@ def expand_serial_range(start: str, end: str) -> list[str]:
 
 def parse_serials_csv(raw_serials) -> tuple[str, int]:
     if raw_serials is None:
-        raise ValueError("serials 不可為空（batch/individual 必填）")
+        raise ValueError("serials 不可為空（individual 必填）")
     if isinstance(raw_serials, float) and pd.isna(raw_serials):
-        raise ValueError("serials 不可為空（batch/individual 必填）")
+        raise ValueError("serials 不可為空（individual 必填）")
 
     if not isinstance(raw_serials, str):
         raw_serials = str(raw_serials)
 
     raw = raw_serials.strip()
     if not raw:
-        raise ValueError("serials 不可為空（batch/individual 必填）")
+        raise ValueError("serials 不可為空（individual 必填）")
 
     serials = [s.strip() for s in raw.split(",") if s.strip()]
     if not serials:
@@ -139,27 +166,119 @@ def parse_datecode_qty(raw_datecode, raw_qty) -> tuple[str, int]:
     if raw_qty is None or (isinstance(raw_qty, float) and pd.isna(raw_qty)):
         raise ValueError("quantity 不可為空")
 
-    qty = int(raw_qty)
+    # dtype=str 讀入後，這裡可能是 "50"
+    try:
+        qty = int(str(raw_qty).strip())
+    except Exception:
+        raise ValueError("quantity 必須為整數")
+
     if qty <= 0:
         raise ValueError("quantity 必須 > 0")
 
     return dc, qty
 
 
-def normalize_order_no(val):
-    if val is None:
-        return None
-    if isinstance(val, float) and pd.isna(val):
-        return None
+# ============================================================
+# Excel 讀取：支援雙 Sheet + 自動找表頭
+# ============================================================
 
-    s = str(val).strip()
-    if not s:
-        return None
+def _find_header_row(df_raw: pd.DataFrame, required_cols: list[str]) -> int:
+    """
+    在 header=None 的 df_raw 中找到「包含 required_cols」的那一列作為表頭列
+    """
+    required = set([c.lower() for c in required_cols])
 
-    if s.endswith(".0"):
-        s = s[:-2]
+    for i in range(len(df_raw)):
+        row_vals = df_raw.iloc[i].tolist()
+        row_norm = set()
+        for v in row_vals:
+            if v is None or (isinstance(v, float) and pd.isna(v)):
+                continue
+            s = str(v).replace("*", "").strip().lower()
+            if s:
+                row_norm.add(s)
+        if required.issubset(row_norm):
+            return i
 
-    return s
+    raise ValueError(f"找不到表頭列（必須包含欄位：{required_cols}）")
+
+
+def _sheet_to_df(df_raw: pd.DataFrame, required_cols: list[str]) -> pd.DataFrame:
+    header_row = _find_header_row(df_raw, required_cols)
+    headers = [str(x).strip() for x in df_raw.iloc[header_row].tolist()]
+
+    df = df_raw.iloc[header_row + 1:].copy()
+    df.columns = headers
+    df = normalize_columns(df)
+
+    # 去掉完全空白列
+    df = df.dropna(how="all")
+
+    # 統一成字串，避免 NaN / 科學記號亂入
+    df = df.fillna("")
+    for c in df.columns:
+        df[c] = df[c].apply(lambda x: str(x).strip() if x is not None else "")
+
+    return df
+
+
+def read_transactions_excel(content: bytes) -> pd.DataFrame:
+    """
+    回傳合併後的 DataFrame
+    - Serial_Transactions：需要 transaction_type / fixture_id / record_type / source_type
+    - Datecode_Transactions：允許沒有 record_type，會自動補成 datecode
+    """
+    xls = pd.read_excel(BytesIO(content), sheet_name=None, header=None, dtype=str)
+
+    merged: list[pd.DataFrame] = []
+
+    for sheet_name, df_raw in xls.items():
+        name = str(sheet_name).strip().lower()
+
+        if "datecode" in name:
+            # datecode sheet：record_type 可以不提供
+            base_required = ["transaction_type", "fixture_id", "source_type", "datecode", "quantity"]
+            df = _sheet_to_df(df_raw, required_cols=base_required)
+
+            if "record_type" not in df.columns:
+                df["record_type"] = "datecode"
+            merged.append(df)
+
+        elif "serial" in name:
+            required = ["transaction_type", "fixture_id", "record_type", "source_type"]
+            df = _sheet_to_df(df_raw, required_cols=required)
+            merged.append(df)
+
+        else:
+            # 兼容單 sheet 舊範本：只要找到必要欄位就吃
+            required = ["transaction_type", "fixture_id", "record_type", "source_type"]
+            try:
+                df = _sheet_to_df(df_raw, required_cols=required)
+                merged.append(df)
+            except Exception:
+                # 不是資料 sheet 就跳過
+                continue
+
+    if not merged:
+        raise ValueError("Excel 內找不到可匯入的資料 Sheet（建議命名：Serial_Transactions / Datecode_Transactions）")
+
+    out = pd.concat(merged, ignore_index=True)
+
+    # 去掉 transaction_type 等關鍵欄位都空的列
+    out = out[~((out.get("transaction_type", "") == "") & (out.get("fixture_id", "") == ""))]
+
+    # 忽略示例列
+    out = out[
+        ~out.apply(
+            lambda r: any(
+                str(v).lower() in ("example", "示例", "範例", "test")
+                for v in r
+            ),
+            axis=1,
+        )
+    ]
+
+    return out
 
 
 # ============================================================
@@ -179,16 +298,13 @@ async def import_transactions(
         raise HTTPException(status_code=400, detail="請使用 .xlsx 檔案匯入")
 
     try:
-        df = pd.read_excel(BytesIO(await file.read()))
+        content = await file.read()
+        df = read_transactions_excel(content)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Excel 讀取失敗：{e}")
 
-    required_cols = [
-        "transaction_type",
-        "fixture_id",
-        "record_type",
-        "source_type",
-    ]
+    # base 必要欄位（record_type 可能由 datecode sheet 自動補）
+    required_cols = ["transaction_type", "fixture_id", "record_type", "source_type"]
     missing = [c for c in required_cols if c not in df.columns]
     if missing:
         raise HTTPException(status_code=400, detail=f"缺少必要欄位：{missing}")
@@ -198,7 +314,7 @@ async def import_transactions(
     warnings: list[str] = []
 
     for idx, row in df.iterrows():
-        row_no = idx + 2
+        row_no = idx + 2  # 合併後 row_no 僅作提示用
         try:
             tx_type = normalize_tx_type(row.get("transaction_type"))
             fixture_id = read_str_optional(row.get("fixture_id"))
@@ -218,7 +334,7 @@ async def import_transactions(
             quantity = None
 
             # =========================
-            # batch（已修正）
+            # batch
             # =========================
             if record_type == "batch":
                 serial_start = read_str_optional(row.get("serial_start"))
@@ -228,24 +344,19 @@ async def import_transactions(
                     raise ValueError("batch 必須填寫 serial_start 與 serial_end")
 
                 serial_list = expand_serial_range(serial_start, serial_end)
+                size = len(serial_list)
 
                 # 🔥 大區間保護（上限 2000）
-                MAX_BATCH_SIZE = 2000
+                if size > MAX_BATCH_SIZE:
+                    raise ValueError(f"batch 區間過大（{size} 筆），上限為 {MAX_BATCH_SIZE} 筆")
 
-                if len(serial_list) > MAX_BATCH_SIZE:
-                    raise ValueError(
-                        f"batch 區間過大（{len(serial_list)} 筆），上限為 {MAX_BATCH_SIZE} 筆"
-                    )
-                # 🔍 異常區間警告（但不阻擋）
+                # 🔍 異常區間警告（不阻擋）
                 if size > WARNING_BATCH_SIZE:
-                    warnings.append(
-                        f"第 {row_no} 行：batch 區間偏大（{size} 筆），請確認是否為預期操作"
-                    )
+                    warnings.append(f"第 {row_no} 行：batch 區間偏大（{size} 筆），請確認是否為預期操作")
 
                 serials_csv = ",".join(serial_list)
-                quantity = len(serial_list)
+                quantity = size
                 datecode = None
-
 
             # =========================
             # individual
@@ -301,3 +412,15 @@ async def import_transactions(
         "errors": errors,
         "warnings": warnings,
     }
+
+
+def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
+    df.columns = (
+        df.columns
+            .astype(str)
+            .str.replace("*", "", regex=False)
+            .str.replace("　", "", regex=False)  # 全形空白
+            .str.strip()
+            .str.lower()
+    )
+    return df
