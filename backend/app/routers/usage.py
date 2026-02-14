@@ -717,10 +717,15 @@ def delete_usage(
     record_level = row.get("record_level")
 
     # 2. 刪除 usage_logs
-    db.execute_update(
-        "DELETE FROM usage_logs WHERE id=%s AND customer_id=%s",
-        (log_id, customer_id),
+    out = db.call_sp_with_out(
+        "sp_delete_usage_log_v6",
+        [log_id, customer_id],
+        ["o_message"]
     )
+
+    return {
+        "message": out.get("o_message") if isinstance(out, dict) else "已刪除"
+    }
 
     # 3. 重算 fixture_usage_summary（只看 record_level='fixture'）
     agg_fx = db.execute_query(

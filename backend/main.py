@@ -35,6 +35,9 @@ from backend.app.routers.fixtures_import import router as fixtures_import_router
 from backend.app.routers.machine_models_import import router as machine_models_import_router
 from backend.app.routers.inventory import router as inventory_router
 from backend.app.routers.transactions_import import router as transaction_import_router
+from backend.app.routers.lifecycle import router as lifecycle_router
+from backend.app.routers.lifecycle_analysis import router as lifecycle_analysis_router
+
 
 # 導入配置和資料庫
 from backend.config import settings
