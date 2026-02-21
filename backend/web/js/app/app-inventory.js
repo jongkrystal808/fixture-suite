@@ -190,21 +190,13 @@ function ensureInventoryPager() {
 /* ============================================================
  * Inline Inventory Detail（展開 / 收合 + 動畫）
  * ============================================================ */
-
 async function toggleInventoryInlineDetail(fixtureId, btn) {
   const tr = btn.closest("tr");
   const next = tr.nextElementSibling;
 
   // 已展開 → 收合
   if (next && next.dataset?.invDetail === fixtureId) {
-    const wrapper = next.querySelector(".inv-inline-wrapper");
-    if (wrapper) {
-      wrapper.classList.remove("inv-inline-expanded");
-      wrapper.classList.add("inv-inline-collapsed");
-      setTimeout(() => next.remove(), 250);
-    } else {
-      next.remove();
-    }
+    next.remove();
     return;
   }
 
@@ -215,39 +207,39 @@ async function toggleInventoryInlineDetail(fixtureId, btn) {
   detailRow.dataset.invDetail = fixtureId;
 
   detailRow.innerHTML = `
-    <td colspan="7" class="bg-gray-50 px-0 py-0">
-      <div class="inv-inline-wrapper inv-inline-collapsed px-6 py-4 text-sm">
-        載入明細中…
-      </div>
+    <td colspan="7" class="bg-gray-50 px-6 py-4 text-sm">
+      載入明細中…
     </td>
   `;
 
   tr.after(detailRow);
 
-  requestAnimationFrame(() => {
-    const wrapper = detailRow.querySelector(".inv-inline-wrapper");
-    wrapper.classList.remove("inv-inline-collapsed");
-    wrapper.classList.add("inv-inline-expanded");
-  });
-
   try {
     const [serialRes, dcRes, historyRes] = await Promise.all([
-      apiInventorySerial({
-      fixture_id: fixtureId,
-      limit: 1000
-    }),
-
+      apiInventorySerial({ fixture_id: fixtureId }),
       apiInventoryDatecode({ fixture_id: fixtureId }),
       apiInventoryHistory({ fixture_id: fixtureId, limit: 200 }),
     ]);
 
+    // 🔥 在這裡才判斷！
+    const hasSerial =
+      serialRes &&
+      (serialRes.total ?? 0) > 0;
+
     detailRow.innerHTML = `
       <td colspan="7" class="bg-gray-50 px-6 py-4 text-sm space-y-4">
-        ${renderInlineSerial(serialRes.items || [])}
-        ${renderInlineDatecode(dcRes.items || [])}
+        ${
+          hasSerial
+            ? renderInlineSerial(serialRes)
+            : renderInlineDatecodeOnly(
+                dcRes.items || [],
+                dcRes.total_usage ?? 0
+              )
+        }
         ${renderInlineHistory(historyRes.items || [])}
       </td>
     `;
+
   } catch (err) {
     console.error(err);
     detailRow.innerHTML = `
@@ -263,38 +255,59 @@ async function toggleInventoryInlineDetail(fixtureId, btn) {
  * Inline render helpers
  * ============================================================ */
 
-function renderInlineSerial(items) {
-  const inUse = items
-    .filter(s =>
-      s.existence_status === "in_stock" &&
-      s.usage_status !== "idle"
-    )
-    .map(s => s.serial_number);
+function renderInlineSerial(data) {
 
-  const idle = items
-    .filter(s =>
-      s.existence_status === "in_stock" &&
-      s.usage_status === "idle"
-    )
-    .map(s => s.serial_number);
+  if (!data || !data.idle) {
+    return `<div class="text-gray-400">序號庫存：—</div>`;
+  }
+
+  const idle = data.idle;
+  const deployed = data.deployed;
+  const maintenance = data.maintenance;
 
   return `
     <div>
       <div class="font-semibold mb-1">序號庫存</div>
-      <div class="grid grid-cols-2 gap-4 text-xs">
+
+      <div class="grid grid-cols-3 gap-4 text-xs">
+
         <div>
           <span class="text-gray-500">使用中：</span>
-          ${inUse.length ? renderSerialRanges(inUse) : "—"}
+          ${
+            deployed.count > 0
+              ? deployed.ranges.join(", ")
+              : "—"
+          }
         </div>
+
         <div>
-          <span class="text-gray-500">可用：</span>
-          ${idle.length ? renderSerialRanges(idle) : "—"}
+          <span class="text-yellow-600">維修中：</span>
+          ${
+            maintenance.count > 0
+              ? maintenance.ranges.join(", ")
+              : "—"
+          }
         </div>
+
+        <div>
+          <span class="text-green-600">可用：</span>
+          ${
+            idle.count > 0
+              ? idle.ranges.join(", ")
+              : "—"
+          }
+        </div>
+
+      </div>
+
+      <div class="mt-2 text-xs text-gray-400">
+        Returned：${data.returned ?? 0}　
+        Scrapped：${data.scrapped ?? 0}　
+        總數：${data.total ?? 0}
       </div>
     </div>
   `;
 }
-
 
 function renderInlineDatecode(items) {
       if (!items.length) {
@@ -379,6 +392,33 @@ function renderInlineHistory(items) {
   `;
 }
 
+
+function renderInlineDatecodeOnly(items, totalUsage) {
+  if (!items.length) {
+    return `<div class="text-gray-500">Datecode：—</div>`;
+  }
+
+  const totalStock = items.reduce((sum, d) => {
+    return sum + (d.in_stock_qty ?? 0);
+  }, 0);
+
+  return `
+    <div>
+      <div class="font-semibold mb-1">Datecode 庫存</div>
+
+      <div class="flex flex-wrap gap-3 text-xs mb-2">
+        ${items.map(d => `
+          <span>${escapeHtml(d.datecode)}（${d.in_stock_qty}）</span>
+        `).join("")}
+      </div>
+
+      <div class="text-xs text-gray-500">
+        總庫存：${totalStock}　
+        累積使用次數：${totalUsage ?? 0}
+      </div>
+    </div>
+  `;
+}
 
 
 /* ============================================================

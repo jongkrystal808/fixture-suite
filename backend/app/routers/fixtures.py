@@ -412,9 +412,9 @@ async def create_fixture(
 
 
 # ============================================================
-# 取得治具詳情 (READ) - 動態路徑
+# 取得治具資訊 (READ) - 動態路徑
 # ============================================================
-@router.get("/{fixture_id}", response_model=FixtureResponse, summary="取得治具詳情")
+@router.get("/{fixture_id}", response_model=FixtureResponse, summary="取得治具資訊")
 async def get_fixture(
     fixture_id: str,
     user=Depends(get_current_user),
@@ -527,7 +527,7 @@ async def get_fixture_detail(
             SELECT *
             FROM replacement_logs
             WHERE fixture_id=%s AND customer_id=%s
-            ORDER BY replacement_date DESC
+            ORDER BY occurred_at DESC
             LIMIT 100
             """,
             (fixture_id, customer_id)
@@ -542,7 +542,7 @@ async def get_fixture_detail(
                    return_date,
                    deployment_id,
                    current_station_id,
-                   total_uses,
+                   COALESCE(sus.total_use_count, 0) AS total_uses,
                    last_use_date,
                    note,
                    existence_status,
@@ -568,8 +568,8 @@ async def get_fixture_detail(
             "serials": serials,
             "last_receipt": last_receipt[0] if last_receipt else None,
             "last_return": last_return[0] if last_return else None,
-            "usage_logs": usage_logs,
-            "replacement_logs": replacement_logs,
+            "usages": usage_logs,
+            "replacements": replacement_logs,
         }
 
     except HTTPException:

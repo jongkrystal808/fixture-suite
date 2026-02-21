@@ -131,17 +131,53 @@ async def lookup_stations_by_model(
     "/lookup/fixtures-by-model-station",
     summary="（搜尋用）依機種 + 站點取得可用治具"
 )
+# --------------------------------------------------------------
+# 🔍 搜尋：依機種 + 站點取得可用治具（Autocomplete）
+# --------------------------------------------------------------
+@router.get(
+    "/lookup/fixtures-by-model-station",
+    summary="（搜尋用）依機種 + 站點取得可用治具"
+)
 async def lookup_fixtures_by_model_station(
     model_id: str = Query(...),
     station_id: str = Query(...),
     customer_id: str = Depends(get_current_customer_id),
     user=Depends(get_current_user),
 ):
+    """
+    v6 Usage Dropdown 需要欄位：
+    - fixture_id, fixture_name
+    - lifecycle_mode
+    - existence_status, usage_status（前端會用來 filter）
+    """
+
     rows = db.execute_query(
         """
         SELECT
             fr.fixture_id,
-            f.fixture_name
+            f.fixture_name,
+
+            -- ✅ v6: Dual lifecycle mode（serial / fixture）
+            f.lifecycle_mode,
+
+            -- 附帶一些數量欄位（可留著給 UI 擴充，不影響）
+            f.in_stock_qty,
+            f.deployed_qty,
+            f.is_scrapped,
+
+            -- ✅ 推導 existence_status（fixture 層級）
+            CASE
+                WHEN f.is_scrapped = 1 THEN 'scrapped'
+                WHEN COALESCE(f.in_stock_qty, 0) > 0 THEN 'in_stock'
+                ELSE 'returned'
+            END AS existence_status,
+
+            -- ✅ 推導 usage_status（fixture 層級；serial 模式才有嚴格意義）
+            CASE
+                WHEN COALESCE(f.deployed_qty, 0) > 0 THEN 'deployed'
+                ELSE 'idle'
+            END AS usage_status
+
         FROM fixture_requirements fr
         JOIN fixtures f
             ON fr.fixture_id = f.id
@@ -149,10 +185,12 @@ async def lookup_fixtures_by_model_station(
         WHERE fr.customer_id=%s
           AND fr.model_id=%s
           AND fr.station_id=%s
+          AND f.is_scrapped = 0
         ORDER BY fr.fixture_id
         """,
         (customer_id, model_id, station_id)
     )
+
     return rows or []
 
 # --------------------------------------------------------------

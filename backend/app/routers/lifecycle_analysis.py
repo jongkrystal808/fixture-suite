@@ -8,6 +8,7 @@ Lifecycle Advanced Analysis
 - Lifespan Distribution
 """
 
+from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from backend.app.database import db
 from backend.app.dependencies import get_current_user, get_current_customer_id
@@ -23,7 +24,7 @@ router = APIRouter(
 # ============================================================
 @router.get("/mtbf", summary="平均壽命 (MTBF)")
 def get_mtbf(
-    fixture_id: str | None = None,
+    fixture_id: Optional[str] = None,
     user=Depends(get_current_user),
     customer_id=Depends(get_current_customer_id),
 ):

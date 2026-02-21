@@ -175,13 +175,33 @@
 
         if (!Array.isArray(rows) || rows.length === 0) return;
 
-        fxOptions = rows;
-        renderFixtureDropdown(rows);
+        // 🔥 v6 強化：只顯示可用治具
+        const filtered = rows.filter(r => {
+
+          // 🟢 fixture 模式：只要在庫就可以用
+          if (r.lifecycle_mode === "fixture") {
+            return r.existence_status === "in_stock";
+          }
+
+          // 🔵 serial 模式：必須在庫 + idle
+          return (
+            r.existence_status === "in_stock" &&
+            r.usage_status === "idle"
+          );
+        });
+
+        if (filtered.length === 0) {
+          toast("目前沒有可使用的治具", "warning");
+          return;
+        }
+
+        fxOptions = filtered;
+        renderFixtureDropdown(filtered);
+
       } catch (err) {
         console.error(err);
       }
     }
-
     /* ============================================================
      * 治具 dropdown render + filter
      * ============================================================ */

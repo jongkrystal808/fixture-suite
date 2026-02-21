@@ -823,7 +823,7 @@ function mmImportModelsXlsx(file) {
 window.mmImportModelsXlsx = mmImportModelsXlsx;
 
 /* ============================================================
- * DRAWER MODE (機種詳情 Drawer 專用)
+ * DRAWER MODE (機種資訊 Drawer 專用)
  * ============================================================ */
 
 async function openModelDetailDrawer(modelId) {

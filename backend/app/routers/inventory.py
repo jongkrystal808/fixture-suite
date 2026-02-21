@@ -5,7 +5,8 @@ Inventory Router (Read-only)
 
 from fastapi import APIRouter, Depends, Query
 from typing import Optional
-
+from collections import defaultdict
+import re
 from backend.app.database import db
 from backend.app.dependencies import get_current_customer_id
 
@@ -17,31 +18,31 @@ router = APIRouter(
 
 # ============================================================
 # 序號庫存（Serial Inventory）
+# - v6 專業版：fixture inline detail 時回傳「分狀態壓縮 ranges」
+# - fallback：維持原本分頁 items
 # ============================================================
 @router.get("/serial")
 def list_serial_inventory(
     customer_id: str = Depends(get_current_customer_id),
-
-    existence_status: Optional[str] = Query(
-        default=None,
-        description="in_stock / returned / scrapped"
-    ),
-    usage_status: Optional[str] = Query(
-        default=None,
-        description="idle / deployed / maintenance"
-    ),
-
-    fixture_id: Optional[str] = Query(default=None),
-    skip: int = Query(default=0, ge=0),
-    limit: int = Query(default=200, ge=1, le=1000),
+    existence_status: Optional[str] = Query(None),
+    usage_status: Optional[str] = Query(None),
+    fixture_id: Optional[str] = Query(None),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(200, ge=1, le=5000),
 ):
-    """
-    查詢治具序號庫存（Read-only）
-    來源：fixture_serials
-    """
+
+    # -----------------------------
+    # WHERE
+    # -----------------------------
     where = ["customer_id = %s"]
     params = [customer_id]
 
+    if fixture_id:
+        where.append("fixture_id = %s")
+        params.append(fixture_id)
+
+    # ⚠️ 注意：如果你要「三狀態完整顯示」，
+    # 前端呼叫這支時不要帶 existence_status/usage_status 篩選。
     if existence_status:
         where.append("existence_status = %s")
         params.append(existence_status)
@@ -50,13 +51,112 @@ def list_serial_inventory(
         where.append("usage_status = %s")
         params.append(usage_status)
 
-    if fixture_id:
-        where.append("fixture_id = %s")
-        params.append(fixture_id)
-
     where_sql = " AND ".join(where)
 
-    sql = f"""
+    # =========================================================
+    # ✅ 專業模式：fixture inline detail（skip==0 且 fixture_id 有帶）
+    # 只有在「未帶 existence_status / usage_status 篩選」時，
+    # 才回傳三狀態壓縮（避免篩選造成 UI 顯示不完整）
+    # =========================================================
+    if fixture_id and skip == 0 and (not existence_status) and (not usage_status):
+        rows = db.execute_query(
+            f"""
+            SELECT
+                serial_number,
+                existence_status,
+                usage_status
+            FROM fixture_serials
+            WHERE customer_id = %s
+              AND fixture_id = %s
+            ORDER BY serial_number
+            """,
+            (customer_id, fixture_id),
+        ) or []
+
+        idle = []
+        deployed = []
+        maintenance = []
+        returned_count = 0
+        scrapped_count = 0
+
+        for r in rows:
+            sn = r.get("serial_number")
+            ex = r.get("existence_status")
+            us = r.get("usage_status")
+
+            if not sn:
+                continue
+
+            if ex == "in_stock":
+                if us == "idle":
+                    idle.append(sn)
+                elif us == "deployed":
+                    deployed.append(sn)
+                elif us == "maintenance":
+                    maintenance.append(sn)
+                else:
+                    # 未知 usage_status（保守丟到 idle，避免 UI 完全消失）
+                    idle.append(sn)
+
+            elif ex == "returned":
+                returned_count += 1
+            elif ex == "scrapped":
+                scrapped_count += 1
+
+        return {
+            "fixture_id": fixture_id,
+            "total": len(rows),
+
+            "idle": {
+                "count": len(idle),
+                "ranges": compress_serial_ranges(idle),
+            },
+            "deployed": {
+                "count": len(deployed),
+                "ranges": compress_serial_ranges(deployed),
+            },
+            "maintenance": {
+                "count": len(maintenance),
+                "ranges": compress_serial_ranges(maintenance),
+            },
+
+            "returned": returned_count,
+            "scrapped": scrapped_count,
+        }
+
+    # =========================================================
+    # ✅ 相容模式：如果 fixture_id + skip==0 但有帶篩選
+    # 就回傳「單一壓縮 ranges」（你原本的行為）
+    # =========================================================
+    if fixture_id and skip == 0:
+        rows = db.execute_query(
+            f"""
+            SELECT serial_number
+            FROM fixture_serials
+            WHERE {where_sql}
+            ORDER BY serial_number
+            """,
+            tuple(params),
+        ) or []
+
+        serials = [r["serial_number"] for r in rows if r.get("serial_number")]
+        ranges = compress_serial_ranges(serials)
+
+        return {
+            "fixture_id": fixture_id,
+            "count": len(serials),
+            "ranges": ranges,
+            "filters": {
+                "existence_status": existence_status,
+                "usage_status": usage_status,
+            }
+        }
+
+    # =========================================================
+    # fallback：原本分頁 items
+    # =========================================================
+    rows = db.execute_query(
+        f"""
         SELECT
             fixture_id,
             serial_number,
@@ -71,10 +171,9 @@ def list_serial_inventory(
         WHERE {where_sql}
         ORDER BY fixture_id, serial_number
         LIMIT %s OFFSET %s
-    """
-
-    params.extend([limit, skip])
-    rows = db.execute_query(sql, tuple(params))
+        """,
+        tuple(params + [limit, skip]),
+    ) or []
 
     return {
         "items": rows,
@@ -94,10 +193,7 @@ def list_datecode_inventory(
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=200, ge=1, le=1000),
 ):
-    """
-    查詢治具 Datecode 庫存（Read-only）
-    來源：fixture_datecode_inventory
-    """
+
     where = ["customer_id = %s"]
     params = [customer_id]
 
@@ -125,10 +221,26 @@ def list_datecode_inventory(
     """
 
     params.extend([limit, skip])
-    rows = db.execute_query(sql, tuple(params))
+    rows = db.execute_query(sql, tuple(params)) or []
+
+    # 🔥 加上 fixture-level usage（給 UI 用）
+    total_usage = 0
+    if fixture_id:
+        usage_row = db.execute_one(
+            """
+            SELECT total_use_count
+            FROM fixture_usage_summary
+            WHERE customer_id = %s
+              AND fixture_id = %s
+            """,
+            (customer_id, fixture_id)
+        )
+        if usage_row:
+            total_usage = usage_row.get("total_use_count") or 0
 
     return {
         "items": rows,
+        "total_usage": total_usage,
         "skip": skip,
         "limit": limit,
     }
@@ -447,3 +559,56 @@ def list_inventory_overview(
         "skip": skip,
         "limit": limit,
     }
+
+
+# ============================================================
+# Helper：壓縮序號 range（後端版）
+# ============================================================
+def compress_serial_ranges(serials: list[str]) -> list[str]:
+    def parse(s):
+        m = re.match(r"^(.*?)(\d+)$", s)
+        if not m:
+            return None, None, None
+        return m.group(1), int(m.group(2)), len(m.group(2))
+
+    groups = defaultdict(list)
+
+    for s in serials:
+        prefix, num, width = parse(s)
+        if prefix is None:
+            groups["__RAW__"].append(s)
+        else:
+            groups[prefix].append((num, width))
+
+    ranges = []
+
+    for prefix, values in groups.items():
+        if prefix == "__RAW__":
+            ranges.extend(values)
+            continue
+
+        values.sort()
+        start = values[0]
+        prev = values[0]
+
+        for cur in values[1:]:
+            if cur[0] == prev[0] + 1:
+                prev = cur
+            else:
+                ranges.append((prefix, start, prev))
+                start = cur
+                prev = cur
+
+        ranges.append((prefix, start, prev))
+
+    result = []
+    for r in ranges:
+        if isinstance(r, str):
+            result.append(r)
+        else:
+            prefix, a, b = r
+            start = f"{prefix}{str(a[0]).zfill(a[1])}"
+            end   = f"{prefix}{str(b[0]).zfill(b[1])}"
+            result.append(start if start == end else f"{start}-{end}")
+
+    return result

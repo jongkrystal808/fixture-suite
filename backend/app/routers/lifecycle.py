@@ -89,9 +89,7 @@ def get_lifecycle_overview(
     customer_id=Depends(get_current_customer_id),
 ):
     sql = """
-        SELECT
-            lifecycle_status,
-            COUNT(*) AS total
+        SELECT lifecycle_status, COUNT(*) AS total
         FROM view_lifecycle_status_v1
         WHERE customer_id = %s
         GROUP BY lifecycle_status
@@ -99,34 +97,24 @@ def get_lifecycle_overview(
 
     rows = db.execute_query(sql, (customer_id,))
 
-    # 預設 0
-    result = {
-        "normal": 0,
-        "warning": 0,
-        "expired": 0,
-        "premature_failure": 0,
-    }
-
+    result = {}
     for r in rows:
         result[r["lifecycle_status"]] = r["total"]
 
     return result
-
 
 # ============================================================
 # 3️⃣ 異常分析（premature 分析用）
 # ============================================================
 @router.get("/anomalies", summary="提前失效統計")
 def get_lifecycle_anomalies(
-    group_by: str = Query(
-        default="fixture",
-        description="fixture / model"
-    ),
+    group_by: str = Query(default="fixture"),
     user=Depends(get_current_user),
     customer_id=Depends(get_current_customer_id),
 ):
+
     if group_by == "model":
-        group_field = "fixture_id"
+        group_field = "model_id"
     else:
         group_field = "fixture_id"
 

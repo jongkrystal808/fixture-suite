@@ -4,7 +4,7 @@
 此版本不再直接寫入 usage_logs，
 所有 INSERT 一律透過 MySQL Stored Procedure：
 
-- sp_insert_usage_log
+- sp_insert_usage_log_v6
 
 summary 表（fixture_usage_summary, serial_usage_summary）
 由 Stored Procedure + 刪除時的重算邏輯共同維護。
@@ -35,15 +35,29 @@ router = APIRouter(prefix="/usage", tags=["使用紀錄 Usage Logs v4.0"])
 
 
 # -------------------------------------------------------------
-# Helper：基本存在性檢查
+# Helper：基本存在性檢查（升級版：回傳 lifecycle_mode）
 # -------------------------------------------------------------
-def ensure_fixture_exists(fixture_id: str, customer_id: str):
-    row = db.execute_query(
-        "SELECT id FROM fixtures WHERE id=%s AND customer_id=%s",
+def ensure_fixture_exists(fixture_id: str, customer_id: str) -> dict:
+    """
+    確認治具存在，並回傳其 lifecycle 設定。
+    """
+
+    rows = db.execute_query(
+        """
+        SELECT id, lifecycle_mode, cycle_unit
+        FROM fixtures
+        WHERE id=%s AND customer_id=%s
+        """,
         (fixture_id, customer_id)
     )
-    if not row:
-        raise HTTPException(400, f"治具 {fixture_id} 不存在或不屬於客戶 {customer_id}")
+
+    if not rows:
+        raise HTTPException(
+            status_code=400,
+            detail=f"治具 {fixture_id} 不存在或不屬於客戶 {customer_id}"
+        )
+
+    return rows[0]
 
 
 def ensure_model_exists(model_id: str, customer_id: str):
@@ -63,9 +77,8 @@ def ensure_station_exists(station_id: str, customer_id: str):
     if not row:
         raise HTTPException(400, f"站點 {station_id} 不存在或不屬於客戶 {customer_id}")
 
-
 # -------------------------------------------------------------
-# Helper：呼叫 sp_insert_usage_log
+# Helper：呼叫 sp_insert_usage_log_v6（✅ 把 MySQL SIGNAL / SP error 轉成 400）
 # -------------------------------------------------------------
 def call_sp_insert_usage(
     customer_id: str,
@@ -79,59 +92,61 @@ def call_sp_insert_usage(
     note: Optional[str],
 ):
     """
-    封裝對 sp_insert_usage_log 的呼叫
-
-    SP 定義：
-
-    sp_insert_usage_log(
-        IN p_customer_id VARCHAR(50),
-        IN p_fixture_id VARCHAR(50),
-        IN p_record_level ENUM('fixture','serial'),
-        IN p_serial_number VARCHAR(100),
-        IN p_station_id VARCHAR(50),
-        IN p_model_id VARCHAR(50),
-        IN p_use_count INT,
-        IN p_operator VARCHAR(100),
-        IN p_note TEXT,
-        OUT o_inserted_count INT,
-        OUT o_message VARCHAR(255)
-    )
+    封裝對 sp_insert_usage_log_v6 的呼叫
+    並把 DB 層錯誤（SIGNAL / procedure not found / constraint）轉成 HTTP 400
     """
 
-    out = db.call_sp_with_out(
-        "sp_insert_usage_log",
-        [
-            customer_id,
-            fixture_id,
-            sp_record_level,
-            serial_number,
-            station_id,
-            model_id,
-            use_count,
-            operator,
-            note,
-        ],
-        ["o_inserted_count", "o_message"],
-    )
+    try:
+        out = db.call_sp_with_out(
+            "sp_insert_usage_log_v6",
+            [
+                customer_id,
+                fixture_id,
+                sp_record_level,
+                serial_number,
+                station_id,
+                model_id,
+                use_count,
+                operator,
+                note,
+            ],
+            ["o_inserted_count", "o_message"],
+        )
+    except Exception as e:
+        # pymysql 的錯誤通常在 e.args 裡，例：
+        # (1644, 'serial not available: in_stock/deployed')
+        # (1305, 'PROCEDURE xxx does not exist')
+        msg = None
+        try:
+            if hasattr(e, "args") and e.args:
+                # e.args 可能是 (code, message)
+                if len(e.args) >= 2 and isinstance(e.args[1], str):
+                    msg = e.args[1]
+                else:
+                    msg = str(e.args[0])
+        except Exception:
+            msg = None
+
+        detail = msg or str(e) or "資料庫錯誤"
+
+        # 常見 DB 錯誤都回 400，避免前端只看到 500
+        raise HTTPException(status_code=400, detail=detail)
 
     # 可能是 dict 或 tuple，兩種都處理一下
     if isinstance(out, dict):
         inserted = out.get("o_inserted_count")
         message = out.get("o_message")
     else:
-        # 順序：o_inserted_count, o_message
         inserted = out[0] if out and len(out) > 0 else None
         message = out[1] if out and len(out) > 1 else None
 
     if not inserted:
-        # SP 自己會填錯誤訊息（如：治具不存在 / 序號不屬於該治具）
         raise HTTPException(400, message or "使用記錄新增失敗")
 
     return {
         "inserted_count": inserted,
         "message": message or "使用記錄新增成功",
     }
-
 
 # -------------------------------------------------------------
 # 列表（僅查 usage_logs，不牽涉 summary）
@@ -523,7 +538,8 @@ def create_usage(
     if not station_id:
         raise HTTPException(400, "缺少 station_id")
 
-    ensure_fixture_exists(fixture_id, customer_id)
+    fixture_row = ensure_fixture_exists(fixture_id, customer_id)
+    lifecycle_mode = fixture_row.get("lifecycle_mode")
     ensure_model_exists(model_id, customer_id)
     ensure_station_exists(station_id, customer_id)
 
@@ -542,6 +558,15 @@ def create_usage(
     note = data.get("note")
 
     record_level = data.get("record_level", "fixture")  # fixture / individual / batch
+    # ---------------------------------------------------------
+    # 🔒 lifecycle 安全防呆（關鍵）
+    # ---------------------------------------------------------
+    if lifecycle_mode == "fixture" and record_level != "fixture":
+        raise HTTPException(
+            status_code=400,
+            detail="此治具為整體壽命模式，不可使用 serial"
+        )
+
 
     # -----------------------------
     # 1. fixture-level 使用紀錄
@@ -726,89 +751,6 @@ def delete_usage(
     return {
         "message": out.get("o_message") if isinstance(out, dict) else "已刪除"
     }
-
-    # 3. 重算 fixture_usage_summary（只看 record_level='fixture'）
-    agg_fx = db.execute_query(
-        """
-        SELECT 
-            COALESCE(SUM(use_count), 0) AS total_use_count,
-            MAX(used_at) AS last_used_at
-        FROM usage_logs
-        WHERE customer_id=%s
-          AND fixture_id=%s
-          AND record_level='fixture'
-        """,
-        (customer_id, fixture_id),
-    )[0]
-
-    total_fx = agg_fx["total_use_count"] or 0
-    last_fx = agg_fx["last_used_at"]
-
-    if total_fx > 0 and last_fx:
-        db.execute_update(
-            """
-            INSERT INTO fixture_usage_summary
-                (customer_id, fixture_id, total_use_count, last_used_at, updated_at)
-            VALUES (%s, %s, %s, %s, NOW())
-            ON DUPLICATE KEY UPDATE
-                total_use_count = VALUES(total_use_count),
-                last_used_at    = VALUES(last_used_at),
-                updated_at      = NOW()
-            """,
-            (customer_id, fixture_id, total_fx, last_fx),
-        )
-    else:
-        db.execute_update(
-            """
-            DELETE FROM fixture_usage_summary
-            WHERE customer_id=%s AND fixture_id=%s
-            """,
-            (customer_id, fixture_id),
-        )
-
-    # 4. 如為 serial-level，重算 serial_usage_summary
-    if record_level == "serial" and serial_number:
-        agg_sn = db.execute_query(
-            """
-            SELECT 
-                COALESCE(SUM(use_count), 0) AS total_use_count,
-                MAX(used_at) AS last_used_at
-            FROM usage_logs
-            WHERE customer_id=%s
-              AND fixture_id=%s
-              AND serial_number=%s
-              AND record_level='serial'
-            """,
-            (customer_id, fixture_id, serial_number),
-        )[0]
-
-        total_sn = agg_sn["total_use_count"] or 0
-        last_sn = agg_sn["last_used_at"]
-
-        if total_sn > 0 and last_sn:
-            db.execute_update(
-                """
-                INSERT INTO serial_usage_summary
-                    (customer_id, fixture_id, serial_number,
-                     total_use_count, last_used_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, NOW())
-                ON DUPLICATE KEY UPDATE
-                    total_use_count = VALUES(total_use_count),
-                    last_used_at    = VALUES(last_used_at),
-                    updated_at      = NOW()
-                """,
-                (customer_id, fixture_id, serial_number, total_sn, last_sn),
-            )
-        else:
-            db.execute_update(
-                """
-                DELETE FROM serial_usage_summary
-                WHERE customer_id=%s AND fixture_id=%s AND serial_number=%s
-                """,
-                (customer_id, fixture_id, serial_number),
-            )
-
-    return {"message": "已刪除", "id": log_id}
 
 
 # -------------------------------------------------------------

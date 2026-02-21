@@ -18,22 +18,7 @@ function apiGetDashboardStats() {
 
 window.apiGetDashboardStats = apiGetDashboardStats;
 
-/* ============================================================
- * Fixture Lifespan
- * Dashboard / 壽命統計 / 不耐用治具
- * GET /stats/fixture-lifespan
- * ============================================================ */
-async function apiGetFixtureLifespan(params = {}) {
-  const q = new URLSearchParams(params).toString();
-  return api(`/stats/fixture-lifespan${q ? `?${q}` : ""}`);
-}
 
-window.apiGetFixtureLifespan = apiGetFixtureLifespan;
-
-/* ============================================================
- * Model Planning
- * 非 Dashboard，但屬於 stats 領域
- * ============================================================ */
 
 /**
  * 取得機種治具需求總表

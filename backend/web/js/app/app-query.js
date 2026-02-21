@@ -185,23 +185,13 @@ async function openFixtureDetail(fixtureId) {
   box.innerHTML = `<div class="p-4 text-gray-500">載入中...</div>`;
 
   try {
-    // =====================================================
-    // 1️⃣ 治具壽命 / 狀態(核心資料)
-    // =====================================================
-    const lifespanResp = await apiGetFixtureLifespan({
-      fixture_id: fixtureId,
-      limit: 1,
-    });
-
-    const lifespanRows = lifespanResp?.items || lifespanResp || [];
-    const f = lifespanRows[0];
-
-    if (!f) {
-      throw new Error("No fixture lifespan data");
-    }
+    // 改成直接用 fixtureId 建基本物件
+    const f = {
+      fixture_id: fixtureId
+    };
 
     // =====================================================
-    // 2️⃣ 使用 / 更換紀錄(各取前 5 筆)
+    // 使用 / 更換紀錄(各取前 5 筆)
     // =====================================================
     let usageLogs = [];
     let replacementLogs = [];
@@ -225,7 +215,7 @@ async function openFixtureDetail(fixtureId) {
     } catch (_) {}
 
     // =====================================================
-    // 3️⃣ Render(無庫存、無序號、無 datecode)
+    // Render(無庫存、無序號、無 datecode)
     // =====================================================
     box.innerHTML = `
       <!-- Tabs -->
@@ -252,13 +242,6 @@ async function openFixtureDetail(fixtureId) {
         <div class="grid grid-cols-2 gap-2 text-sm">
           <div><b>治具編號：</b>${f.fixture_id}</div>
           <div><b>名稱：</b>${f.fixture_name ?? "-"}</div>
-          <div><b>壽命狀態：</b>${f.lifespan_status ?? "-"}</div>
-          <div>
-            <b>預期壽命：</b>
-            ${f.replacement_cycle ?? "-"}
-            ${f.cycle_unit === "uses" ? "次" : "天"}
-          </div>
-          <div><b>已使用：</b>${f.total_uses ?? 0}</div>
         </div>
 
         <!-- 🔍 跳轉到庫存 -->

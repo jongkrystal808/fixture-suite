@@ -104,7 +104,14 @@ async function submitReplacementLog() {
     if (!serials.length) {
       return toast("請輸入序號", "warning");
     }
+
+    // 🔥 簡單前端驗證（避免空白或奇怪格式）
+    if (serials.some(s => s.length < 2)) {
+      return toast("序號格式異常", "warning");
+    }
+
     payload.serial_number = serials.join(",");
+
   }
 
   // -----------------------------
@@ -118,6 +125,9 @@ async function submitReplacementLog() {
       expandBatchSerials(start, end); // 只驗證格式
     } catch (e) {
       return toast(e.message, "error");
+    }
+    if (start.length < 2 || end.length < 2) {
+      return toast("批量序號格式異常", "warning");
     }
 
     // ⭐ event log：用描述字串即可
@@ -223,11 +233,22 @@ function renderReplacementTable(rows) {
   rows.forEach((r) => {
     const tr = document.createElement("tr");
 
+    // 🔥 v6 相容：individual / batch / future array
+    let serialText = "-";
+
+    if (r.serial_number) {
+      serialText = r.serial_number;
+    } else if (r.serial_start && r.serial_end) {
+      serialText = `${r.serial_start} ~ ${r.serial_end}`;
+    } else if (Array.isArray(r.serials)) {
+      serialText = r.serials.join(", ");
+    }
+
     tr.innerHTML = `
       <td class="py-2 pr-4">${fmtDate(r.occurred_at)}</td>
       <td class="py-2 pr-4">${r.fixture_id ?? "-"}</td>
       <td class="py-2 pr-4">${renderReplacementLevelBadge(r)}</td>
-      <td class="py-2 pr-4">${r.serial_number ?? "-"}</td>
+      <td class="py-2 pr-4">${serialText}</td>
       <td class="py-2 pr-4">${r.note ?? "-"}</td>
       <td class="py-2 pr-4">${r.operator ?? r.executor ?? "-"}</td>
       <td class="py-2 pr-4">
@@ -256,7 +277,6 @@ async function deleteReplacement(id) {
   }
 }
 
-window.loadReplacementLogs = loadReplacementLogs;
 window.deleteReplacement = deleteReplacement;
 
 
@@ -454,13 +474,12 @@ function renderReplacementLevelBadge(r) {
     return `<span class="badge badge-info">治具</span>`;
   }
 
-  if (r.note?.startsWith("[batch]")) {
+  if (r.serial_start && r.serial_end) {
     return `<span class="badge badge-warning">批量</span>`;
   }
 
   return `<span class="badge badge-warning">序號</span>`;
 }
-
 
 /* ============================================================
  * Replacement - 快速日期區間（today / yesterday / 7days）

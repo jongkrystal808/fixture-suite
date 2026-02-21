@@ -57,7 +57,7 @@ async def list_stations(
 # 2. 查詢單一站點
 # ============================================================
 
-@router.get("/{station_id}", response_model=StationResponse, summary="查詢站點詳情")
+@router.get("/{station_id}", response_model=StationResponse, summary="查詢站點資訊")
 async def get_station(
     station_id: str,
     customer_id: str = Depends(get_current_customer_id),
