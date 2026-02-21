@@ -67,20 +67,32 @@ async function loadDashboard() {
     if (upcomingList) {
       upcomingList.innerHTML = "";
       (data.upcoming_replacements || []).forEach(r => {
-        const percent = Math.round((r.usage_ratio || 0) * 100);
-        const color =
-          percent >= 100 ? "text-red-600" :
-          percent >= 90  ? "text-orange-600" :
-                           "text-yellow-600";
 
-        const div = document.createElement("div");
-        div.className = `text-sm flex justify-between ${color}`;
-        div.innerHTML = `
-          <span>${r.fixture_id} ${r.fixture_name}</span>
-          <span>${percent}%</span>
-        `;
-        upcomingList.appendChild(div);
-      });
+          const percent = Math.round((r.actual_value || 0) * 100);
+
+          const color =
+            r.lifecycle_status === "expired"
+              ? "text-red-600"
+              : r.lifecycle_status === "warning"
+              ? "text-orange-600"
+              : "text-yellow-600";
+
+          const div = document.createElement("div");
+          div.className = `text-sm flex justify-between ${color}`;
+
+          div.innerHTML = `
+            <span>
+              ${r.fixture_id}
+              ${r.datecode ? `(${r.datecode})` : ""}
+              <span class="text-xs text-gray-500 ml-1">
+                ${r.lifecycle_mode}
+              </span>
+            </span>
+            <span>${percent}%</span>
+          `;
+
+          upcomingList.appendChild(div);
+        });
     }
 
     /* ===============================

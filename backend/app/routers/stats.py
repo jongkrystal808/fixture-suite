@@ -47,6 +47,59 @@ async def get_serial_status(
 
 
 # ============================================================
+# Lifecycle 狀態（v6 雙模型整合）
+# 來源：view_lifecycle_status_v2
+# ============================================================
+
+@router.get("/lifecycle-status", summary="治具壽命狀態（Serial + Datecode）")
+async def get_lifecycle_status(
+    fixture_id: Optional[str] = Query(default=None),
+    lifecycle_mode: Optional[str] = Query(default=None),  # serial / fixture
+    status: Optional[str] = Query(default=None),          # normal / warning / expired
+    skip: int = Query(default=0),
+    limit: int = Query(default=50),
+    customer_id: str = Depends(get_current_customer_id),
+    user=Depends(get_current_user),
+):
+    """
+    v6 正式壽命 API
+    讀取 view_lifecycle_status_v2
+    """
+
+    sql = """
+        SELECT *
+        FROM view_lifecycle_status_v2
+        WHERE customer_id = %s
+    """
+    params = [customer_id]
+
+    if fixture_id:
+        sql += " AND fixture_id = %s"
+        params.append(fixture_id)
+
+    if lifecycle_mode:
+        sql += " AND lifecycle_mode = %s"
+        params.append(lifecycle_mode)
+
+    if status:
+        sql += " AND status = %s"
+        params.append(status)
+
+    sql += " ORDER BY usage_ratio DESC"
+    sql += " LIMIT %s OFFSET %s"
+    params.extend([limit, skip])
+
+    rows = db.execute_query(sql, tuple(params)) or []
+
+    return {
+        "data": rows,
+        "count": len(rows),
+        "skip": skip,
+        "limit": limit
+    }
+
+
+# ============================================================
 # Dashboard（Event-based）
 # ============================================================
 
@@ -55,18 +108,9 @@ async def get_dashboard(
     customer_id: str = Depends(get_current_customer_id),
     user=Depends(get_current_user),
 ):
-    """
-    回傳格式：
-    {
-        today_in: { total, items },
-        today_out: { total, items },
-        upcoming_replacements: [],
-        fixture_summary: {}
-    }
-    """
 
     # ========================================================
-    # 1️⃣ 今日收料總數
+    # 今日收料總數
     # ========================================================
     receipt_rows = db.execute_query(
         """
@@ -81,9 +125,6 @@ async def get_dashboard(
 
     receipt_count = receipt_rows[0]["cnt"] if receipt_rows else 0
 
-    # ========================================================
-    # 1️⃣ 今日收料明細（依治具分組）
-    # ========================================================
     receipt_items = db.execute_query(
         """
         SELECT mti.fixture_id,
@@ -101,7 +142,7 @@ async def get_dashboard(
     ) or []
 
     # ========================================================
-    # 2️⃣ 今日退料總數
+    # 今日退料總數
     # ========================================================
     return_rows = db.execute_query(
         """
@@ -116,9 +157,6 @@ async def get_dashboard(
 
     return_count = return_rows[0]["cnt"] if return_rows else 0
 
-    # ========================================================
-    # 2️⃣ 今日退料明細（依治具分組）
-    # ========================================================
     return_items = db.execute_query(
         """
         SELECT mti.fixture_id,
@@ -136,24 +174,24 @@ async def get_dashboard(
     ) or []
 
     # ========================================================
-    # 3️⃣ 即將更換治具
+    # 即將更換治具（從 lifecycle view 來）
     # ========================================================
-    try:
-        upcoming = db.execute_query(
-            """
-            SELECT fixture_id, fixture_name, usage_ratio
-            FROM view_upcoming_fixture_replacements
-            WHERE customer_id = %s
-              AND usage_ratio >= 0.8
-            """,
-            (customer_id,)
-        ) or []
-    except Exception:
-        upcoming = []
+    upcoming = db.execute_query(
+        """
+        SELECT fixture_id,
+               lifecycle_mode,
+               actual_value,
+               remaining_value,
+               lifecycle_status,
+               datecode
+        FROM view_lifecycle_status_v2
+        WHERE customer_id = %s
+          AND actual_value >= warning_ratio
+        ORDER BY actual_value DESC
+        """,
+        (customer_id,)
+    ) or []
 
-    # ========================================================
-    # 4️⃣ 回傳 v6 格式
-    # ========================================================
     return {
         "today_in": {
             "total": receipt_count,
