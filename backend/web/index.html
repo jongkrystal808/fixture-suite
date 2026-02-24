@@ -1000,63 +1000,50 @@
                       </div>
 
                       <!-- 新增表單 -->
-                      <div id="usageAddForm" class="hidden border rounded-2xl p-4 bg-yellow-50 space-y-3">
-                          <div class="grid md:grid-cols-6 gap-3">
+                      <div id="usageAddForm" class="hidden border rounded-2xl p-4 bg-yellow-50 space-y-4">
+
+                          <!-- ============================= -->
+                          <!-- 🔵 批量使用記錄（機種驅動） -->
+                          <!-- ============================= -->
+
+                          <div class="grid md:grid-cols-4 gap-3">
 
                             <!-- 機種 -->
-                            <div class="field">
+                            <div class="field relative">
                               <label class="text-base font-semibold">機種 ID *</label>
                               <input
                                 id="usageAddModel"
-                                class="input"
-                                placeholder="例: AWK"
+                                class="input w-full"
+                                placeholder="輸入關鍵字搜尋機種"
                                 autocomplete="off"
                               />
                             </div>
 
-                            <!-- 站點（必須選） -->
+                            <!-- 站點（可選，空=全部） -->
                             <div class="field">
-                              <label class="text-base font-semibold">站點 ID *</label>
+                              <label class="text-base font-semibold">
+                                站點（選填，空=全部站）
+                              </label>
                               <select id="usageAddStation" class="input">
-                                <option value="">請先選擇機種</option>
+                                <option value="">全部站點</option>
                               </select>
                             </div>
 
-                            <!-- 治具（只能選的 autocomplete） -->
-                            <div class="field relative">
-                              <label class="text-base font-semibold">治具 ID *</label>
-
-                              <input
-                                id="usageAddFixture"
-                                class="input w-full"
-                                placeholder="請從清單選擇治具"
-                                autocomplete="off"
-                              />
-
-                              <!-- 🔽 Autocomplete Dropdown -->
-                              <div
-                                id="usageFixtureDropdown"
-                                class="absolute left-0 right-0 z-50 mt-1 bg-white border rounded shadow hidden max-h-56 overflow-auto"
-                              ></div>
-                            </div>
-
-                            <!-- 使用次數 -->
+                            <!-- 數量 -->
                             <div class="field">
-                              <label id="usageAddCountLabel" class="text-base font-semibold">
-                                  使用值 *
-                                </label>
-                                <input
-                                  id="usageAddCount"
-                                  type="number"
-                                  class="input"
-                                  value="1"
-                                  min="1"
-                                />
+                              <label class="text-base font-semibold">產量 / 開站次數 *</label>
+                              <input
+                                id="usageAddCount"
+                                type="number"
+                                class="input"
+                                value="1"
+                                min="1"
+                              />
                             </div>
 
                             <!-- 操作人員 -->
                             <div class="field">
-                              <label class="text-base font-semibold">操作人員 *</label>
+                              <label class="text-base font-semibold">操作人員</label>
                               <input
                                 id="usageAddOperator"
                                 class="input"
@@ -1064,62 +1051,31 @@
                               />
                             </div>
 
-                            <!-- 使用時間 -->
-                            <div class="field">
-                              <label class="text-base font-semibold">使用時間 *</label>
-                              <input
-                                id="usageAddTime"
-                                type="datetime"
-                                class="input"
-                              />
-                            </div>
-
                           </div>
 
-                        <!-- Record Level -->
-                        <div class="grid md:grid-cols-6 gap-3">
-
-                          <div class="field">
-                            <label class="text-base font-semibold">記錄層級 *</label>
-                            <select id="usageAddLevel" class="input" onchange="toggleUsageSerialInputs()">
-                              <option value="fixture">治具Datecode</option>
-                              <option value="individual">治具個別序號</option>
-                              <option value="batch">治具批量序號</option>
-                            </select>
+                          <!-- 預覽按鈕 -->
+                          <div class="flex justify-end">
+                            <button class="btn btn-primary" onclick="previewUsageByModel()">
+                              加載
+                            </button>
                           </div>
 
-                             <!-- 個別記錄 -->
-                          <div id="usageSerialSingleField" class="field hidden">
-                            <label class="label-xs">序號(逗號分隔) *</label>
-                            <input id="usageAddSerials" class="input" placeholder="SN001, SN002..." />
-                          </div>
+                          <!-- ============================= -->
+                          <!-- 🔵 Preview 動態區域 -->
+                          <!-- ============================= -->
+                          <div id="usagePreviewContainer" class="mt-4"></div>
 
-                            <!-- 批量記錄 -->
-                          <div id="usageSerialBatchField" class="field hidden ">
-                           <div class="field">
-                              <label class="text-base font-semibold">序號起始 *</label>
-                              <input id="usageAddSerialStart" class="input" placeholder="SN001">
-                          </div>
-                            <div class="field">
-                               <label class="text-base font-semibold">序號結尾 *</label>
-                               <input id="usageAddSerialEnd" class="input" placeholder="SN100">
-                            </div>
+                          <!-- 底部按鈕 -->
+                          <div class="flex justify-end gap-2 mt-4">
+                            <button class="btn btn-ghost" onclick="toggleUsageAdd(false)">
+                              取消
+                            </button>
                           </div>
 
                         </div>
 
-                        <div class="field">
-                          <label class="text-base font-semibold">備註</label>
-                          <input id="usageAddNote" class="input" />
-                        </div>
 
-                        <div class="flex justify-end gap-2">
-                          <button class="btn btn-ghost" onclick="toggleUsageAdd(false)">取消</button>
-                          <button class="btn btn-primary" onclick="submitUsageLog()">提交</button>
-                        </div>
-                      </div>
-
-                        <div class="border-t border-gray-300 my-4"></div>
+                      <div class="border-t border-gray-300 my-4"></div>
 
 
                         <!-- 查詢區 -->
