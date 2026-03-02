@@ -164,53 +164,23 @@ async function initCustomerHeaderSelect() {
 
 
 /* ============================================================
- * 第一次登入：強制選 customer（若多個）
+ * 第一次登入：自動套用 customer（預設第一筆）
  * ============================================================ */
 async function ensureCustomerSelected() {
   const allowed = getAllowedCustomers();
+  const hasCurrent = !!window.currentCustomerId;
 
-  if (allowed.length === 1 && !window.currentCustomerId) {
+  // 防止沿用前一位登入者的 customer，造成錯誤略過強制選擇
+  if (hasCurrent && !allowed.includes(window.currentCustomerId)) {
+    window.currentCustomerId = null;
+    localStorage.removeItem("current_customer_id");
+  }
+
+  // 預設使用 user 可見客戶清單第一筆
+  if (allowed.length >= 1 && !window.currentCustomerId) {
     setCurrentCustomer(allowed[0]);
     return;
   }
-
-  if (allowed.length <= 1) return;
-  if (window.currentCustomerId) return;
-
-  const select = document.getElementById("customerSelect");
-  const modal = document.getElementById("customerSelectModal");
-  if (!select || !modal) return;
-
-  try {
-    const list = await api("/customers?limit=100");
-
-    select.innerHTML =
-      `<option value="" disabled selected>請選擇客戶</option>`;
-
-    list
-      .filter(c => allowed.includes(c.id))
-      .forEach(c => {
-        const opt = document.createElement("option");
-        opt.value = c.id;
-        opt.textContent = c.customer_abbr || c.id;   // ✅ 顯示名稱
-        select.appendChild(opt);
-      });
-
-    modal.showModal();
-
-  } catch (err) {
-    console.error("載入客戶失敗", err);
-  }
-}
-
-
-function confirmCustomerSelection() {
-  const select = document.getElementById("customerSelect");
-  const value = select?.value;
-  if (!value) return;
-
-  document.getElementById("customerSelectModal")?.close();
-  setCurrentCustomer(value);
 }
 
 /* ============================================================
@@ -300,5 +270,4 @@ window.onUserReady?.(() => {
  * ============================================================ */
 window.setCurrentCustomer = setCurrentCustomer;
 window.switchCustomerFromHeader = switchCustomerFromHeader;
-window.confirmCustomerSelection = confirmCustomerSelection;
 window.hideCustomerHeaderSelect = hideCustomerHeaderSelect;
