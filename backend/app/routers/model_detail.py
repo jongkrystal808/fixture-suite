@@ -91,6 +91,225 @@ def ensure_fixture(customer_id: str, fixture_id: str) -> None:
         raise HTTPException(status_code=404, detail="治具不存在")
 
 
+# --------------------------------------------------------------
+# 🔁 關聯查詢：治具 -> 機種（忽略站點）
+# --------------------------------------------------------------
+@router.get(
+    "/relations/models-by-fixture",
+    summary="依治具查可對應機種（忽略站點）"
+)
+async def list_models_by_fixture(
+    fixture_id: str = Query(...),
+    customer_id: str = Depends(get_current_customer_id),
+    user=Depends(get_current_user),
+):
+    ensure_fixture(customer_id, fixture_id)
+
+    rows = db.execute_query(
+        """
+        SELECT
+            fr.model_id AS id,
+            mm.model_name,
+            COUNT(DISTINCT fr.station_id) AS station_count
+        FROM fixture_requirements fr
+        JOIN machine_models mm
+          ON fr.customer_id = mm.customer_id
+         AND fr.model_id = mm.id
+        WHERE fr.customer_id = %s
+          AND fr.fixture_id = %s
+        GROUP BY fr.model_id, mm.model_name
+        ORDER BY fr.model_id
+        """,
+        (customer_id, fixture_id)
+    )
+
+    return {
+        "fixture_id": fixture_id,
+        "models": rows or []
+    }
+
+
+# --------------------------------------------------------------
+# 🔁 關聯查詢：機種 -> 治具（忽略站點）
+# --------------------------------------------------------------
+@router.get(
+    "/relations/fixtures-by-model",
+    summary="依機種查可對應治具（忽略站點）"
+)
+async def list_fixtures_by_model(
+    model_id: str = Query(...),
+    customer_id: str = Depends(get_current_customer_id),
+    user=Depends(get_current_user),
+):
+    ensure_model(customer_id, model_id)
+
+    rows = db.execute_query(
+        """
+        SELECT
+            fr.fixture_id AS id,
+            f.fixture_name,
+            f.fixture_type,
+            COUNT(DISTINCT fr.station_id) AS station_count
+        FROM fixture_requirements fr
+        JOIN fixtures f
+          ON fr.customer_id = f.customer_id
+         AND fr.fixture_id = f.id
+        WHERE fr.customer_id = %s
+          AND fr.model_id = %s
+        GROUP BY fr.fixture_id, f.fixture_name, f.fixture_type
+        ORDER BY fr.fixture_id
+        """,
+        (customer_id, model_id)
+    )
+
+    return {
+        "model_id": model_id,
+        "fixtures": rows or []
+    }
+
+
+# --------------------------------------------------------------
+# 🔎 關聯搜尋：同時回傳治具 + 機種（忽略站點）
+# --------------------------------------------------------------
+@router.get(
+    "/relations/search",
+    summary="同時搜尋治具與機種（含互相關聯）"
+)
+async def search_fixture_model_relations(
+    q: str = Query(default=""),
+    fixture_skip: int = Query(default=0, ge=0),
+    fixture_limit: int = Query(default=20, ge=1, le=200),
+    model_skip: int = Query(default=0, ge=0),
+    model_limit: int = Query(default=20, ge=1, le=200),
+    customer_id: str = Depends(get_current_customer_id),
+    user=Depends(get_current_user),
+):
+    keyword = (q or "").strip()
+    like = f"%{keyword}%"
+
+    fixture_filter = """
+        (
+            %s = ''
+            OR f.id LIKE %s
+            OR f.fixture_name LIKE %s
+            OR mm.id LIKE %s
+            OR mm.model_name LIKE %s
+        )
+    """
+
+    model_filter = """
+        (
+            %s = ''
+            OR mm.id LIKE %s
+            OR mm.model_name LIKE %s
+            OR f.id LIKE %s
+            OR f.fixture_name LIKE %s
+        )
+    """
+
+    fixtures_sql = f"""
+        SELECT
+            f.id,
+            f.fixture_name,
+            COALESCE(
+                GROUP_CONCAT(DISTINCT fr.model_id ORDER BY fr.model_id SEPARATOR ', '),
+                ''
+            ) AS related_models
+        FROM fixtures f
+        LEFT JOIN fixture_requirements fr
+          ON f.customer_id = fr.customer_id
+         AND f.id = fr.fixture_id
+        LEFT JOIN machine_models mm
+          ON fr.customer_id = mm.customer_id
+         AND fr.model_id = mm.id
+        WHERE f.customer_id = %s
+          AND {fixture_filter}
+        GROUP BY f.id, f.fixture_name
+        ORDER BY f.id
+        LIMIT %s OFFSET %s
+    """
+    fixtures = db.execute_query(
+        fixtures_sql,
+        (customer_id, keyword, like, like, like, like, fixture_limit, fixture_skip)
+    )
+
+    fixtures_total_sql = f"""
+        SELECT COUNT(*) AS total FROM (
+            SELECT f.id
+            FROM fixtures f
+            LEFT JOIN fixture_requirements fr
+              ON f.customer_id = fr.customer_id
+             AND f.id = fr.fixture_id
+            LEFT JOIN machine_models mm
+              ON fr.customer_id = mm.customer_id
+             AND fr.model_id = mm.id
+            WHERE f.customer_id = %s
+              AND {fixture_filter}
+            GROUP BY f.id
+        ) t
+    """
+    fixtures_total_row = db.execute_query(
+        fixtures_total_sql,
+        (customer_id, keyword, like, like, like, like)
+    )
+    fixtures_total = (fixtures_total_row[0]["total"] if fixtures_total_row else 0) or 0
+
+    models_sql = f"""
+        SELECT
+            mm.id,
+            mm.model_name,
+            COALESCE(
+                GROUP_CONCAT(DISTINCT fr.fixture_id ORDER BY fr.fixture_id SEPARATOR ', '),
+                ''
+            ) AS related_fixtures
+        FROM machine_models mm
+        LEFT JOIN fixture_requirements fr
+          ON mm.customer_id = fr.customer_id
+         AND mm.id = fr.model_id
+        LEFT JOIN fixtures f
+          ON fr.customer_id = f.customer_id
+         AND fr.fixture_id = f.id
+        WHERE mm.customer_id = %s
+          AND {model_filter}
+        GROUP BY mm.id, mm.model_name
+        ORDER BY mm.id
+        LIMIT %s OFFSET %s
+    """
+    models = db.execute_query(
+        models_sql,
+        (customer_id, keyword, like, like, like, like, model_limit, model_skip)
+    )
+
+    models_total_sql = f"""
+        SELECT COUNT(*) AS total FROM (
+            SELECT mm.id
+            FROM machine_models mm
+            LEFT JOIN fixture_requirements fr
+              ON mm.customer_id = fr.customer_id
+             AND mm.id = fr.model_id
+            LEFT JOIN fixtures f
+              ON fr.customer_id = f.customer_id
+             AND fr.fixture_id = f.id
+            WHERE mm.customer_id = %s
+              AND {model_filter}
+            GROUP BY mm.id
+        ) t
+    """
+    models_total_row = db.execute_query(
+        models_total_sql,
+        (customer_id, keyword, like, like, like, like)
+    )
+    models_total = (models_total_row[0]["total"] if models_total_row else 0) or 0
+
+    return {
+        "keyword": keyword,
+        "fixtures": fixtures or [],
+        "fixtures_total": fixtures_total,
+        "models": models or [],
+        "models_total": models_total,
+    }
+
+
 
 
 

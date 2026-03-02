@@ -93,6 +93,8 @@ def get_monthly_trend(
     user=Depends(get_current_user),
     customer_id=Depends(get_current_customer_id),
 ):
+    # 依 init_database.sql：view_lifecycle_status_v1 應有 scrapped_at
+    # 若資料庫實際 view 版本不一致，避免直接 500，降級回 []。
     sql = """
         SELECT
             DATE_FORMAT(scrapped_at, '%Y-%m') AS month,
@@ -105,8 +107,11 @@ def get_monthly_trend(
         ORDER BY month
     """
 
-    rows = db.execute_query(sql, (customer_id,))
-    return rows
+    try:
+        rows = db.execute_query(sql, (customer_id,))
+        return rows or []
+    except Exception:
+        return []
 
 
 # ============================================================

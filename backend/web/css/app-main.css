@@ -68,6 +68,113 @@ button {
   box-shadow:0 0 0 2px rgba(17,24,39,0.25) inset;
 }
 
+.layout-shell {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.sidebar {
+  position: sticky;
+  top: 5.5rem;
+}
+
+.sidebar.card {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: .25rem;
+}
+
+.sidebar-tab {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: .375rem;
+}
+
+.sidebar-main {
+  border: 0;
+  background: transparent;
+  border-radius: .75rem;
+  font-size: 1.05rem;
+  font-weight: 500;
+  color: #2b2f36;
+  padding: .55rem .8rem;
+}
+
+.sidebar-main:hover {
+  background: transparent;
+}
+
+.sidebar-main::after {
+  content: "›";
+  margin-left: auto;
+  font-size: 1rem;
+  opacity: .7;
+}
+
+.sidebar .sidebar-main.tab-active {
+  background: transparent;
+  color: #111827;
+  box-shadow: none;
+  font-weight: 500;
+}
+
+.sidebar .sidebar-main.tab-active::after {
+  content: "⌄";
+}
+
+.sidebar-submenu {
+  display: flex;
+  flex-direction: column;
+  gap: .35rem;
+  padding: .15rem 0 .5rem 1.6rem;
+}
+
+.sidebar-subtab {
+  width: 100%;
+  justify-content: flex-start;
+  border: 0;
+  background: transparent;
+  font-size: 1.05rem;
+  font-weight: 500;
+  color: #2f343b;
+  padding: .35rem 0;
+  border-radius: 0;
+  transition: all .15s ease;
+}
+
+.sidebar-subtab:hover {
+  color: #111827;
+  background: transparent;
+}
+
+.sidebar .sidebar-subtab.subtab-active {
+  border: 0;
+  background: transparent;
+  color: #111827;
+  font-weight: 600;
+  border-radius: 0;
+  padding: .35rem 0;
+}
+
+@media (max-width: 1024px) {
+  .layout-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: static;
+    display: block;
+  }
+}
+
 .section-title {
   font-size:1rem;
   font-weight:600;
@@ -481,15 +588,10 @@ dialog.inventory-modal .modal-body {
 
 .home-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 24px;
-  padding: 24px;
-}
-
-.home-column {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+  padding: 8px 0;
+  align-items: stretch;
 }
 
 .home-card {
@@ -497,7 +599,7 @@ dialog.inventory-modal .modal-body {
   border-radius: 16px;
   padding: 24px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-  min-height: 160px;
+  min-height: 150px;
   transition: 0.2s ease;
 }
 
@@ -544,4 +646,24 @@ dialog.inventory-modal .modal-body {
   border-color: #f59e0b;
   transform: translateY(-3px);
   box-shadow: 0 10px 20px rgba(245,158,11,0.15);
+}
+
+/* ================================
+ * Sidebar Index: text-only active state
+ * ================================ */
+.sidebar .sidebar-main,
+.sidebar .sidebar-subtab {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.sidebar .sidebar-main.tab-active,
+.sidebar .sidebar-subtab.subtab-active {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  color: #111827 !important;
+  font-weight: 700 !important;
 }

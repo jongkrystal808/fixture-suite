@@ -259,6 +259,8 @@ app.include_router(transaction_import_router, prefix="/api/v2")
 # 📊 統計（Analytics / Dashboard）
 # ============================================================
 app.include_router(stats_router, prefix="/api/v2")
+app.include_router(lifecycle_router, prefix="/api/v2")
+app.include_router(lifecycle_analysis_router, prefix="/api/v2")
 
 # ==================== 根路由 ====================
 

@@ -246,7 +246,7 @@ function renderPreview(data) {
   // ===== 確認按鈕 =====
   const btn = document.createElement("button");
   btn.className = "btn btn-primary mt-6";
-  btn.textContent = "確認寫入使用紀錄";
+  btn.textContent = "送出";
   btn.onclick = submitPreviewUsage;
 
   previewBox.appendChild(btn);

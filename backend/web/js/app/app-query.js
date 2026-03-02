@@ -9,99 +9,281 @@
  * ============================================================ */
 let fixtureQueryPage = 1;
 const fixtureQueryPageSize = 20;
+let modelQueryPage = 1;
+const modelQueryPageSize = fixtureQueryPageSize;
 let fixtureQueryPager = null;
 let modelQueryPager = null;
+let unifiedQueryTimer = null;
+let lastFixtureQueryRows = [];
+let lastFixtureQueryTotal = 0;
+let hasLoadedFixtureQuery = false;
+let lastModelQueryRows = [];
+let lastModelQueryTotal = 0;
+let hasLoadedModelQuery = false;
+let relationFilterState = null;
 
-let fixtureStorageOptionsLoaded = false;
-
-
-/* ============================================================
- * 🔵 治具查詢 Fixtures
- * ============================================================ */
-
-let fixturesQueryTimer = null;
-function debounceLoadFixtures() {
-  clearTimeout(fixturesQueryTimer);
-  fixturesQueryTimer = setTimeout(loadFixturesQuery, 250);
+function getUnifiedQueryKeyword() {
+  return (document.getElementById("unifiedSearchKeyword")?.value || "").trim();
 }
 
-async function loadFixtureStorageOptions() {
-  if (!window.currentCustomerId) return;
-
-  const select = document.getElementById("fixtureStorageSelect");
-  if (!select) return;
-
-  if (fixtureStorageOptionsLoaded) return;
-
-  try {
-    const list = await apiListFixtureStorages();
-
-    select.innerHTML = `<option value="">全部</option>`;
-
-    list.forEach(r => {
-      const s = typeof r === "string" ? r : r.storage_location;
-      if (!s) return;
-
-      const opt = document.createElement("option");
-      opt.value = s;
-      opt.textContent = s;
-      select.appendChild(opt);
-    });
-
-    fixtureStorageOptionsLoaded = true;
-
-  } catch (err) {
-    console.error("[query] loadFixtureStorageOptions failed:", err);
-  }
+function escAttr(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/'/g, "&#39;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
+function setQueryAreaVisibility(mode = "both") {
+  const fixtureArea = document.getElementById("fixtureQueryArea");
+  const modelArea = document.getElementById("modelQueryArea");
+  if (!fixtureArea || !modelArea) return;
 
-async function loadFixturesQuery() {
-  // v4.x：一定要有 customer context
-  if (!window.currentCustomerId) return;
-
-  const searchEl = document.getElementById("fixtureSearch");
-  const tbody = document.getElementById("fixtureTable");
-
-  if (!searchEl || !tbody) {
-    console.warn("[query] fixture query UI not ready");
+  if (mode === "fixture") {
+    fixtureArea.classList.remove("hidden");
+    modelArea.classList.add("hidden");
     return;
   }
 
-  const keyword = searchEl.value.trim();
-  const storage =
-  document.getElementById("fixtureStorageSelect")?.value || "";
+  if (mode === "model") {
+    modelArea.classList.remove("hidden");
+    fixtureArea.classList.add("hidden");
+    return;
+  }
 
+  fixtureArea.classList.remove("hidden");
+  modelArea.classList.remove("hidden");
+}
 
-  const params = {
+function includesKeyword(value, keyword) {
+  return String(value || "").toLowerCase().includes(keyword);
+}
+
+function resolveSearchVisibility(keyword, fixtures, models) {
+  const kw = String(keyword || "").trim().toLowerCase();
+  if (!kw) return "both";
+
+  const fixtureDirectHit = (fixtures || []).some((f) =>
+    includesKeyword(f.fixture_id ?? f.id, kw) ||
+    includesKeyword(f.fixture_name, kw)
+  );
+
+  const modelDirectHit = (models || []).some((m) =>
+    includesKeyword(m.model_id ?? m.id, kw) ||
+    includesKeyword(m.model_name, kw)
+  );
+
+  if (fixtureDirectHit && !modelDirectHit) return "fixture";
+  if (modelDirectHit && !fixtureDirectHit) return "model";
+  return "both";
+}
+
+function renderRelationFilterBar() {
+  const bar = document.getElementById("relationFilterBar");
+  const text = document.getElementById("relationFilterText");
+  if (!bar || !text) return;
+
+  if (!relationFilterState) {
+    bar.classList.add("hidden");
+    text.textContent = "";
+    return;
+  }
+
+  if (relationFilterState.type === "fixture") {
+    text.textContent = `關聯模式：治具 ${relationFilterState.anchorId} -> 所有關聯機種`;
+  } else {
+    text.textContent = `關聯模式：機種 ${relationFilterState.anchorId} -> 所有關聯治具`;
+  }
+  bar.classList.remove("hidden");
+}
+
+function applyRelationFilterView() {
+  if (!relationFilterState) return false;
+  setQueryAreaVisibility("both");
+
+  if (relationFilterState.type === "fixture") {
+    renderFixturesTable([relationFilterState.fixtureRow]);
+    renderModelsQueryTable(relationFilterState.relatedModels || []);
+    if (fixtureQueryPager) fixtureQueryPager.render(1);
+    if (modelQueryPager) modelQueryPager.render(1);
+  } else {
+    renderFixturesTable(relationFilterState.relatedFixtures || []);
+    renderModelsQueryTable([relationFilterState.modelRow]);
+    if (fixtureQueryPager) fixtureQueryPager.render(1);
+    if (modelQueryPager) modelQueryPager.render(1);
+  }
+  renderRelationFilterBar();
+  return true;
+}
+
+async function enrichFixturesWithRelatedModels(fixtures = []) {
+  if (typeof apiListModelsByFixture !== "function") return fixtures;
+
+  const enriched = await Promise.all(
+    fixtures.map(async (f) => {
+      const fixtureId = f.fixture_id ?? f.id;
+      if (!fixtureId) return f;
+      try {
+        const rel = await apiListModelsByFixture(fixtureId);
+        const modelIds = (rel?.models || [])
+          .map((m) => m?.id)
+          .filter(Boolean)
+          .join(", ");
+        return { ...f, related_models: modelIds || "-" };
+      } catch (_) {
+        return { ...f, related_models: f.related_models || "-" };
+      }
+    })
+  );
+
+  return enriched;
+}
+
+async function enrichModelsWithRelatedFixtures(models = []) {
+  if (typeof apiListFixturesByModel !== "function") return models;
+
+  const enriched = await Promise.all(
+    models.map(async (m) => {
+      const modelId = m.model_id ?? m.id;
+      if (!modelId) return m;
+      try {
+        const rel = await apiListFixturesByModel(modelId);
+        const fixtureIds = (rel?.fixtures || [])
+          .map((f) => f?.id)
+          .filter(Boolean)
+          .join(", ");
+        return { ...m, related_fixtures: fixtureIds || "-" };
+      } catch (_) {
+        return { ...m, related_fixtures: m.related_fixtures || "-" };
+      }
+    })
+  );
+
+  return enriched;
+}
+
+async function loadRelationQueryTablesFallback({ refreshFixtures, refreshModels }) {
+  const keyword = getUnifiedQueryKeyword();
+  let fixtureRows = lastFixtureQueryRows;
+  let fixtureTotal = lastFixtureQueryTotal;
+  if (refreshFixtures) {
+    const fixtureParams = {
       skip: (fixtureQueryPage - 1) * fixtureQueryPageSize,
       limit: fixtureQueryPageSize,
     };
+    if (keyword) fixtureParams.search = keyword;
+    const fixtureData = await apiListFixtures(fixtureParams);
+    const fixtureRowsRaw = fixtureData?.fixtures || [];
+    fixtureRows = await enrichFixturesWithRelatedModels(fixtureRowsRaw);
+    fixtureTotal = Number(fixtureData?.total) || 0;
+  }
 
-    console.log("[fixture query]", {
-      page: fixtureQueryPage,
-      skip: params.skip,
-      limit: params.limit
-    });
+  let modelRows = lastModelQueryRows;
+  let modelTotal = lastModelQueryTotal;
+  if (refreshModels) {
+    const modelParams = {
+      search: keyword,
+      skip: (modelQueryPage - 1) * modelQueryPageSize,
+      limit: modelQueryPageSize,
+    };
+    const modelData = await apiListMachineModels(modelParams);
+    const modelRowsRaw = modelData?.items || modelData?.models || modelData || [];
+    modelRows = await enrichModelsWithRelatedFixtures(modelRowsRaw);
+    modelTotal = Number(modelData?.total) || modelRows.length;
+  }
 
+  return {
+    fixtures: fixtureRows,
+    fixtures_total: fixtureTotal,
+    models: modelRows,
+    models_total: modelTotal,
+  };
+}
 
-  if (keyword) params.search = keyword;
-  if (storage) params.storage = storage;
+async function loadRelationQueryTables({ refreshFixtures = true, refreshModels = true } = {}) {
+  if (!window.currentCustomerId) return;
+  if (relationFilterState) {
+    applyRelationFilterView();
+    return;
+  }
+  if (!refreshFixtures && !hasLoadedFixtureQuery) {
+    refreshFixtures = true;
+  }
+  if (!refreshModels && !hasLoadedModelQuery) {
+    refreshModels = true;
+  }
 
   try {
-    const data = await apiListFixtures(params);
-    renderFixturesTable(data?.fixtures || []);
-
-    if (fixtureQueryPager) {
-      fixtureQueryPager.render(data?.total || 0);
+    let data;
+    try {
+      data = await apiSearchFixtureModelRelations({
+        q: getUnifiedQueryKeyword(),
+        fixture_skip: refreshFixtures ? (fixtureQueryPage - 1) * fixtureQueryPageSize : 0,
+        fixture_limit: refreshFixtures ? fixtureQueryPageSize : 1,
+        model_skip: refreshModels ? (modelQueryPage - 1) * modelQueryPageSize : 0,
+        model_limit: refreshModels ? modelQueryPageSize : 1,
+      });
+    } catch (err) {
+      if (err?.status !== 404) throw err;
+      console.warn("[query] /relations/search not found, fallback to legacy APIs");
+      data = await loadRelationQueryTablesFallback({ refreshFixtures, refreshModels });
     }
 
+    if (refreshFixtures) {
+      lastFixtureQueryRows = data?.fixtures || [];
+      lastFixtureQueryTotal = Number(data?.fixtures_total) || 0;
+      hasLoadedFixtureQuery = true;
+      renderFixturesTable(lastFixtureQueryRows);
+      if (fixtureQueryPager) fixtureQueryPager.render(lastFixtureQueryTotal);
+    } else {
+      renderFixturesTable(lastFixtureQueryRows);
+    }
+
+    if (refreshModels) {
+      lastModelQueryRows = data?.models || [];
+      lastModelQueryTotal = Number(data?.models_total) || 0;
+      hasLoadedModelQuery = true;
+      renderModelsQueryTable(lastModelQueryRows);
+      if (modelQueryPager) modelQueryPager.render(lastModelQueryTotal);
+    } else {
+      renderModelsQueryTable(lastModelQueryRows);
+    }
+
+    setQueryAreaVisibility(
+      resolveSearchVisibility(getUnifiedQueryKeyword(), lastFixtureQueryRows || [], lastModelQueryRows || [])
+    );
+    renderRelationFilterBar();
   } catch (err) {
-    console.error("[query] loadFixturesQuery failed:", err);
-    renderFixturesTable([]);
+    console.error("[query] loadRelationQueryTables failed:", err);
+    if (refreshFixtures) {
+      lastFixtureQueryRows = [];
+      lastFixtureQueryTotal = 0;
+      hasLoadedFixtureQuery = false;
+      renderFixturesTable([]);
+      if (fixtureQueryPager) fixtureQueryPager.render(0);
+    }
+    if (refreshModels) {
+      lastModelQueryRows = [];
+      lastModelQueryTotal = 0;
+      hasLoadedModelQuery = false;
+      renderModelsQueryTable([]);
+      if (modelQueryPager) modelQueryPager.render(0);
+    }
+    setQueryAreaVisibility("both");
+    renderRelationFilterBar();
   }
 }
 
+async function loadFixturesQuery() {
+  return loadRelationQueryTables({ refreshFixtures: true, refreshModels: false });
+}
+window.loadFixturesQuery = loadFixturesQuery;
+
+async function loadModelsQuery() {
+  return loadRelationQueryTables({ refreshFixtures: false, refreshModels: true });
+}
+window.loadModelsQuery = loadModelsQuery;
 
 function renderFixturesTable(rows) {
   const tbody = document.getElementById("fixtureTable");
@@ -112,48 +294,33 @@ function renderFixturesTable(rows) {
   if (!Array.isArray(rows) || rows.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="8" class="text-center text-gray-400 py-3">
-          沒有資料
-        </td>
+        <td colspan="3" class="text-center text-gray-400 py-3">沒有資料</td>
       </tr>`;
     return;
   }
 
   for (const f of rows) {
-    const purchased = f.self_purchased_qty ?? 0;
-    const supplied  = f.customer_supplied_qty ?? 0;
-    const available = f.in_stock_qty ?? 0;
-
-    const fid = f.fixture_id ?? f.id ?? "-";
-
+    const fixtureId = f.fixture_id ?? f.id ?? "-";
+    const fixtureName = f.fixture_name || "-";
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td class="py-2 px-4">
         <span class="text-indigo-600 underline cursor-pointer"
-              onclick="openFixtureDetail('${fid}')">
-          ${fid}
+              onclick="openFixtureDetail('${fixtureId}')">
+          ${fixtureId}
         </span>
       </td>
-
       <td class="py-2 px-4">${f.fixture_name || "-"}</td>
-      <td class="py-2 px-4">${f.fixture_type || "-"}</td>
-
-      <!-- ⭐ 統一庫存顯示 -->
       <td class="py-2 px-4">
-        ${purchased} / ${supplied} / ${available}
+        <button class="btn btn-ghost text-xs"
+                onclick="filterRelationsByFixture('${escAttr(fixtureId)}','${escAttr(fixtureName)}')">
+          關聯機種
+        </button>
       </td>
-
-      <td class="py-2 px-4">${f.storage_location || "-"}</td>
-      <td class="py-2 px-4">${f.owner_name || "-"}</td>
-      <td class="py-2 px-4">${f.note || "-"}</td>
     `;
-
     tbody.appendChild(tr);
   }
 }
-
-window.loadFixturesQuery = loadFixturesQuery;
-window.debounceLoadFixtures = debounceLoadFixtures;
 
 /* ============================================================
  * 🟦 Fixture Detail Drawer
@@ -278,47 +445,6 @@ async function openFixtureDetail(fixtureId) {
 window.openFixtureDetail = openFixtureDetail;
 window.closeFixtureDetail = closeFixtureDetail;
 
-
-
-/* ============================================================
- * 🟩 機種查詢 Models(v4.x：不帶 customer_id)
- * ============================================================ */
-
-let modelQueryPage = 1;
-const modelQueryPageSize = 50;
-
-async function loadModelsQuery() {
-  if (!window.currentCustomerId) return;
-
-  const keyword =
-    document.getElementById("modelSearch")?.value.trim() || "";
-
-  const params = {
-    search: keyword,
-    skip: (modelQueryPage - 1) * modelQueryPageSize,
-    limit: modelQueryPageSize,
-  };
-
-  try {
-    const data = await apiListMachineModels(params);
-
-    // 相容：後端可能回 items/models/array
-    const list = data?.items || data?.models || data || [];
-
-    renderModelsQueryTable(list);
-
-    if (modelQueryPager) {
-      modelQueryPager.render(data?.total || 0);
-    }
-
-
-  } catch (err) {
-    console.error("loadModelsQuery() failed:", err);
-    renderModelsQueryTable([]);
-  }
-}
-window.loadModelsQuery = loadModelsQuery;
-
 function renderModelsQueryTable(list) {
   const tbody = document.getElementById("modelTable");
   if (!tbody) return;
@@ -336,23 +462,89 @@ function renderModelsQueryTable(list) {
   }
 
   list.forEach((m) => {
+    const modelId = m.model_id ?? m.id ?? "-";
+    const modelName = m.model_name || "-";
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <!-- ✅ 機種編號可點擊 -->
       <td class="py-2 px-4">
         <span class="text-indigo-600 underline cursor-pointer"
-              onclick="openModelDetail('${m.id}')">
-          ${m.id}
+              onclick="openModelDetail('${modelId}')">
+          ${modelId}
         </span>
       </td>
 
       <td class="py-2 px-4">${m.model_name || "-"}</td>
-      <td class="py-2 px-4">${m.note || "-"}</td>
+      <td class="py-2 px-4">
+        <button class="btn btn-ghost text-xs"
+                onclick="filterRelationsByModel('${escAttr(modelId)}','${escAttr(modelName)}')">
+          關聯治具
+        </button>
+      </td>
     `;
     tbody.appendChild(tr);
   });
 }
 
+async function filterRelationsByFixture(fixtureId, fixtureName) {
+  if (!fixtureId) return;
+  try {
+    const res = await apiListModelsByFixture(fixtureId);
+    const models = Array.isArray(res?.models) ? res.models : [];
+    const relatedModelIds = models.map(m => m?.id).filter(Boolean).join(", ");
+    relationFilterState = {
+      type: "fixture",
+      anchorId: fixtureId,
+      fixtureRow: {
+        id: fixtureId,
+        fixture_name: fixtureName || fixtureId,
+        related_models: relatedModelIds || "-",
+      },
+      relatedModels: models,
+    };
+    fixtureQueryPage = 1;
+    modelQueryPage = 1;
+    applyRelationFilterView();
+  } catch (err) {
+    console.error("filterRelationsByFixture failed:", err);
+    toast?.("關聯機種查詢失敗", "error");
+  }
+}
+window.filterRelationsByFixture = filterRelationsByFixture;
+
+async function filterRelationsByModel(modelId, modelName) {
+  if (!modelId) return;
+  try {
+    const res = await apiListFixturesByModel(modelId);
+    const fixtures = Array.isArray(res?.fixtures) ? res.fixtures : [];
+    const relatedFixtureIds = fixtures.map(f => f?.id).filter(Boolean).join(", ");
+    relationFilterState = {
+      type: "model",
+      anchorId: modelId,
+      modelRow: {
+        id: modelId,
+        model_name: modelName || modelId,
+        related_fixtures: relatedFixtureIds || "-",
+      },
+      relatedFixtures: fixtures,
+    };
+    fixtureQueryPage = 1;
+    modelQueryPage = 1;
+    applyRelationFilterView();
+  } catch (err) {
+    console.error("filterRelationsByModel failed:", err);
+    toast?.("關聯治具查詢失敗", "error");
+  }
+}
+window.filterRelationsByModel = filterRelationsByModel;
+
+function clearRelationFilter() {
+  relationFilterState = null;
+  fixtureQueryPage = 1;
+  modelQueryPage = 1;
+  setQueryAreaVisibility("both");
+  unifiedQuerySearch();
+}
+window.clearRelationFilter = clearRelationFilter;
 
 /* ============================================================
  * v4.x：Query 模組初始化(等 customer ready)
@@ -360,20 +552,21 @@ function renderModelsQueryTable(list) {
 
 document.addEventListener("DOMContentLoaded", () => {
   fixtureQueryPager = createPagination({
-  getPage: () => fixtureQueryPage,
-  setPage: (v) => {
-    fixtureQueryPage = v;
-  },
-  getPageSize: () => fixtureQueryPageSize,
-  onPageChange: () => {
-    loadFixturesQuery();
-  },
-  els: {
-    pageNow: document.getElementById("fixturePageNow"),
-    pageMax: document.getElementById("fixturePageMax"),
-  }
-});
-    modelQueryPager = createPagination({
+    getPage: () => fixtureQueryPage,
+    setPage: (v) => {
+      fixtureQueryPage = v;
+    },
+    getPageSize: () => fixtureQueryPageSize,
+    onPageChange: () => {
+      loadFixturesQuery();
+    },
+    els: {
+      pageNow: document.getElementById("fixturePageNow"),
+      pageMax: document.getElementById("fixturePageMax"),
+    }
+  });
+  window.fixtureQueryPager = fixtureQueryPager;
+  modelQueryPager = createPagination({
     getPage: () => modelQueryPage,
     setPage: (v) => {
       modelQueryPage = v;
@@ -387,15 +580,9 @@ document.addEventListener("DOMContentLoaded", () => {
       pageMax: document.getElementById("modelPageMax"),
     }
   });
+  window.modelQueryPager = modelQueryPager;
 
-
-
-  // ⭐⭐⭐ 關鍵補這段
-  const type = document.getElementById("queryType")?.value;
-  if (type === "fixture" && window.currentCustomerId) {
-    loadFixtureStorageOptions();
-    loadFixturesQuery();
-  }
+  if (window.currentCustomerId) unifiedQuerySearch();
 });
 
 
@@ -409,33 +596,31 @@ document.addEventListener("DOMContentLoaded", () => {
  * - 切換時重置分頁
  * ============================================================ */
 function switchQueryType() {
-  const type = document.getElementById("queryType")?.value;
-  if (!type) return;
-
-  const fixtureArea = document.getElementById("fixtureQueryArea");
-  const modelArea = document.getElementById("modelQueryArea");
-  if (!fixtureArea || !modelArea) return;
   if (!window.currentCustomerId) return;
-
-  if (type === "fixture") {
-    fixtureArea.classList.remove("hidden");
-    modelArea.classList.add("hidden");
-
-    // ✅ 正確、穩定的時機
-    loadFixtureStorageOptions();
-
-    fixtureQueryPage = 1;
-    loadFixturesQuery();
-  } else {
-    modelArea.classList.remove("hidden");
-    fixtureArea.classList.add("hidden");
-
-    modelQueryPage = 1;
-    loadModelsQuery();
-  }
+  relationFilterState = null;
+  fixtureQueryPage = 1;
+  modelQueryPage = 1;
+  setQueryAreaVisibility("both");
+  loadRelationQueryTables({ refreshFixtures: true, refreshModels: true });
 }
 
 window.switchQueryType = switchQueryType;
+
+function unifiedQuerySearch() {
+  if (!window.currentCustomerId) return;
+  relationFilterState = null;
+  fixtureQueryPage = 1;
+  modelQueryPage = 1;
+  setQueryAreaVisibility("both");
+  loadRelationQueryTables({ refreshFixtures: true, refreshModels: true });
+}
+window.unifiedQuerySearch = unifiedQuerySearch;
+
+function debounceUnifiedQuerySearch() {
+  clearTimeout(unifiedQueryTimer);
+  unifiedQueryTimer = setTimeout(() => unifiedQuerySearch(), 250);
+}
+window.debounceUnifiedQuerySearch = debounceUnifiedQuerySearch;
 
 
 /* ============================================================

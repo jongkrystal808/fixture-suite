@@ -23,6 +23,7 @@ async function loadDashboard() {
   try {
     const data = await apiGetDashboardStats();
      console.log("DASHBOARD DATA:", data);
+    loadHomeLifecycleSummary();
 
     /* ===============================
      * 1️⃣ 今日收料
@@ -104,6 +105,32 @@ async function loadDashboard() {
   } catch (err) {
     console.error("[dashboard] load failed", err);
     toast("Dashboard 載入失敗", "error");
+  }
+}
+
+async function loadHomeLifecycleSummary() {
+  try {
+    const overview = await api("/lifecycle/overview");
+    const normal = Number(overview?.normal || 0);
+    const warning = Number(overview?.warning || 0);
+    const expired = Number(overview?.expired || 0);
+    const premature = Number(overview?.premature_failure || 0);
+    const total = normal + warning + expired + premature;
+
+    const normalPct = total ? Math.round((normal / total) * 100) : 0;
+    const warningPct = total ? Math.round((warning / total) * 100) : 0;
+    const dangerPct = total ? Math.round(((expired + premature) / total) * 100) : 0;
+
+    const setText = (id, value) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = value;
+    };
+
+    setText("homeLifeNormalPct", `${normalPct}%`);
+    setText("homeLifeWarningPct", `${warningPct}%`);
+    setText("homeLifeDangerPct", `${dangerPct}%`);
+  } catch (e) {
+    console.warn("[dashboard] lifecycle summary failed", e);
   }
 }
 

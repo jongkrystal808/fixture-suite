@@ -1,29 +1,27 @@
 /**
- * 更換記錄前端控制 (v4.x PATCHED, aligned with app-usage)
+ * 更換記錄前端控制 (v6 COMPLETE FINAL)
  * -----------------------------------------------------------
- * 對齊原則：
- * - customer 由 header/context 決定
- * - record_level：fixture / individual / batch（UI）→ fixture / serial（DB）
- * - individual / batch 僅影響 serial_number 展開
- * - replacement = event（不計數）
+ * 完全對齊 sp_fixture_replacement_master_v3
+ *
+ * 規則：
+ * - serial → 必須 serial_number
+ * - fixture → 必須 scrap_qty
+ * - lifecycle_mode=fixture → 必須 datecode
+ * - replacement = event（不影響 usage）
  */
 
-const repFxInput      = document.getElementById("replaceAddFixture");
-const repLevelSelect  = document.getElementById("replaceAddLevel");
-
-const repSerialsInput = document.getElementById("replaceAddSerials");
-const repBatchStart   = document.getElementById("replaceAddSerialStart");
-const repBatchEnd     = document.getElementById("replaceAddSerialEnd");
-
-const repOperatorInput= document.getElementById("replaceAddExecutor");
-const repDateInput    = document.getElementById("replaceAddDate");
-const repNoteInput    = document.getElementById("replaceAddNote");
-
-const repTableBody    = document.getElementById("replaceTable");
-
+const repFxInput       = document.getElementById("replaceAddFixture");
+const repLevelSelect   = document.getElementById("replaceAddLevel");
+const repSerialsInput  = document.getElementById("replaceAddSerials");
+const repOperatorInput = document.getElementById("replaceAddExecutor");
+const repDateInput     = document.getElementById("replaceAddDate");
+const repNoteInput     = document.getElementById("replaceAddNote");
+const repTableBody     = document.getElementById("replaceTable");
+let currentLifecycleMode = null;
 let repPage = 1;
 const repPageSize = 20;
 
+/* ============================================================ */
 
 function fmtDate(v) {
   if (!v) return "-";
@@ -32,7 +30,10 @@ function fmtDate(v) {
   return d.toISOString().slice(0, 10);
 }
 
-// 🔵 預設：登入者 + 今天
+/* ============================================================ */
+/* 預設登入者 + 今天 */
+/* ============================================================ */
+
 function initReplacementDefaults() {
   if (repOperatorInput && !repOperatorInput.value) {
     repOperatorInput.value =
@@ -47,23 +48,37 @@ function initReplacementDefaults() {
   }
 }
 
+/* ============================================================ */
+/* 顯示控制 */
+/* ============================================================ */
 
 function toggleReplacementSerialInputs() {
-  const mode = repLevelSelect?.value;
+  const level = repLevelSelect?.value;
 
+  repFxInput?.addEventListener("blur", detectFixtureLifecycle);
   document
     .getElementById("replaceSerialSingleField")
-    ?.classList.toggle("hidden", mode !== "individual");
+    ?.classList.toggle("hidden", level !== "serial");
 
   document
-    .getElementById("replaceSerialBatchField")
-    ?.classList.toggle("hidden", mode !== "batch");
+    .getElementById("replaceScrapQtyField")
+    ?.classList.toggle("hidden", level !== "fixture");
+
+  document
+    .getElementById("replaceDatecodeField")
+    ?.classList.toggle("hidden", level !== "fixture");
 }
 
 repLevelSelect?.addEventListener("change", toggleReplacementSerialInputs);
+document
+  .getElementById("replaceAddEventType")
+  ?.addEventListener("change", toggleReplacementSerialInputs);
+
 toggleReplacementSerialInputs();
 
-
+/* ============================================================ */
+/* 新增更換記錄 */
+/* ============================================================ */
 
 async function submitReplacementLog() {
   if (!window.currentCustomerId) {
@@ -75,68 +90,65 @@ async function submitReplacementLog() {
     return toast("請輸入治具 ID", "warning");
   }
 
-  const uiLevel = repLevelSelect?.value || "fixture";
+  const recordLevel = repLevelSelect?.value || "fixture";
+  const eventType   = document.getElementById("replaceAddEventType")?.value;
+
+  if (!["serial", "fixture"].includes(recordLevel)) {
+    return toast("record_level 錯誤", "warning");
+  }
+
+  if (!["scrap", "maintenance"].includes(eventType)) {
+    return toast("event_type 錯誤", "warning");
+  }
 
   const payload = {
     fixture_id: fixtureId,
-
-    // ⭐ DB 只吃 fixture / serial
-    record_level: uiLevel,
-
+    record_level: recordLevel,
+    event_type: eventType,
     operator:
       (repOperatorInput?.value || "").trim() ||
-      window.currentUserName ||
-      window.currentUsername ||
       window.currentUser?.username ||
       "",
-
-    // ⭐ 對齊 schema：occurred_at
-    occurred_at: repDateInput?.value || new Date().toISOString().slice(0, 10),
-
     note: (repNoteInput?.value || "").trim() || null,
   };
 
-  // -----------------------------
-  // individual
-  // -----------------------------
-  if (uiLevel === "individual") {
-    const serials = parseIndividualSerials(repSerialsInput?.value || "");
-    if (!serials.length) {
+  /* -----------------------------
+     SERIAL 模式
+  ----------------------------- */
+  if (recordLevel === "serial") {
+    const sn = repSerialsInput?.value.trim();
+    if (!sn) {
       return toast("請輸入序號", "warning");
     }
-
-    // 🔥 簡單前端驗證（避免空白或奇怪格式）
-    if (serials.some(s => s.length < 2)) {
-      return toast("序號格式異常", "warning");
-    }
-
-    payload.serial_number = serials.join(",");
-
+    payload.serial_number = sn;
   }
 
-  // -----------------------------
-  // batch
-  // -----------------------------
-  if (uiLevel === "batch") {
-    const start = repBatchStart?.value || "";
-    const end   = repBatchEnd?.value || "";
+  /* -----------------------------
+     FIXTURE 模式
+  ----------------------------- */
+  if (recordLevel === "fixture") {
 
-    try {
-      expandBatchSerials(start, end); // 只驗證格式
-    } catch (e) {
-      return toast(e.message, "error");
-    }
-    if (start.length < 2 || end.length < 2) {
-      return toast("批量序號格式異常", "warning");
+    const qty = parseInt(
+      document.getElementById("replaceAddScrapQty")?.value,
+      10
+    );
+
+    if (!qty || qty <= 0) {
+      return toast("請輸入正確數量", "warning");
     }
 
-    // ⭐ event log：用描述字串即可
-        payload.serial_start = start;
-        payload.serial_end   = end;
+    payload.scrap_qty = qty;
+
+    const datecode = document
+      .getElementById("replaceAddDatecode")
+      ?.value.trim();
+
+    if (!datecode) {
+      return toast("請輸入 datecode", "warning");
+    }
+
+    payload.datecode = datecode;
   }
-
-  // ⭐ 將 UI record_level 語意補進 note
-  payload.note = withReplacementLevelNote(uiLevel, payload.note);
 
   try {
     await api("/replacement", {
@@ -148,14 +160,15 @@ async function submitReplacementLog() {
     toggleReplaceAdd(false);
     loadReplacementLogs();
   } catch (err) {
-    console.error(err);
-    toast(err?.data?.detail || err?.message || "新增更換記錄失敗", "error");
+    toast(err?.data?.detail || "新增失敗", "error");
   }
 }
 
 window.submitReplacementLog = submitReplacementLog;
 
-
+/* ============================================================ */
+/* 查詢列表 + 分頁 */
+/* ============================================================ */
 
 async function loadReplacementLogs(page = 1) {
   if (!window.currentCustomerId) return;
@@ -165,7 +178,6 @@ async function loadReplacementLogs(page = 1) {
   const fixture  = document.getElementById("replaceSearchFixture")?.value.trim();
   const serial   = document.getElementById("replaceSearchSerial")?.value.trim();
   const executor = document.getElementById("replaceSearchExecutor")?.value.trim();
-  const reason   = document.getElementById("replaceSearchReason")?.value.trim();
 
   const params = {
     skip: (repPage - 1) * repPageSize,
@@ -174,11 +186,13 @@ async function loadReplacementLogs(page = 1) {
 
   if (fixture)  params.fixture_id = fixture;
   if (serial)   params.serial_number = serial;
-  if (executor) params.executor = executor;
-  if (reason)   params.reason = reason;
+  if (executor) params.operator = executor;
 
   const dateFrom = document.getElementById("replaceSearchFrom")?.value;
   const dateTo   = document.getElementById("replaceSearchTo")?.value;
+  const type     = document.getElementById("replaceSearchEventType")?.value;
+
+  if (type) params.event_type = type;
 
   if (dateFrom) {
     params.date_from = new Date(dateFrom).toISOString();
@@ -196,15 +210,15 @@ async function loadReplacementLogs(page = 1) {
 
     renderReplacementTable(list);
 
-    // ⭐ 分頁
+    // ⭐ 分頁（沿用你系統 renderPagination）
     renderPagination(
       "replacementPagination",
       list.length < repPageSize
-          ? (repPage - 1) * repPageSize + list.length
-          : repPage * repPageSize + 1,
-        repPage,
-        repPageSize,
-p => loadReplacementLogs(p)
+        ? (repPage - 1) * repPageSize + list.length
+        : repPage * repPageSize + 1,
+      repPage,
+      repPageSize,
+      (p) => loadReplacementLogs(p)
     );
 
   } catch (err) {
@@ -215,6 +229,20 @@ p => loadReplacementLogs(p)
 
 window.loadReplacementLogs = loadReplacementLogs;
 
+/* ============================================================ */
+/* Badge */
+/* ============================================================ */
+
+function renderReplacementLevelBadge(r) {
+  if (r.record_level === "fixture") {
+    return `<span class="badge badge-info">治具</span>`;
+  }
+  return `<span class="badge badge-warning">序號</span>`;
+}
+
+/* ============================================================ */
+/* 表格渲染 */
+/* ============================================================ */
 
 function renderReplacementTable(rows) {
   if (!repTableBody) return;
@@ -233,9 +261,8 @@ function renderReplacementTable(rows) {
   rows.forEach((r) => {
     const tr = document.createElement("tr");
 
-    // 🔥 v6 相容：individual / batch / future array
+    // v6 相容
     let serialText = "-";
-
     if (r.serial_number) {
       serialText = r.serial_number;
     } else if (r.serial_start && r.serial_end) {
@@ -248,37 +275,62 @@ function renderReplacementTable(rows) {
       <td class="py-2 pr-4">${fmtDate(r.occurred_at)}</td>
       <td class="py-2 pr-4">${r.fixture_id ?? "-"}</td>
       <td class="py-2 pr-4">${renderReplacementLevelBadge(r)}</td>
+      <td class="py-2 pr-4">${r.scrap_qty ?? "-"}</td>
       <td class="py-2 pr-4">${serialText}</td>
       <td class="py-2 pr-4">${r.note ?? "-"}</td>
       <td class="py-2 pr-4">${r.operator ?? r.executor ?? "-"}</td>
-      <td class="py-2 pr-4">
-        <button class="btn btn-xs btn-error"
-          onclick="deleteReplacement(${JSON.stringify(r.id)})">
-          刪除
-        </button>
-      </td>
     `;
 
     repTableBody.appendChild(tr);
   });
 }
 
-async function deleteReplacement(id) {
-  if (!id) return;
-  if (!confirm("確定要刪除此更換記錄？")) return;
+/* ============================================================ */
+/* 快速日期區間（today / yesterday / 7days） */
+/* ============================================================ */
 
-  try {
-    await api(`/replacement/${id}`, { method: "DELETE" });
-    toast("已刪除");
-    loadReplacementLogs();
-  } catch (err) {
-    console.error(err);
-    toast(err?.data?.detail || err?.message || "刪除失敗", "error");
+function quickReplaceDateRange(type) {
+  const fromEl = document.getElementById("replaceSearchFrom");
+  const toEl   = document.getElementById("replaceSearchTo");
+  if (!fromEl || !toEl) return;
+
+  const today = new Date();
+  let from, to;
+
+  switch (type) {
+    case "today":
+      from = new Date(today);
+      to   = new Date(today);
+      break;
+
+    case "yesterday":
+      from = new Date(today);
+      from.setDate(from.getDate() - 1);
+      to = new Date(from);
+      break;
+
+    case "7days":
+      to = new Date(today);
+      from = new Date(today);
+      from.setDate(from.getDate() - 6);
+      break;
+
+    default:
+      return;
   }
+
+  fromEl.value = from.toISOString().slice(0, 10);
+  toEl.value   = to.toISOString().slice(0, 10);
+
+  loadReplacementLogs();
 }
 
-window.deleteReplacement = deleteReplacement;
+window.quickReplaceDateRange = quickReplaceDateRange;
 
+
+/* ============================================================ */
+/* 初始化（對齊 usage 模組） */
+/* ============================================================ */
 
 onUserReady?.(() => {
   onCustomerReady?.(() => {
@@ -287,29 +339,10 @@ onUserReady?.(() => {
   });
 });
 
+/* ============================================================ */
+/* Replacement - Import Excel (xlsx) */
+/* ============================================================ */
 
-// ============================================================
-// Replacement - 將 record_level 語意補進 note（對齊 usage event 模型）
-// ============================================================
-function withReplacementLevelNote(recordLevel, note) {
-  const base = (note || "").trim();
-
-  if (recordLevel === "individual") {
-    return base ? `[individual] ${base}` : "[individual]";
-  }
-
-  if (recordLevel === "batch") {
-    return base ? `[batch] ${base}` : "[batch]";
-  }
-
-  return base || null;
-}
-
-
-
-// ============================================================
-// Replacement - Import Excel (xlsx)
-// ============================================================
 window.handleReplacementImport = async function (input) {
   try {
     if (!input || !input.files || input.files.length === 0) {
@@ -329,7 +362,6 @@ window.handleReplacementImport = async function (input) {
       return;
     }
 
-    // 🔑 正確取得 token（與 api() / usage 完全一致）
     let token = null;
     if (window.TokenManager?.getToken) {
       token = window.TokenManager.getToken();
@@ -366,33 +398,29 @@ window.handleReplacementImport = async function (input) {
 
     const result = await res.json();
 
-    // ✅ 成功提示（格式完全對齊 usage）
     toast(
       `匯入完成：成功 ${result.success_count} 筆，失敗 ${result.error_count} 筆`,
       "success"
     );
 
-    // ⚠️ 若有錯誤，印到 console 方便 debug
     if (Array.isArray(result.errors) && result.errors.length > 0) {
       console.warn("Replacement import errors:", result.errors);
     }
 
-    // 🔁 重新載入列表
     loadReplacementLogs();
+
   } catch (err) {
     console.error(err);
     toast(err.message || "匯入更換記錄失敗", "error");
   } finally {
-    // 重置 input，避免同檔案無法再次觸發 onchange
     input.value = "";
   }
 };
 
+/* ============================================================ */
+/* Replacement - Download Template */
+/* ============================================================ */
 
-
-// ============================================================
-// Replacement - Download Import Template
-// ============================================================
 window.downloadReplaceTemplate = async function () {
   try {
     if (!window.currentCustomerId) {
@@ -435,32 +463,25 @@ window.downloadReplaceTemplate = async function () {
 
     window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
+
   } catch (err) {
     console.error(err);
-    toast("下載更換記錄範本失敗（請確認登入狀態）", "error");
+    toast("下載更換記錄範本失敗", "error");
   }
 };
 
+/* ============================================================ */
+/* 新增表單顯示 / 隱藏 */
+/* ============================================================ */
 
-/* ============================================================
- * 🔵 更換記錄：新增表單顯示 / 隱藏（對齊 toggleUsageAdd）
- * ============================================================ */
 function toggleReplaceAdd(show) {
   const form = document.getElementById("replaceAddForm");
   if (!form) return;
 
   if (show) {
     form.classList.remove("hidden");
-
-    // 🔧 開啟時初始化預設值
-    if (typeof initReplacementDefaults === "function") {
-      initReplacementDefaults();
-    }
-
-    // 🔧 同步一次層級顯示
-    if (typeof toggleReplacementSerialInputs === "function") {
-      toggleReplacementSerialInputs();
-    }
+    initReplacementDefaults();
+    toggleReplacementSerialInputs();
   } else {
     form.classList.add("hidden");
   }
@@ -468,59 +489,61 @@ function toggleReplaceAdd(show) {
 
 window.toggleReplaceAdd = toggleReplaceAdd;
 
+async function detectFixtureLifecycle() {
+  const fixtureId = repFxInput?.value.trim();
+  if (!fixtureId || !window.currentCustomerId) return;
 
-function renderReplacementLevelBadge(r) {
-  if (r.record_level === "fixture") {
-    return `<span class="badge badge-info">治具</span>`;
+  try {
+    const data = await api("/replacement/fixture-info", {
+      params: { fixture_id: fixtureId }
+    });
+
+    currentLifecycleMode = data.lifecycle_mode;
+
+    applyLifecycleUI();
+
+  } catch (err) {
+    currentLifecycleMode = null;
   }
-
-  if (r.serial_start && r.serial_end) {
-    return `<span class="badge badge-warning">批量</span>`;
-  }
-
-  return `<span class="badge badge-warning">序號</span>`;
 }
+function applyLifecycleUI() {
+  const level = repLevelSelect?.value;
 
-/* ============================================================
- * Replacement - 快速日期區間（today / yesterday / 7days）
- * ============================================================ */
-function quickReplaceDateRange(type) {
-  const fromEl = document.getElementById("replaceSearchFrom");
-  const toEl   = document.getElementById("replaceSearchTo");
-  if (!fromEl || !toEl) return;
+  const isSerialMode = currentLifecycleMode === "serial";
+  const isFixtureMode = currentLifecycleMode === "fixture";
 
-  const today = new Date();
-  let from, to;
+  // Serial lifecycle
+  if (isSerialMode) {
+    document.getElementById("replaceSerialSingleField")
+      ?.classList.remove("hidden");
 
-  switch (type) {
-    case "today":
-      from = new Date(today);
-      to   = new Date(today);
-      break;
+    document.getElementById("replaceDatecodeField")
+      ?.classList.add("hidden");
 
-    case "yesterday":
-      from = new Date(today);
-      from.setDate(from.getDate() - 1);
-      to = new Date(from);
-      break;
+    document.getElementById("replaceScrapQtyField")
+      ?.classList.add("hidden");
 
-    case "7days":
-      to = new Date(today);
-      from = new Date(today);
-      from.setDate(from.getDate() - 6); // 含今天共 7 天
-      break;
-
-    default:
-      return;
+    repLevelSelect.value = "serial";
+    repLevelSelect.disabled = true;
+    return;
   }
 
-  fromEl.value = from.toISOString().slice(0, 10);
-  toEl.value   = to.toISOString().slice(0, 10);
+  // Fixture lifecycle (datecode)
+  if (isFixtureMode) {
+    document.getElementById("replaceSerialSingleField")
+      ?.classList.add("hidden");
 
-  // 🔥 直接刷新列表
-  loadReplacementLogs();
+    document.getElementById("replaceDatecodeField")
+      ?.classList.remove("hidden");
+
+    document.getElementById("replaceScrapQtyField")
+      ?.classList.remove("hidden");
+
+    repLevelSelect.value = "fixture";
+    repLevelSelect.disabled = true;
+    return;
+  }
+
+  // Unknown
+  repLevelSelect.disabled = false;
 }
-
-window.quickReplaceDateRange = quickReplaceDateRange;
-
-

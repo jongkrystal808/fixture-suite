@@ -94,23 +94,63 @@
 
 
               <!-- 主容器 -->
-              <main class="mx-auto max-w-7xl p-4 md:p-6 space-y-6">
-                <!-- 功能分頁 -->
-                <nav class="grid grid-cols-2 md:grid-cols-7 gap-2">
-                  <button data-tab="dashboard" class="tab tab-active">首頁</button>
-                  <button data-tab="transactions"  class="tab">收/退料</button>
-                  <button data-tab="query"    class="tab">治具/機種查詢</button>
-                  <button data-tab="logs"     class="tab">使用/更換記錄</button>
-                  <button data-tab="admin"    class="tab">後台管理</button>
-                </nav>
+              <main class="mx-auto max-w-7xl p-4 md:p-6">
+                <div class="layout-shell">
+                  <aside class="sidebar card p-3 space-y-2">
+                    <div class="nav-group" data-nav-group="dashboard">
+                      <button data-tab="dashboard" class="tab sidebar-tab sidebar-main tab-active">
+                        <span>首頁（總覽）</span>
+                      </button>
+                    </div>
 
-                <!-- 當前切頁標題欄 -->
-                <div id="activeTabBanner" class="card px-4 py-3 flex items-center justify-between">
-                  <div class="flex items-center gap-3">
-                    <div class="h-8 w-1.5 rounded-full bg-gray-900"></div>
-                    <div class="section-title" id="activeTabTitle">首頁</div>
-                  </div>
-                </div>
+                    <div class="nav-group" data-nav-group="transactions">
+                      <button data-tab="transactions" class="tab sidebar-tab sidebar-main">
+                        <span>操作中心</span>
+                      </button>
+                      <div class="sidebar-submenu hidden">
+                        <button class="subtab sidebar-subtab" data-route="transactions/register">記錄收料/退料</button>
+                        <button class="subtab sidebar-subtab" data-route="transactions/usage">記錄治具使用</button>
+                        <button class="subtab sidebar-subtab" data-route="transactions/replacement">記錄治具更換</button>
+                      </div>
+                    </div>
+
+                    <div class="nav-group" data-nav-group="logs">
+                      <button data-tab="logs" class="tab sidebar-tab sidebar-main">
+                        <span>庫存與壽命</span>
+                      </button>
+                      <div class="sidebar-submenu hidden">
+                        <button class="subtab sidebar-subtab" data-route="logs/inventory">在庫總覽</button>
+                        <button class="subtab sidebar-subtab" data-route="logs/lifecycle">壽命分析</button>
+                      </div>
+                    </div>
+
+                    <div class="nav-group" data-nav-group="query">
+                      <button data-tab="query" class="tab sidebar-tab sidebar-main">
+                        <span>查詢中心</span>
+                      </button>
+                    </div>
+
+                    <div class="nav-group" data-nav-group="admin">
+                      <button data-tab="admin" class="tab sidebar-tab sidebar-main">
+                        <span>資訊管理</span>
+                      </button>
+                      <div class="sidebar-submenu hidden">
+                        <button class="subtab sidebar-subtab" data-route="admin/fixture_mt">治具管理</button>
+                        <button class="subtab sidebar-subtab" data-route="admin/station_mt">站點管理</button>
+                        <button class="subtab sidebar-subtab" data-route="admin/model_mt">機種管理</button>
+                        <button class="subtab sidebar-subtab" data-route="admin/owner_mt">負責人管理</button>
+                      </div>
+                    </div>
+                  </aside>
+
+                  <section class="content-shell space-y-6">
+                    <!-- 當前切頁標題欄 -->
+                    <div id="activeTabBanner" class="card px-4 py-3 flex items-center justify-between">
+                      <div class="flex items-center gap-3">
+                        <div class="h-8 w-1.5 rounded-full bg-gray-900"></div>
+                        <div class="section-title" id="activeTabTitle">首頁（總覽）</div>
+                      </div>
+                    </div>
 
 
                 <!-- ============================================================= -->
@@ -119,10 +159,7 @@
                 <section id="tab-dashboard" class="space-y-6">
 
                   <!-- ===== 首頁三欄版型 ===== -->
-                  <div class="home-grid grid md:grid-cols-3 gap-6">
-
-                    <!-- 左欄 -->
-                    <div class="home-column space-y-6">
+                  <div class="home-grid">
 
                       <div class="home-card card p-5">
                         <div class="flex items-center justify-between">
@@ -148,57 +185,19 @@
                             <span class="pill border-orange-300 text-orange-700 bg-orange-50">壽命</span>
                           </div>
                           <div class="mt-3 space-y-2" id="upcomingList"></div>
-                        </div>  
-
-                    </div>
-
-
-                    <!-- 中欄 -->
-                    <div class="home-column space-y-6 md:border-l md:border-gray-200 md:pl-6">
-
-
-                      <div class="home-card card p-5 cursor-pointer hover-card-green transition"
-                             onclick="location.hash='transactions/register'">
-                          <h3 class="font-semibold text-lg">收 / 退料</h3>
-                          <p class="text-sm text-gray-600 leading-relaxed">
-                            登記 | 查詢 | 庫存檢視
-                          </p>
                         </div>
 
-
-                      <div class="home-card card p-5 cursor-pointer hover-card-pink transition"
-                             onclick="location.hash='logs/usage'">
-                          <h3 class="font-semibold text-lg">使用 / 更換治具</h3>
-                          <p class="text-sm text-gray-600 leading-relaxed">
-                            登記 | 查詢
-                          </p>
+                      <div class="home-card card p-5">
+                        <div class="flex items-center justify-between">
+                          <h3 class="font-semibold">壽命分析圖標</h3>
+                          <button class="btn btn-ghost text-xs" onclick="navigateSidebarRoute('logs/lifecycle')">查看詳情</button>
                         </div>
-
-                    </div>
-
-
-                    <!-- 右欄 -->
-                    <div class="home-column space-y-6">
-
-                      <div class="home-card card p-5 cursor-pointer hover-card-purple transition"
-                             onclick="location.hash='query/fixtures'">
-                          <h3 class="font-semibold text-lg">治具 / 機種資訊</h3>
-                          <p class="text-sm text-gray-600 leading-relaxed">
-                              治具: 基本資訊 | 使用記錄 | 更換記錄查詢<br>
-                              機種: 基本資訊 | 最大開站數
-                          </p>
+                        <div class="mt-3 space-y-2 text-sm">
+                          <div class="flex justify-between"><span>正常</span><span id="homeLifeNormalPct">0%</span></div>
+                          <div class="flex justify-between"><span>警告</span><span id="homeLifeWarningPct">0%</span></div>
+                          <div class="flex justify-between"><span>危險</span><span id="homeLifeDangerPct">0%</span></div>
                         </div>
-
-                      <div class="home-card card p-5 cursor-pointer hover-card-yellow transition"
-                             onclick="location.hash='admin/fixture_mt'">
-                          <h3 class="font-semibold text-lg">後台資訊管理</h3>
-                          <p class="text-sm text-gray-600 leading-relaxed">
-                            治具資訊管理 | 機種資訊管理 <br>站點資訊管理 | 負責人資訊管理
-                          </p>
-                        </div>
-
-
-                    </div>
+                      </div>
 
                   </div>
 
@@ -210,6 +209,9 @@
                 <!-- 交易管理 Transactions -->
                 <!-- ============================================================= -->
                 <section id="tab-transactions" class="hidden space-y-4">
+
+                  <!-- 舊交易子流程（由操作中心入口導入時顯示） -->
+                  <div id="transactionsLegacy" class="hidden space-y-4">
 
                   <!-- 主分頁 -->
                   <div class="flex gap-2">
@@ -717,6 +719,8 @@
 
                       </div>
                     </div>
+                  </div>
+                  <div id="transactionsRecordHost" class="hidden space-y-4"></div>
 
 
                 </section>
@@ -728,7 +732,7 @@
                 <section id="tab-query" class="hidden space-y-4">
                       <div class="card p-5 space-y-4">
                         <div class="flex items-center justify-between">
-                          <h3 class="font-semibold text-lg">治具／機種查詢</h3>
+                          <h3 class="font-semibold text-lg">治具-機種查詢中心</h3>
 
                           <!-- 🔧 管理入口（只做跳轉） -->
                           <div id="queryAdminActions" class="flex gap-2">
@@ -752,74 +756,23 @@
                           </div>
                         </div>
 
-                        <!-- 查詢類型 -->
-                        <div class="flex gap-4 items-center">
-                          <label class="font-semibold">查詢類型：</label>
-                          <select id="queryType" class="input w-60" onchange="switchQueryType()">
-                            <option value="fixture">治具查詢</option>
-                            <option value="model">機種查詢</option>
-                          </select>
+                        <!-- 單一搜尋（同時搜尋治具 + 機種） -->
+                        <div class="flex gap-3 items-center">
+                          <input id="unifiedSearchKeyword"
+                                 class="input w-80"
+                                 placeholder="輸入治具編號/名稱 或 機種代碼/名稱"
+                                 oninput="debounceUnifiedQuerySearch()" />
+                          <button class="btn btn-primary" onclick="unifiedQuerySearch()">查詢</button>
                         </div>
-
+                        <div id="relationFilterBar" class="hidden border rounded-xl px-3 py-2 bg-gray-50 text-sm flex items-center justify-between">
+                          <span id="relationFilterText" class="text-gray-700"></span>
+                          <button class="btn btn-ghost text-xs" onclick="clearRelationFilter()">清除關聯篩選</button>
+                        </div>
+                        <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
                         <!-- ====================================================== -->
                         <!-- 🔵 治具查詢 -->
                         <!-- ====================================================== -->
                         <div id="fixtureQueryArea" class="space-y-3">
-
-                            <div class="flex items-center justify-between gap-4 mb-4">
-
-                              <!-- 左側：搜尋 -->
-                              <div class="flex items-center gap-4">
-                                <div>
-                                  <span class="query-label">治具搜尋：</span>
-                                  <input id="fixtureSearch"
-                                         class="query-input"
-                                         placeholder="輸入治具編號 / 名稱"
-                                         oninput="
-                                           fixtureQueryPage = 1;
-                                           debounceLoadFixtures();
-                                         ">
-                                </div>
-
-                                <button
-                                  class="btn btn-primary"
-                                  onclick="fixtureQueryPage = 1; loadFixturesQuery();">
-                                  搜尋
-                                </button>
-                                <div id="fixtureQueryPagination"
-                                   class="flex items-center gap-2">
-
-                                <button class="btn btn-xs"
-                                        onclick="fixtureQueryPager.go('first')">
-                                  «
-                                </button>
-
-                                <button class="btn btn-xs"
-                                        onclick="fixtureQueryPager.go('prev')">
-                                  上一頁
-                                </button>
-
-                                <span class="px-3 text-sm text-gray-600 whitespace-nowrap">
-                                  第 <span id="fixturePageNow">1</span> /
-                                  <span id="fixturePageMax">1</span> 頁
-                                </span>
-
-                                <button class="btn btn-xs"
-                                        onclick="fixtureQueryPager.go('next')">
-                                  下一頁
-                                </button>
-
-                                <button class="btn btn-xs"
-                                        onclick="fixtureQueryPager.go('last')">
-                                  »
-                                </button>
-                              </div>
-
-                              </div>
-
-
-
-                            </div>
 
                           <div class="overflow-x-auto border rounded-lg shadow-sm">
                             <table class="min-w-full text-sm text-center border-collapse">
@@ -827,42 +780,27 @@
                                 <tr>
                                   <th class="py-2 px-4 w-24">治具編號</th>
                                   <th class="py-2 px-4 w-32">名稱</th>
-                                  <th class="py-2 px-4 w-32">類型</th>
-                                  <th class="py-2 px-4 w-44">庫存(自購/客供/總)</th>
-                                  <th class="py-2 px-4 w-24">儲位</th>
-                                  <th class="py-2 px-4 w-32">負責人</th>
-                                  <th class="py-2 px-4 w-48">備註</th>
+                                  <th class="py-2 px-4 w-28">關聯機種</th>
                                 </tr>
                               </thead>
                               <tbody id="fixtureTable" class="divide-y divide-gray-100 text-gray-800"></tbody>
                             </table>
-
+                          </div>
+                          <div id="fixtureQueryPagination" class="flex items-center justify-center gap-2">
+                            <button class="btn btn-xs" onclick="fixtureQueryPager.go('first')">«</button>
+                            <button class="btn btn-xs" onclick="fixtureQueryPager.go('prev')">上一頁</button>
+                            <span class="px-3 text-sm text-gray-600 whitespace-nowrap">
+                              第 <span id="fixturePageNow">1</span> / <span id="fixturePageMax">1</span> 頁
+                            </span>
+                            <button class="btn btn-xs" onclick="fixtureQueryPager.go('next')">下一頁</button>
+                            <button class="btn btn-xs" onclick="fixtureQueryPager.go('last')">»</button>
                           </div>
                         </div>
 
                         <!-- ====================================================== -->
                         <!-- 🔵 機種查詢 -->
                         <!-- ====================================================== -->
-                        <div id="modelQueryArea" class="hidden space-y-3">
-
-                          <div class="flex gap-3">
-                            <input id="modelSearch"
-                               class="input w-64"
-                               placeholder="輸入機種代碼或名稱"
-                               oninput="
-                                 modelQueryPage = 1;
-                                 loadModelsQuery();" />
-
-
-                            <button
-                              class="btn btn-primary"
-                              onclick="
-                                modelQueryPage = 1;
-                                loadModelsQuery();">
-                              查詢
-                            </button>
-
-                          </div>
+                        <div id="modelQueryArea" class="space-y-3">
 
                           <div class="overflow-x-auto border rounded-lg shadow-sm">
                             <table class="min-w-full text-sm text-center border-collapse">
@@ -870,15 +808,22 @@
                                 <tr>
                                   <th class="py-2 px-4 w-32">機種代碼</th>
                                   <th class="py-2 px-4 w-40">名稱</th>
-                                  <th class="py-2 px-4 w-64">備註</th>
+                                  <th class="py-2 px-4 w-28">關聯治具</th>
                                 </tr>
                               </thead>
                               <tbody id="modelTable" class="divide-y divide-gray-100 text-gray-800"></tbody>
                             </table>
-
-                            <div id="modelQueryPagination"
-                                 class="flex gap-2 mt-3 justify-center"></div>
                           </div>
+                          <div id="modelQueryPagination" class="flex items-center justify-center gap-2">
+                            <button class="btn btn-xs" onclick="modelQueryPager.go('first')">«</button>
+                            <button class="btn btn-xs" onclick="modelQueryPager.go('prev')">上一頁</button>
+                            <span class="px-3 text-sm text-gray-600 whitespace-nowrap">
+                              第 <span id="modelPageNow">1</span> / <span id="modelPageMax">1</span> 頁
+                            </span>
+                            <button class="btn btn-xs" onclick="modelQueryPager.go('next')">下一頁</button>
+                            <button class="btn btn-xs" onclick="modelQueryPager.go('last')">»</button>
+                          </div>
+                        </div>
 
                           <!-- ====================================================== -->
                           <!-- 三段式 UI：站點綁定 + 治具需求設定 -->
@@ -965,26 +910,113 @@
 
 
                 <!-- ============================================================= -->
-                <!-- 使用/更換記錄 Usage/Replacement -->
+                <!-- 庫存與壽命中心 Inventory/Lifecycle/Replacement Analysis -->
                 <!-- ============================================================= -->
                 <section id="tab-logs" class="hidden space-y-4">
 
                   <!-- 子分頁 -->
-                  <div class="flex gap-2">
-                    <button class="subtab subtab-active" data-logtab="usage">使用記錄</button>
-                    <button class="subtab" data-logtab="replacement">更換記錄</button>
+                  <div class="flex flex-wrap gap-2 items-center justify-between">
+                    <div class="flex gap-2">
+                      <button class="subtab subtab-active" data-logtab="inventory">庫存總覽</button>
+                      <button class="subtab" data-logtab="lifecycle">壽命分析</button>
+                    </div>
+                    <div class="flex gap-2">
+                      <button class="btn btn-ghost text-xs" onclick="navigateSidebarRoute('transactions/usage')">治具使用記錄表</button>
+                      <button class="btn btn-ghost text-xs" onclick="navigateSidebarRoute('transactions/replacement')">治具更換記錄表</button>
+                    </div>
                   </div>
 
                   <!-- ========================================================= -->
-                  <!-- 🔵 使用記錄 TAB v4.0 -->
+                  <!-- 🔵 Inventory -->
                   <!-- ========================================================= -->
-                  <div id="logtab-usage" class="space-y-4">
+                  <div id="logtab-inventory" class="space-y-4">
+                    <div class="card p-5 space-y-3">
+                      <h3 class="font-semibold text-lg">庫存總覽</h3>
+                      <p class="text-sm text-gray-600">整合序號與 Datecode 在庫、異動與明細。</p>
+                    </div>
+                    <div id="logsInventoryHost"></div>
+                  </div>
+
+                  <!-- ========================================================= -->
+                  <!-- 🔴 Lifecycle -->
+                  <!-- ========================================================= -->
+                  <div id="logtab-lifecycle" class="hidden space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                      <div class="card p-4">
+                        <div class="text-xs text-gray-500">正常</div>
+                        <div id="kpi-normal" class="text-2xl font-semibold">0</div>
+                      </div>
+                      <div class="card p-4">
+                        <div class="text-xs text-gray-500">警告</div>
+                        <div id="kpi-warning" class="text-2xl font-semibold text-yellow-600">0</div>
+                      </div>
+                      <div class="card p-4">
+                        <div class="text-xs text-gray-500">過期</div>
+                        <div id="kpi-expired" class="text-2xl font-semibold text-orange-600">0</div>
+                      </div>
+                      <div class="card p-4">
+                        <div class="text-xs text-gray-500">Premature</div>
+                        <div id="kpi-premature" class="text-2xl font-semibold text-red-600">0</div>
+                      </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div class="card p-4">
+                        <div class="text-xs text-gray-500">平均壽命 (MTBF)</div>
+                        <div id="lc-mtbf" class="text-2xl font-semibold">-</div>
+                        <div id="lc-failures" class="text-xs text-gray-500 mt-1">失效數: -</div>
+                      </div>
+                      <div class="card p-4">
+                        <div class="text-xs text-gray-500">提前失效率</div>
+                        <div id="lc-failure-rate" class="text-2xl font-semibold">0%</div>
+                        <div id="lc-failure-breakdown" class="text-xs text-gray-500 mt-1">premature 0 / normal 0</div>
+                      </div>
+                      <div class="card p-4">
+                        <div class="text-xs text-gray-500">壽命分布</div>
+                        <div id="lc-distribution" class="text-sm mt-2 space-y-1"></div>
+                      </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div class="card p-5 space-y-3">
+                        <h4 class="font-semibold">壽命預警清單</h4>
+                        <div class="overflow-auto">
+                          <table class="min-w-full text-sm">
+                            <thead class="text-left text-gray-500">
+                              <tr>
+                                <th class="py-2 pr-4">類型</th>
+                                <th class="py-2 pr-4">治具</th>
+                                <th class="py-2 pr-4">序號</th>
+                                <th class="py-2 pr-4">狀態</th>
+                                <th class="py-2 pr-4">已用</th>
+                                <th class="py-2 pr-4">剩餘</th>
+                              </tr>
+                            </thead>
+                            <tbody id="lifecycleAlertTable"></tbody>
+                          </table>
+                        </div>
+                      </div>
+                      <div class="card p-5 space-y-3">
+                        <h4 class="font-semibold">Premature 排行</h4>
+                        <div id="lifecycleAnomalyList" class="space-y-1"></div>
+                        <div class="border-t pt-3 mt-2">
+                          <h5 class="text-sm font-semibold mb-2">每月提前失效趨勢</h5>
+                          <div id="lc-monthly-trend" class="space-y-1 text-sm"></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                <!-- ========================================================= -->
+                <!-- ⚙ 操作流程保留：使用記錄（由操作中心入口呼叫） -->
+                <!-- ========================================================= -->
+                  <div id="logtab-usage" class="hidden space-y-4">
                     <div class="card p-5 space-y-4">
 
                       <h3 class="font-semibold text-lg">使用記錄</h3>
 
                       <!-- 新增表單 -->
-                      <div class="flex gap-2 flex-wrap">
+                      <div id="usageOpsBarLog" class="flex gap-2 flex-wrap">
                         <button class="btn bg-yellow-600 text-white hover:bg-yellow-500" onclick="toggleUsageAdd(true)">
                             新增使用記錄
                         </button>
@@ -1022,7 +1054,7 @@
                             <!-- 站點（可選，空=全部） -->
                             <div class="field">
                               <label class="text-base font-semibold">
-                                站點（選填，空=全部站）
+                                站點
                               </label>
                               <select id="usageAddStation" class="input">
                                 <option value="">全部站點</option>
@@ -1031,7 +1063,7 @@
 
                             <!-- 數量 -->
                             <div class="field">
-                              <label class="text-base font-semibold">產量 / 開站次數 *</label>
+                              <label class="text-base font-semibold">開站次數 *</label>
                               <input
                                 id="usageAddCount"
                                 type="number"
@@ -1145,161 +1177,218 @@
 
                   </div>
 
-                  <!-- ========================================================= -->
-                  <!-- 🟠 更換記錄 TAB（支援不同治具層級） -->
-                  <!-- ========================================================= -->
-                  <div id="logtab-replacement" class="hidden space-y-4">
-                    <div class="card p-5 space-y-4">
+                <!-- ========================================================= -->
+                <!-- ⚙ 操作流程保留：更換記錄（由操作中心入口呼叫） -->
+                <!-- ========================================================= -->
+                <div id="logtab-replacement" class="hidden space-y-4">
+                  <div class="card p-5 space-y-4">
 
-                      <h3 class="font-semibold text-lg">更換記錄</h3>
+                    <h3 class="font-semibold text-lg">更換記錄</h3>
 
+                    <!-- 操作列 -->
+                    <div id="replacementOpsBar" class="flex gap-2 flex-wrap">
+                      <button class="btn bg-pink-600 text-white hover:bg-pink-500"
+                              onclick="toggleReplaceAdd(true)">
+                        新增更換記錄
+                      </button>
 
-                      <!-- 新增表單 -->
-                      <div class="flex gap-2 flex-wrap">
-                        <button class="btn bg-pink-600 text-white hover:bg-pink-500" onclick="toggleReplaceAdd(true)">
-                            新增更換記錄
+                      <label class="btn btn-ghost cursor-pointer">
+                        <input id="replaceXlsx"
+                               type="file"
+                               accept=".xlsx"
+                               class="hidden"
+                               onchange="handleReplacementImport(this)" />
+                        匯入 Excel(.xlsx)
+                      </label>
+
+                      <button class="btn btn-ghost"
+                              onclick="downloadReplaceTemplate()">
+                        下載範本
+                      </button>
+                    </div>
+
+                    <!-- ===================================================== -->
+                    <!-- 新增表單 -->
+                    <!-- ===================================================== -->
+                    <div id="replaceAddForm"
+                         class="hidden border rounded-2xl p-4 bg-pink-50 space-y-4">
+
+                      <div class="grid md:grid-cols-4 gap-3">
+
+                        <div class="field">
+                          <label class="font-semibold">治具 ID *</label>
+                          <input id="replaceAddFixture"
+                                 class="input"
+                                 placeholder="例: C-00001">
+                        </div>
+
+                        <div class="field">
+                          <label class="font-semibold">更換層級 *</label>
+                          <select id="replaceAddLevel"
+                                  class="input">
+                            <option value="fixture">治具（Datecode / 批次）</option>
+                            <option value="serial">序號</option>
+                          </select>
+                        </div>
+
+                        <div class="field">
+                          <label class="font-semibold">事件類型 *</label>
+                          <select id="replaceAddEventType"
+                                  class="input">
+                            <option value="scrap">報廢</option>
+                            <option value="maintenance">送修</option>
+                          </select>
+                        </div>
+
+                        <div class="field">
+                          <label class="font-semibold">操作人員</label>
+                          <input id="replaceAddExecutor"
+                                 class="input"
+                                 placeholder="預設登入者">
+                        </div>
+
+                      </div>
+
+                      <!-- =============================== -->
+                      <!-- Serial 模式 -->
+                      <!-- =============================== -->
+                      <div id="replaceSerialSingleField"
+                           class="field hidden">
+                        <label class="font-semibold">序號 *</label>
+                        <input id="replaceAddSerials"
+                               class="input"
+                               placeholder="SN0001">
+                      </div>
+
+                      <!-- =============================== -->
+                      <!-- Fixture 模式：Datecode -->
+                      <!-- =============================== -->
+                      <div id="replaceDatecodeField"
+                           class="field hidden">
+                        <label class="font-semibold">Datecode *</label>
+                        <input id="replaceAddDatecode"
+                               class="input"
+                               placeholder="例: 20260224">
+                      </div>
+
+                      <!-- =============================== -->
+                      <!-- Fixture 模式：數量（scrap / maintenance 都要） -->
+                      <!-- =============================== -->
+                      <div id="replaceScrapQtyField"
+                           class="field hidden">
+                        <label class="font-semibold">數量 *</label>
+                        <input id="replaceAddScrapQty"
+                               type="number"
+                               min="1"
+                               class="input"
+                               placeholder="例: 5">
+                      </div>
+
+                      <!-- 備註 -->
+                      <div class="field">
+                        <label class="font-semibold">備註</label>
+                        <input id="replaceAddNote"
+                               class="input">
+                      </div>
+
+                      <div class="flex justify-end gap-2">
+                        <button class="btn btn-ghost"
+                                onclick="toggleReplaceAdd(false)">
+                          取消
                         </button>
-
-                        <label class="btn btn-ghost cursor-pointer">
-                          <input id="replaceXlsx" type="file" accept=".xlsx" class="hidden"
-                                 onchange="handleReplacementImport(this)" />
-                          匯入 Excel(.xlsx)
-                        </label>
-
-                        <button class="btn btn-ghost" onclick="downloadReplaceTemplate()">
-                            下載範本
+                        <button class="btn btn-primary"
+                                onclick="submitReplacementLog()">
+                          提交
                         </button>
-                      </div>
-
-                      <!-- 新增表單 -->
-                      <div id="replaceAddForm" class="hidden border rounded-2xl p-4 bg-pink-50 space-y-3">
-
-                        <div class="grid md:grid-cols-5 gap-3">
-
-                          <div class="field">
-                            <label class="text-base font-semibold">治具 ID *</label>
-                            <input id="replaceAddFixture" class="input" placeholder="例:C-00001">
-                          </div>
-
-                            <div class="field">
-                            <label class="text-base font-semibold">操作人員 *</label>
-                            <input id="replaceAddExecutor" class="input"  placeholder="預設登入者">
-                          </div>
-
-                          <div class="field">
-                            <label class="text-base font-semibold">更換日期 *</label>
-                            <input id="replaceAddDate" type="date" class="input" />
-                          </div>
-
-                        </div>
-
-                            <!-- Record Level -->
-                            <div class="grid md:grid-cols-6 gap-3">
-
-                              <div class="field">
-                                <label class="text-base font-semibold">更換層級 *</label>
-                                <select id="replaceAddLevel" class="input" onchange="toggleReplacementSerialInputs()">
-                                  <option value="fixture">治具Datecode</option>
-                                  <option value="individual">治具個別序號</option>
-                                  <option value="batch">治具批量序號</option>
-                                </select>
-                              </div>
-
-                                 <!-- 個別記錄 -->
-                              <div id="replaceSerialSingleField" class="field hidden">
-                                <label class="label-xs">序號(逗號分隔) *</label>
-                                <input id="replaceAddSerials" class="input" placeholder="SN001, SN002..." />
-                              </div>
-
-                                <!-- 批量記錄 -->
-                                  <div id="replaceSerialBatchField" class="field hidden ">
-                                      <div class="field">
-                                      <label class="text-base font-semibold">序號起始 *</label>
-                                      <input id="replaceAddSerialStart" class="input" placeholder="SN001">
-                                  </div>
-                                    <div class="field">
-                                       <label class="text-base font-semibold">序號結尾 *</label>
-                                       <input id="replaceAddSerialEnd" class="input" placeholder="SN100">
-                                    </div>
-                                  </div>
-
-                        </div>
-
-                           <div class="field">
-                          <label class="label-xs">備註</label>
-                          <input id="replaceAddNote" class="input" />
-                        </div>
-
-                        <div class="flex justify-end gap-2">
-                          <button class="btn btn-ghost" onclick="toggleReplaceAdd(false)">取消</button>
-                          <button class="btn btn-primary" onclick="submitReplacementLog()">提交</button>
-                        </div>
-
-                      </div>
-
-                        <div class="border-t border-gray-300 my-4"></div>
-
-                        <!-- 查詢區 -->
-                      <div class="border rounded-2xl p-4 bg-white space-y-4">
-                          <div class="flex flex-wrap items-end gap-3">
-                              <div class="flex items-center gap-2">
-                              <input id="replaceSearchFrom" type="date" class="input w-40" />
-                              <span class="text-gray-400">—</span>
-                              <input id="replaceSearchTo" type="date" class="input w-40" />
-                            </div>
-
-                            <!-- 快速日期 -->
-                            <div class="flex gap-1">
-                              <button class="btn btn-xs btn-outline" onclick="quickReplaceDateRange('today')">今天</button>
-                              <button class="btn btn-xs btn-outline" onclick="quickReplaceDateRange('yesterday')">昨天</button>
-                              <button class="btn btn-xs btn-outline" onclick="quickReplaceDateRange('7days')">最近 7 天</button>
-
-                            </div>
-
-                          </div>
-
-                      <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
-                        <div class="field">
-                          <input id="replaceSearchFixture" class="input" placeholder="治具 ID" />
-                        </div>
-
-                        <div class="field">
-                          <input id="replaceSearchSerial" class="input" placeholder="治具序號" />
-                        </div>
-
-                        <div class="field">
-                          <input id="replaceSearchExecutor" class="input" placeholder="員工工號" />
-                        </div>
-
-                        <div class="flex items-end">
-                          <button class="btn bg-gray-400 w-full" onclick="loadReplacementLogs()">查詢/刷新</button>
-                        </div>
-
-                      </div>
-                      </div>
-
-                      <!-- 更換記錄表格 -->
-                      <div class="overflow-auto">
-                        <table class="min-w-full text-sm">
-                          <thead class="text-left text-gray-500">
-                          <tr>
-                            <th class="py-2 pr-4">日期</th>
-                            <th class="py-2 pr-4">治具</th>
-                            <th class="py-2 pr-4">更換層級</th>
-                            <th class="py-2 pr-4">序號</th>
-                            <th class="py-2 pr-4">備註</th>
-                            <th class="py-2 pr-4">操作人員</th>
-                            <th class="py-2 pr-4">操作</th>
-                          </tr>
-                          </thead>
-                          <tbody id="replaceTable"></tbody>
-                        </table>
-                          <div id="replacementPagination" class="flex mt-4 justify-center"></div>
                       </div>
 
                     </div>
-                  </div>
 
+                    <div class="border-t border-gray-300 my-4"></div>
+
+                    <!-- ===================================================== -->
+                    <!-- 查詢區 -->
+                    <!-- ===================================================== -->
+                    <div class="border rounded-2xl p-4 bg-white space-y-4">
+
+                      <div class="flex flex-wrap items-end gap-3">
+
+                        <div class="flex items-center gap-2">
+                          <input id="replaceSearchFrom"
+                                 type="date"
+                                 class="input w-40" />
+                          <span class="text-gray-400">—</span>
+                          <input id="replaceSearchTo"
+                                 type="date"
+                                 class="input w-40" />
+                        </div>
+
+                        <div class="flex gap-1">
+                          <button class="btn btn-xs btn-outline"
+                                  onclick="quickReplaceDateRange('today')">
+                            今天
+                          </button>
+                          <button class="btn btn-xs btn-outline"
+                                  onclick="quickReplaceDateRange('yesterday')">
+                            昨天
+                          </button>
+                          <button class="btn btn-xs btn-outline"
+                                  onclick="quickReplaceDateRange('7days')">
+                            最近 7 天
+                          </button>
+                        </div>
+
+                      </div>
+
+                      <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+
+                        <input id="replaceSearchFixture"
+                               class="input"
+                               placeholder="治具 ID" />
+
+                        <input id="replaceSearchSerial"
+                               class="input"
+                               placeholder="序號" />
+
+                        <input id="replaceSearchExecutor"
+                               class="input"
+                               placeholder="操作人員" />
+
+                        <button class="btn bg-gray-400"
+                                onclick="loadReplacementLogs()">
+                          查詢 / 刷新
+                        </button>
+
+                      </div>
+
+                    </div>
+
+                    <!-- ===================================================== -->
+                    <!-- 表格 -->
+                    <!-- ===================================================== -->
+                    <div class="overflow-auto">
+                      <table class="min-w-full text-sm">
+                        <thead class="text-left text-gray-500">
+                          <tr>
+                            <th class="py-2 pr-4">日期</th>
+                            <th class="py-2 pr-4">治具</th>
+                            <th class="py-2 pr-4">層級</th>
+                            <th class="py-2 pr-4">數量</th>
+                            <th class="py-2 pr-4">序號</th>
+                            <th class="py-2 pr-4">備註</th>
+                            <th class="py-2 pr-4">操作人員</th>
+                          </tr>
+                        </thead>
+                        <tbody id="replaceTable"></tbody>
+                      </table>
+
+                      <div id="replacementPagination"
+                           class="flex mt-4 justify-center">
+                      </div>
+                    </div>
+
+                  </div>
+                  </div>
                 </section>
 
 
@@ -1308,10 +1397,10 @@
                 <!-- ============================================================= -->
                 <section id="tab-admin" class="hidden">
 
-                  <div class="grid grid-cols-[140px_1fr] gap-6">
+                  <div class="grid grid-cols-1 gap-6">
 
                     <!-- ================= 左側：後台選單 ================= -->
-                    <aside class="card p-3 space-y-2">
+                    <aside class="card p-3 space-y-2 hidden">
 
                       <button class="admin-menu btn btn-sm btn-outline w-full" data-admin-page="stations">
                         站點管理
@@ -2155,6 +2244,8 @@
                     <div class="bg-gray-900 text-white px-4 py-2 rounded-xl shadow-lg">訊息</div>
                   </div>
 
+                  </section>
+                </div>
               </main>
 
         <!-- ================================ -->

@@ -360,11 +360,56 @@ window.apiImportTransactionsXlsx = apiImportTransactionsXlsx;
 function downloadTransactionTemplate() {
 
   const wb = XLSX.utils.book_new();
+  const TEMPLATE_DATA_ROWS = 500;
 
   const headerStyle = {
     font: { bold: true },
     fill: { fgColor: { rgb: "FFFF99" } }
   };
+
+  // 將整張工作表的資料型別統一為文字，避免 Excel 自動轉型
+  function forceSheetCellsAsText(ws) {
+    if (!ws || !ws["!ref"]) return;
+
+    const range = XLSX.utils.decode_range(ws["!ref"]);
+    for (let r = range.s.r; r <= range.e.r; r++) {
+      for (let c = range.s.c; c <= range.e.c; c++) {
+        const cellRef = XLSX.utils.encode_cell({ r, c });
+        const cell = ws[cellRef];
+        if (!cell) continue;
+
+        if (cell.v === null || cell.v === undefined) {
+          cell.v = "";
+        }
+        cell.t = "s";
+        cell.v = String(cell.v);
+        cell.z = "@";
+      }
+    }
+  }
+
+  // 為資料 sheet 預建固定列數的空白儲存格，並讓後續可套用文字格式
+  function ensureSheetDataRows(ws, columnCount, totalDataRows) {
+    for (let r = 1; r <= totalDataRows; r++) { // r=1 代表第 2 列（表頭下第一列）
+      for (let c = 0; c < columnCount; c++) {
+        const cellRef = XLSX.utils.encode_cell({ r, c });
+        if (!ws[cellRef]) {
+          ws[cellRef] = { t: "s", v: "", z: "@" };
+        }
+      }
+    }
+
+    // 確保範圍涵蓋到預建列數
+    const endRef = XLSX.utils.encode_cell({ r: totalDataRows, c: columnCount - 1 });
+    if (!ws["!ref"]) {
+      ws["!ref"] = `A1:${endRef}`;
+    } else {
+      const range = XLSX.utils.decode_range(ws["!ref"]);
+      range.e.r = Math.max(range.e.r, totalDataRows);
+      range.e.c = Math.max(range.e.c, columnCount - 1);
+      ws["!ref"] = XLSX.utils.encode_range(range);
+    }
+  }
 
   // ==========================================================
   // SERIAL SHEET
@@ -421,6 +466,7 @@ function downloadTransactionTemplate() {
 
   // 凍結第一列
   wsSerial["!freeze"] = { xSplit: 0, ySplit: 1 };
+  ensureSheetDataRows(wsSerial, serialHeaders.length, TEMPLATE_DATA_ROWS);
 
   // ==========================================================
   // DATECODE SHEET
@@ -443,7 +489,7 @@ function downloadTransactionTemplate() {
       "25123458",
       "customer_supplied",
       "2024W12",
-      50,
+      "50",
       "Datecode 收料範例"
     ]
   ];
@@ -459,6 +505,7 @@ function downloadTransactionTemplate() {
   }));
 
   wsDate["!freeze"] = { xSplit: 0, ySplit: 1 };
+  ensureSheetDataRows(wsDate, dateHeaders.length, TEMPLATE_DATA_ROWS);
 
   // ==========================================================
   // INSTRUCTIONS SHEET
@@ -489,6 +536,11 @@ function downloadTransactionTemplate() {
   const wsInstruction = XLSX.utils.aoa_to_sheet(instructionData);
 
   wsInstruction["!cols"] = [{ wch: 50 }];
+
+  // 全部工作表欄位格式強制為文字
+  forceSheetCellsAsText(wsSerial);
+  forceSheetCellsAsText(wsDate);
+  forceSheetCellsAsText(wsInstruction);
 
   // ==========================================================
   // 加入 Workbook

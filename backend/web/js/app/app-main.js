@@ -6,27 +6,35 @@ window.__activeOverlayCloser = null;
   const TAB_CONFIG = {
     dashboard: {
       sectionId: "tab-dashboard",
-      title: "首頁"
+      title: "首頁（總覽）"
     },
     transactions: {
       sectionId: "tab-transactions",
-      title: "收料 / 退料"
+      title: "操作中心"
     },
     query: {
       sectionId: "tab-query",
-      title: "治具 / 機種查詢"
+      title: "治具-機種查詢中心"
     },
     logs: {
       sectionId: "tab-logs",
-      title: "使用 / 更換記錄"
+      title: "庫存與壽命"
     },
     admin: {
       sectionId: "tab-admin",
-      title: "後台管理"
+      title: "資訊管理"
     }
   };
 
-  const tabButtons = Array.from(document.querySelectorAll("[data-tab]"));
+  const tabButtons = Array.from(document.querySelectorAll(".sidebar-main[data-tab]"));
+  const subRouteButtons = Array.from(document.querySelectorAll(".sidebar-subtab[data-route]"));
+  const defaultRouteByTab = {
+    dashboard: "dashboard",
+    transactions: "transactions/register",
+    logs: "logs/inventory",
+    query: "query",
+    admin: "admin/fixture_mt"
+  };
   const sections = {};
   Object.keys(TAB_CONFIG).forEach(key => {
     sections[key] = document.getElementById(TAB_CONFIG[key].sectionId);
@@ -35,6 +43,42 @@ window.__activeOverlayCloser = null;
   const bannerTitle = document.getElementById("activeTabTitle");
   let currentTab = null;
   const loadedFlags = {};
+
+  function expandSidebarGroup(tabKey) {
+    document.querySelectorAll(".nav-group").forEach(group => {
+      const isActive = group.dataset.navGroup === tabKey;
+      const submenu = group.querySelector(".sidebar-submenu");
+      if (submenu) submenu.classList.toggle("hidden", !isActive);
+    });
+  }
+
+  function setActiveSubRoute(route) {
+    const normalized = (route || "dashboard").replace(/^#/, "");
+    let matched = false;
+    subRouteButtons.forEach(btn => {
+      if (btn.dataset.route === normalized) {
+        btn.classList.add("subtab-active");
+        matched = true;
+      } else {
+        btn.classList.remove("subtab-active");
+      }
+    });
+
+    if (matched) return;
+
+    const main = normalized.split("/")[0];
+    const fallback = {
+      dashboard: "dashboard",
+      transactions: "transactions/register",
+      logs: "logs/inventory",
+      query: "query",
+      admin: "admin/fixture_mt"
+    }[main];
+
+    if (!fallback) return;
+    const fallbackBtn = subRouteButtons.find(btn => btn.dataset.route === fallback);
+    fallbackBtn?.classList.add("subtab-active");
+  }
 
   function normalizeHash(hash) {
     if (!hash) return "dashboard";
@@ -82,6 +126,7 @@ window.__activeOverlayCloser = null;
         btn.classList.remove("tab-active");
       }
     });
+    expandSidebarGroup(tabKey);
 
     // 3) 切換標題
     if (bannerTitle) {
@@ -121,7 +166,7 @@ window.__activeOverlayCloser = null;
                 if (typeof window.loadReplacementLogs === "function") window.loadReplacementLogs();
                 setTimeout(() => {
                   if (typeof window.switchLogTab === "function") {
-                    window.switchLogTab("usage");
+                    window.switchLogTab("inventory");
                   }
                 }, 100);
                 break;
@@ -146,32 +191,70 @@ window.__activeOverlayCloser = null;
   tabButtons.forEach(btn => {
     btn.addEventListener("click", () => {
       const tabKey = btn.dataset.tab;
+      expandSidebarGroup(tabKey);
 
       if (tabKey === "transactions") {
         setHash("transactions/register");
         showTab(tabKey, { updateHash: false });
+        if (typeof window.toggleOperationCenterView === "function") {
+          window.toggleOperationCenterView("legacy");
+        }
+        if (typeof window.hideTransactionsRecordPanel === "function") {
+          window.hideTransactionsRecordPanel();
+        }
+        if (typeof window.showTransactionSubTab === "function") {
+          window.showTransactionSubTab("ttab-register");
+        }
+        setActiveSubRoute("transactions/register");
       } else if (tabKey === "logs") {
-        setHash("logs/usage");
+        setHash("logs/inventory");
         showTab(tabKey, { updateHash: false });
+        setActiveSubRoute("logs/inventory");
       } else if (tabKey === "admin") {
         setHash("admin/fixture_mt");
         showTab(tabKey, { updateHash: false });
+        setActiveSubRoute("admin/fixture_mt");
       } else if (tabKey === "query") {
-        setHash("query/fixtures");
+        setHash("query");
         showTab(tabKey, { updateHash: false });
+        setActiveSubRoute("query");
+        if (typeof window.unifiedQuerySearch === "function") {
+          window.unifiedQuerySearch();
+        } else if (typeof window.loadFixturesQuery === "function") {
+          window.loadFixturesQuery();
+        }
       } else {
         const hash = btn.dataset.hash || tabKey;
         showTab(tabKey, { updateHash: true });
         setHash(hash);
+        setActiveSubRoute(defaultRouteByTab[tabKey] || hash);
       }
     });
   });
 
   // 監聽 hash 改變
-  window.addEventListener("hashchange", () => {
-    const tabKey = normalizeHash(location.hash);
-    showTab(tabKey, { updateHash: false });
-  });
+    window.addEventListener("hashchange", () => {
+      const fullRoute = location.hash.replace(/^#/, "") || "dashboard";
+      const tabKey = normalizeHash(location.hash);
+      const sub = getSubTab(location.hash);
+
+      if (
+        tabKey === "query" &&
+        ["receipt-records", "usage-records", "replacement-records"].includes(sub || "")
+      ) {
+        window.navigateSidebarRoute(fullRoute);
+        return;
+      }
+
+      showTab(tabKey, { updateHash: false });
+      if (tabKey === "transactions" && typeof window.toggleOperationCenterView === "function") {
+        window.toggleOperationCenterView("legacy");
+      }
+      if (tabKey === "logs" && typeof window.switchLogTab === "function") {
+        window.switchLogTab(sub || "inventory");
+      }
+      setActiveSubRoute(fullRoute);
+    });
 
   // Global ESC handler
   document.addEventListener("keydown", function (e) {
@@ -211,6 +294,7 @@ window.__activeOverlayCloser = null;
     };
     if (hashMap[page]) {
       setHash(hashMap[page]);
+      setActiveSubRoute(hashMap[page]);
     }
 
     // 更新按鈕樣式
@@ -274,7 +358,211 @@ window.__activeOverlayCloser = null;
     }
 
     // (1) Transactions 子頁籤切換
+    window.toggleOperationCenterView = function(mode = "hub") {
+      const hub = document.getElementById("operationCenterHub");
+      const legacy = document.getElementById("transactionsLegacy");
+      if (!legacy) return;
+
+      if (mode === "legacy") {
+        if (hub) hub.classList.add("hidden");
+        legacy.classList.remove("hidden");
+      } else {
+        if (hub) {
+          hub.classList.remove("hidden");
+          legacy.classList.add("hidden");
+        } else {
+          // 當前版面沒有 hub 時，維持 legacy 可見，避免操作中心空白
+          legacy.classList.remove("hidden");
+        }
+      }
+    };
+
+    function hideTransactionsRecordPanel() {
+      const host = document.getElementById("transactionsRecordHost");
+      if (!host) return;
+      host.classList.add("hidden");
+
+      const usage = document.getElementById("logtab-usage");
+      const replacement = document.getElementById("logtab-replacement");
+      if (usage) usage.classList.add("hidden");
+      if (replacement) replacement.classList.add("hidden");
+      moveRecordPanelsToLogs();
+    }
+    window.hideTransactionsRecordPanel = hideTransactionsRecordPanel;
+
+    function moveRecordPanelsToLogs() {
+      const logsSection = document.getElementById("tab-logs");
+      const usage = document.getElementById("logtab-usage");
+      const replacement = document.getElementById("logtab-replacement");
+      if (!logsSection || !usage || !replacement) return;
+
+      if (usage.parentElement !== logsSection) logsSection.appendChild(usage);
+      if (replacement.parentElement !== logsSection) logsSection.appendChild(replacement);
+    }
+    window.moveRecordPanelsToLogs = moveRecordPanelsToLogs;
+
+    function showTransactionsRecordPanel(kind) {
+      const host = document.getElementById("transactionsRecordHost");
+      const legacy = document.getElementById("transactionsLegacy");
+      const usage = document.getElementById("logtab-usage");
+      const replacement = document.getElementById("logtab-replacement");
+      if (!host || !legacy || !usage || !replacement) return;
+
+      moveRecordPanelsToLogs();
+      legacy.classList.add("hidden");
+      host.classList.remove("hidden");
+
+      if (kind === "usage") {
+        host.appendChild(usage);
+        usage.classList.remove("hidden");
+        replacement.classList.add("hidden");
+        document.getElementById("usageOpsBarLog")?.classList.remove("hidden");
+        if (typeof window.loadUsageLogs === "function") window.loadUsageLogs();
+      } else {
+        host.appendChild(replacement);
+        replacement.classList.remove("hidden");
+        usage.classList.add("hidden");
+        document.getElementById("replacementOpsBar")?.classList.remove("hidden");
+        if (typeof window.loadReplacementLogs === "function") window.loadReplacementLogs(1);
+      }
+    }
+
+    window.openOperationAction = function(action) {
+      if (action === "receipt" || action === "return") {
+        setHash("transactions/register");
+        showTab("transactions", { updateHash: false });
+        setActiveSubRoute(`transactions/${action}`);
+        setTimeout(() => {
+          if (typeof window.toggleOperationCenterView === "function") {
+            window.toggleOperationCenterView("legacy");
+          }
+          if (typeof window.showTransactionSubTab === "function") {
+            window.showTransactionSubTab("ttab-register");
+          }
+          const direction = document.getElementById("transactionDirection");
+          if (direction) direction.value = action;
+          if (typeof window.toggleTransactionAdd === "function") {
+            window.toggleTransactionAdd(true);
+          }
+        }, 80);
+        return;
+      }
+
+      if (action === "usage") {
+        setHash("transactions/usage");
+        showTab("transactions", { updateHash: false });
+        setActiveSubRoute("transactions/usage");
+        setTimeout(() => {
+          showTransactionsRecordPanel("usage");
+        }, 80);
+        return;
+      }
+
+      if (action === "replacement") {
+        setHash("transactions/replacement");
+        showTab("transactions", { updateHash: false });
+        setActiveSubRoute("transactions/replacement");
+        setTimeout(() => {
+          showTransactionsRecordPanel("replacement");
+        }, 80);
+      }
+    };
+
+    window.navigateSidebarRoute = function(route) {
+      const target = (route || "").replace(/^#/, "");
+      if (!target) return;
+
+      const [main, sub] = target.split("/");
+
+      if (main === "dashboard") {
+        showTab("dashboard", { updateHash: false });
+        setHash("dashboard");
+        setActiveSubRoute("dashboard");
+        return;
+      }
+
+      if (main === "transactions") {
+        if (sub === "receipt" || sub === "return" || sub === "usage" || sub === "replacement") {
+          window.openOperationAction(sub);
+          return;
+        }
+
+        showTab("transactions", { updateHash: false });
+        if (typeof window.toggleOperationCenterView === "function") {
+          window.toggleOperationCenterView(sub ? "legacy" : "hub");
+        }
+
+        if (sub === "register") {
+          hideTransactionsRecordPanel();
+          window.showTransactionSubTab?.("ttab-register");
+          return;
+        }
+        if (sub === "view-all") {
+          hideTransactionsRecordPanel();
+          window.showTransactionSubTab?.("ttab-view-all");
+          return;
+        }
+        if (sub === "inventory") {
+          hideTransactionsRecordPanel();
+          window.showTransactionSubTab?.("inventoryTab");
+          return;
+        }
+
+        setHash("transactions/register");
+        setActiveSubRoute("transactions/register");
+        return;
+      }
+
+      if (main === "logs") {
+        showTab("logs", { updateHash: false });
+        window.switchLogTab?.(sub || "inventory");
+        return;
+      }
+
+      if (main === "query") {
+        showTab("query", { updateHash: false });
+        setHash("query");
+        setActiveSubRoute("query");
+        if (typeof window.unifiedQuerySearch === "function") {
+          window.unifiedQuerySearch();
+        } else if (typeof window.loadFixturesQuery === "function") {
+          window.loadFixturesQuery();
+        }
+        return;
+      }
+
+      if (main === "admin") {
+        showTab("admin", { updateHash: false });
+        const adminMap = {
+          station_mt: "stations",
+          fixture_mt: "fixtures",
+          model_mt: "models",
+          owner_mt: "owners",
+          settings: "systems"
+        };
+        window.switchAdminPage?.(adminMap[sub] || "fixtures");
+      }
+    };
+
+    subRouteButtons.forEach(btn => {
+      if (btn.__subrouteBound) return;
+      btn.__subrouteBound = true;
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        window.navigateSidebarRoute(btn.dataset.route);
+      });
+    });
+
     window.showTransactionSubTab = function(tabId) {
+      if (tabId === "inventoryTab") {
+        showTab("logs", { updateHash: false });
+        if (typeof window.switchLogTab === "function") {
+          window.switchLogTab("inventory");
+        }
+        return;
+      }
+
       const tabs = [
           "ttab-register",
           "ttab-view-all",
@@ -319,14 +607,17 @@ window.__activeOverlayCloser = null;
       };
       if (hashMap[tabId]) {
         setHash(hashMap[tabId]);
+        setActiveSubRoute(hashMap[tabId]);
       }
+
+      if (typeof window.toggleOperationCenterView === "function") {
+        window.toggleOperationCenterView("legacy");
+      }
+      hideTransactionsRecordPanel();
 
       // 載入資料
       if (tabId === "ttab-view-all" && typeof window.loadTransactionViewAll === "function") {
         window.loadTransactionViewAll(1);
-      }
-      if (tabId === "inventoryTab" && typeof window.loadInventory === "function") {
-        window.loadInventory();
       }
     };
 
@@ -338,20 +629,30 @@ window.__activeOverlayCloser = null;
       setHash("transactions/register");
       showTab(initialTab, { updateHash: false });
     } else if (initialTab === "logs" && !initialSubTab) {
-      setHash("logs/usage");
+      setHash("logs/inventory");
       showTab(initialTab, { updateHash: false });
     } else if (initialTab === "admin" && !initialSubTab) {
       setHash("admin/fixture_mt");
       showTab(initialTab, { updateHash: false });
     } else if (initialTab === "query" && !initialSubTab) {
-      setHash("query/fixtures");
+      setHash("query");
       showTab(initialTab, { updateHash: false });
     } else {
       showTab(initialTab, { updateHash: true });
     }
 
+    setActiveSubRoute(location.hash.replace(/^#/, "") || "dashboard");
+
+    if (initialTab === "transactions" && typeof window.toggleOperationCenterView === "function") {
+      window.toggleOperationCenterView("legacy");
+    }
+
     // (3) 觸發子頁籤切換
-    const shouldTriggerSubTab = initialSubTab || (initialTab === "transactions") || (initialTab === "logs") || (initialTab === "admin") || (initialTab === "query");
+    const shouldTriggerSubTab =
+      initialSubTab ||
+      (initialTab === "logs") ||
+      (initialTab === "admin") ||
+      (initialTab === "transactions");
 
     if (shouldTriggerSubTab) {
       setTimeout(() => {
@@ -369,31 +670,14 @@ window.__activeOverlayCloser = null;
           }
         }
 
-        if (initialTab === "query") {
-          const queryMap = {
-            "fixtures": "fixture",
-            "model": "model"
-          };
-          const targetSubTab = initialSubTab || "fixtures";
-          const queryValue = queryMap[targetSubTab];
-
-          if (queryValue) {
-            const select = document.getElementById("queryType");
-            if (select) {
-              select.value = queryValue;
-              if (typeof window.switchQueryType === "function") {
-                window.switchQueryType();
-              }
-            }
-          }
-        }
-
         if (initialTab === "logs") {
           const logtabMap = {
+            "inventory": "inventory",
+            "lifecycle": "lifecycle",
             "usage": "usage",
             "replacement": "replacement"
           };
-          const targetSubTab = initialSubTab || "usage";
+          const targetSubTab = initialSubTab || "inventory";
           const logtabValue = logtabMap[targetSubTab];
           if (logtabValue && typeof window.switchLogTab === "function") {
             window.switchLogTab(logtabValue);
@@ -417,51 +701,66 @@ window.__activeOverlayCloser = null;
       }, 100);
     }
 
-    // (4) Query 子分頁
-   window.switchQueryType = function(type) {
-      const select = document.getElementById("queryType");
-      if (!select) return;
-
-      if (!type) type = select.value;
-      else select.value = type;
-
-      const hashMap = {
-        "fixture": "query/fixtures",
-        "model": "query/model"
-      };
-      if (hashMap[type]) {
-        setHash(hashMap[type]);
-      }
-
-      const fixtureTab = document.getElementById("fixtureQueryArea");
-      const modelTab = document.getElementById("modelQueryArea");
-
-      if (fixtureTab) fixtureTab.classList.toggle("hidden", type !== "fixture");
-      if (modelTab) modelTab.classList.toggle("hidden", type !== "model");
-
-      // 資料載入（只在切到時）
-      if (type === "fixture") {
-      if (typeof window.loadFixtureStorageOptions === "function") {
-        window.loadFixtureStorageOptions();
-      }
-
-      if (typeof window.fixtureQueryPage !== "undefined") {
-        window.fixtureQueryPage = 1;
-      }
-
-      if (typeof window.loadFixturesQuery === "function") {
-        window.loadFixturesQuery();
+    // (4) Logs 子分頁
+    function mountInventoryIntoLogs() {
+      const host = document.getElementById("logsInventoryHost");
+      const inventoryPanel = document.getElementById("inventoryTab");
+      if (!host || !inventoryPanel) return;
+      if (inventoryPanel.parentElement !== host) {
+        host.appendChild(inventoryPanel);
       }
     }
 
-      if (type === "model" && typeof window.loadModelsQuery === "function") {
-        window.loadModelsQuery();
+    async function loadLifecycleAdvancedAnalytics() {
+      try {
+        const [mtbf, failureRate, distribution, trend] = await Promise.all([
+          api("/lifecycle-analysis/mtbf"),
+          api("/lifecycle-analysis/failure-rate"),
+          api("/lifecycle-analysis/lifespan-distribution"),
+          api("/lifecycle-analysis/monthly-trend")
+        ]);
+
+        const mtbfEl = document.getElementById("lc-mtbf");
+        const failuresEl = document.getElementById("lc-failures");
+        const rateEl = document.getElementById("lc-failure-rate");
+        const breakdownEl = document.getElementById("lc-failure-breakdown");
+        const distEl = document.getElementById("lc-distribution");
+        const trendEl = document.getElementById("lc-monthly-trend");
+
+        if (mtbfEl) mtbfEl.textContent = mtbf?.average_lifespan ? Number(mtbf.average_lifespan).toFixed(2) : "-";
+        if (failuresEl) failuresEl.textContent = `失效數: ${mtbf?.total_failures ?? 0}`;
+        if (rateEl) rateEl.textContent = `${failureRate?.failure_rate_percent ?? 0}%`;
+        if (breakdownEl) {
+          breakdownEl.textContent = `premature ${failureRate?.premature_count ?? 0} / normal ${failureRate?.normal_expired_count ?? 0}`;
+        }
+
+        if (distEl) {
+          if (!distribution?.length) {
+            distEl.innerHTML = `<div class="text-gray-400">無資料</div>`;
+          } else {
+            distEl.innerHTML = distribution
+              .map(d => `<div class="flex justify-between"><span>${d.lifespan_range}</span><span class="font-semibold">${d.total}</span></div>`)
+              .join("");
+          }
+        }
+
+        if (trendEl) {
+          if (!trend?.length) {
+            trendEl.innerHTML = `<div class="text-gray-400">無資料</div>`;
+          } else {
+            trendEl.innerHTML = trend
+              .map(t => `<div class="flex justify-between"><span>${t.month}</span><span class="font-semibold text-red-600">${t.premature_count}</span></div>`)
+              .join("");
+          }
+        }
+      } catch (e) {
+        console.warn("loadLifecycleAdvancedAnalytics failed", e);
       }
-    };
+    }
 
-
-    // (5) Logs 子分頁
     window.switchLogTab = function(target) {
+      const inventoryTab = document.getElementById("logtab-inventory");
+      const lifecycleTab = document.getElementById("logtab-lifecycle");
       const usageTab = document.getElementById("logtab-usage");
       const replaceTab = document.getElementById("logtab-replacement");
       const tabButtons = document.querySelectorAll("[data-logtab]");
@@ -474,21 +773,47 @@ window.__activeOverlayCloser = null;
         }
       });
 
-      if (usageTab) usageTab.classList.add("hidden");
-      if (replaceTab) replaceTab.classList.add("hidden");
+      [inventoryTab, lifecycleTab, usageTab, replaceTab]
+        .forEach(el => el && el.classList.add("hidden"));
 
-      if (target === "usage" && usageTab) {
+      const usageOpsBar = document.getElementById("usageOpsBarLog");
+      const replacementOpsBar = document.getElementById("replacementOpsBar");
+
+      if (target === "inventory" && inventoryTab) {
+        mountInventoryIntoLogs();
+        moveRecordPanelsToLogs();
+        inventoryTab.classList.remove("hidden");
+        const inventoryPanel = document.getElementById("inventoryTab");
+        if (inventoryPanel) inventoryPanel.classList.remove("hidden");
+        if (typeof window.loadInventoryOverview === "function") {
+          window.loadInventoryOverview(1);
+        }
+      } else if (target === "lifecycle" && lifecycleTab) {
+        moveRecordPanelsToLogs();
+        lifecycleTab.classList.remove("hidden");
+        if (typeof window.loadLifecycleDashboard === "function") {
+          window.loadLifecycleDashboard();
+        }
+        loadLifecycleAdvancedAnalytics();
+      } else if (target === "usage" && usageTab) {
+        moveRecordPanelsToLogs();
         usageTab.classList.remove("hidden");
+        if (usageOpsBar) usageOpsBar.classList.remove("hidden");
       } else if (target === "replacement" && replaceTab) {
+        moveRecordPanelsToLogs();
         replaceTab.classList.remove("hidden");
+        if (replacementOpsBar) replacementOpsBar.classList.remove("hidden");
       }
 
       const hashMap = {
+        "inventory": "logs/inventory",
+        "lifecycle": "logs/lifecycle",
         "usage": "logs/usage",
         "replacement": "logs/replacement"
       };
       if (hashMap[target]) {
         setHash(hashMap[target]);
+        setActiveSubRoute(hashMap[target]);
       }
     };
 
@@ -576,11 +901,12 @@ window.__activeOverlayCloser = null;
       }
 
       // 切主 tab
-      showTab("transactions", { updateHash: false });
+      showTab("logs", { updateHash: false });
 
       setTimeout(() => {
-        // 切 inventory 子頁
-        showTransactionSubTab("inventoryTab");
+        if (typeof window.switchLogTab === "function") {
+          window.switchLogTab("inventory");
+        }
 
         // 帶查詢條件
         const input = document.getElementById("invSearchKeyword");

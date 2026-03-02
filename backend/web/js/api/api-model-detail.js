@@ -154,6 +154,31 @@ function apiGetModelDetail(model_id) {
 }
 
 /* ============================================================
+ * 🔁 關聯查詢（忽略站點）
+ * ============================================================ */
+function apiListModelsByFixture(fixture_id) {
+  if (!fixture_id) {
+    throw new Error("apiListModelsByFixture: fixture_id is required");
+  }
+  return api("/model-detail/relations/models-by-fixture", {
+    params: { fixture_id },
+  });
+}
+
+function apiListFixturesByModel(model_id) {
+  if (!model_id) {
+    throw new Error("apiListFixturesByModel: model_id is required");
+  }
+  return api("/model-detail/relations/fixtures-by-model", {
+    params: { model_id },
+  });
+}
+
+function apiSearchFixtureModelRelations(params = {}) {
+  return api("/model-detail/relations/search", { params });
+}
+
+/* ============================================================
  * Export to Global
  * ============================================================ */
 
@@ -169,3 +194,6 @@ window.apiUpdateRequirement = apiUpdateRequirement;
 window.apiDeleteRequirement = apiDeleteRequirement;
 
 window.apiGetModelDetail = apiGetModelDetail;
+window.apiListModelsByFixture = apiListModelsByFixture;
+window.apiListFixturesByModel = apiListFixturesByModel;
+window.apiSearchFixtureModelRelations = apiSearchFixtureModelRelations;
