@@ -58,7 +58,7 @@ function renderMachineModelTable(list) {
       <tr class="hover:bg-gray-50 transition">
         <td class="py-2 px-4">
           <span
-            class="text-indigo-600 underline cursor-pointer"
+            class="text-indigo-600 font-bold hover:underline cursor-pointer"
             onclick="openModelDetail('${m.id}')"
           >
             ${m.id}
@@ -341,12 +341,12 @@ function renderMeFixturePanel(requirements) {
         </thead>
         <tbody class="divide-y divide-gray-100">
           ${
-            (requirements || []).length
-              ? (requirements || []).map(r => `
-                  <tr>
-                    <td class="py-1 px-3 text-center">${r.fixture_id}</td>
-                    <td class="py-1 px-3 text-center">${r.required_qty}</td>
-                    <td class="py-1 px-3 text-center">
+	            (requirements || []).length
+	              ? (requirements || []).map(r => `
+	                  <tr>
+	                    <td class="py-1 px-3 text-center">${window.toDrawerLinkHtml ? window.toDrawerLinkHtml(r.fixture_id, "fixture") : r.fixture_id}</td>
+	                    <td class="py-1 px-3 text-center">${r.required_qty}</td>
+	                    <td class="py-1 px-3 text-center">
                       <div class="flex justify-center gap-2">
                         <button class="btn btn-xs btn-outline"
                           onclick="meEditRequirement(${r.id}, ${r.required_qty})">

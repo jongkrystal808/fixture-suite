@@ -88,10 +88,10 @@ const VIEW_ALL_TABLE_SCHEMA = {
     columns: [
       { key: 'transaction_date', label: '日期', render: r => formatDate(r.transaction_date) },
       { key: 'transaction_type', label: '類型', render: renderTxType },
-      { key: 'fixture_id', label: '治具' },
-      { key: 'order_no', label: '單號' },
+      { key: 'fixture_id', label: '治具', render: renderFixtureDrawerLink },
+      { key: 'order_no', label: '單號', render: renderOrderNoSearchLink },
       { key: 'record_type', label: '記錄類型', render: renderRecordType },
-      { key: 'quantity', label: '數量', render: renderQuantity },
+      { key: 'quantity', label: '數量', render: renderQuantitySearchable },
       { key: 'operator', label: '操作人員' }
     ]
   },
@@ -100,10 +100,10 @@ const VIEW_ALL_TABLE_SCHEMA = {
     columns: [
       { key: 'transaction_date', label: '日期', render: r => formatDate(r.transaction_date) },
       { key: 'transaction_type', label: '類型', render: renderTxType },
-      { key: 'fixture_id', label: '治具' },
-      { key: 'order_no', label: '單號', render: r => formatOrderNo(r.order_no)},
+      { key: 'fixture_id', label: '治具', render: renderFixtureDrawerLink },
+      { key: 'order_no', label: '單號', render: renderOrderNoSearchLink },
       { key: 'record_type', label: '記錄類型', render: renderRecordType },
-      { key: 'quantity', label: '數量', render: renderQuantity },
+      { key: 'quantity', label: '數量', render: renderQuantitySearchable },
       { key: 'operator', label: '操作人員' }
     ]
   }
@@ -396,7 +396,7 @@ function renderSerialModeTable(rows) {
     }
 
     const fixtureId = r.fixture_id || "-";
-    const orderNo = formatOrderNo(r.order_no);
+    const orderNoLink = renderOrderNoSearchLink(r);
     const serialNo = r.serial_number || r.serial || "-";
     const operator = r.operator || "-";
 
@@ -404,8 +404,8 @@ function renderSerialModeTable(rows) {
     tr.innerHTML = `
       <td class="py-2 pr-4">${txDate}</td>
       <td class="py-2 pr-4">${txTypeHtml}</td>
-      <td class="py-2 pr-4">${fixtureId}</td>
-      <td class="py-2 pr-4">${orderNo}</td>
+      <td class="py-2 pr-4">${renderFixtureDrawerLink(r)}</td>
+      <td class="py-2 pr-4">${orderNoLink}</td>
       <td class="py-2 pr-4 font-mono">
         <a class="text-blue-600 hover:underline cursor-pointer"
            onclick="openSerialDetail('${fixtureId}', '${serialNo}')">
@@ -446,6 +446,58 @@ function renderQuantity(r) {
   }
 
   return r.display_quantity_text || r.display_quantity || r.quantity || '-';
+}
+
+function renderTxSearchLink(label, payload) {
+  const text = String(label ?? "").trim();
+  if (!text || text === "-" || text === "null" || text === "undefined") return "-";
+  const safeText = text.replace(/[&<>"']/g, (ch) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }[ch]));
+
+  const encoded = encodeURIComponent(JSON.stringify(payload || {}));
+  return `
+    <button
+      type="button"
+      class="text-indigo-600 font-bold hover:underline cursor-pointer"
+      onclick="if(window.goToTransactionRecordSearch){window.goToTransactionRecordSearch(JSON.parse(decodeURIComponent('${encoded}')))}">
+      ${safeText}
+    </button>
+  `.trim();
+}
+
+function renderOrderNoSearchLink(r) {
+  const orderNo = formatOrderNo(r?.order_no);
+  return renderTxSearchLink(orderNo, {
+    fixture_id: r?.fixture_id || "",
+    order_no: orderNo,
+    mode: "all",
+  });
+}
+
+function renderQuantitySearchable(r) {
+  const quantityText = renderQuantity(r);
+  if (r?.record_type !== "datecode") return quantityText;
+  if (!r?.datecode || r.datecode === "-") return quantityText;
+
+  return renderTxSearchLink(quantityText, {
+    fixture_id: r?.fixture_id || "",
+    order_no: formatOrderNo(r?.order_no),
+    datecode: r?.datecode || "",
+    mode: "datecode",
+  });
+}
+
+function renderFixtureDrawerLink(r) {
+  const fixtureId = r?.fixture_id || "-";
+  if (typeof window.toDrawerLinkHtml === "function") {
+    return window.toDrawerLinkHtml(fixtureId, "fixture");
+  }
+  return fixtureId;
 }
 
 

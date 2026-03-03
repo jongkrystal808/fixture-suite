@@ -36,6 +36,11 @@ function closeLogin() {
   if (m) m.style.display = "none";
 }
 
+function isLoginModalOpen() {
+  const m = document.getElementById("loginModal");
+  return !!m && m.style.display !== "none" && m.style.display !== "";
+}
+
 /* ============================================================
  * Login
  * ============================================================ */
@@ -149,4 +154,19 @@ window.loadCurrentUser = loadCurrentUser;
  * ============================================================ */
 document.addEventListener("DOMContentLoaded", () => {
   loadCurrentUser();
+
+  document.addEventListener("keydown", (e) => {
+    if (!isLoginModalOpen()) return;
+
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeLogin();
+      return;
+    }
+
+    if (e.key === "Enter") {
+      e.preventDefault();
+      doLogin();
+    }
+  });
 });

@@ -177,6 +177,48 @@ function stripHtml(html) {
   return tmp.textContent || tmp.innerText || '';
 }
 
+function escapeHtmlText(str) {
+  return String(str ?? "").replace(/[&<>"']/g, (ch) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }[ch]));
+}
+
+/**
+ * 將 fixture/model ID 轉成可點擊 Drawer 連結
+ * @param {string} value - 真正傳給 drawer 的 ID
+ * @param {"fixture"|"model"} entityType - Drawer 類型
+ * @param {string} className - 額外 class
+ * @param {string|null} label - 顯示文字（預設同 value）
+ * @returns {string}
+ */
+function toDrawerLinkHtml(value, entityType = "fixture", className = "", label = null) {
+  const raw = String(value ?? "").trim();
+  if (!raw || raw === "-" || raw === "null" || raw === "undefined") {
+    return "-";
+  }
+
+  const display = escapeHtmlText(label ?? raw);
+  const encoded = encodeURIComponent(raw);
+  const openFn = entityType === "model" ? "openModelDetail" : "openFixtureDetail";
+  const baseClass = "text-indigo-600 font-bold hover:underline cursor-pointer";
+  const fullClass = [baseClass, className].filter(Boolean).join(" ");
+
+  return `
+    <button
+      type="button"
+      class="${fullClass}"
+      onclick="if(window.${openFn}) window.${openFn}(decodeURIComponent('${encoded}'))">
+      ${display}
+    </button>
+  `.trim();
+}
+
+window.toDrawerLinkHtml = toDrawerLinkHtml;
+
 // ============================================
 // 陣列處理
 // ============================================

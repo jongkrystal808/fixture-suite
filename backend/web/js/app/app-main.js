@@ -891,6 +891,65 @@ window.__activeOverlayCloser = null;
       }, 0);
     };
 
+    window.goToTransactionRecordSearch = function ({
+      order_no,
+      datecode,
+      fixture_id,
+      mode = "all"
+    }) {
+      showTab("transactions", { updateHash: false });
+
+      setTimeout(() => {
+        showTransactionSubTab("ttab-view-all");
+
+        const targetMode = datecode ? "datecode" : mode;
+        switchViewAllMode(targetMode);
+
+        const clearIds = [
+          "vaAllFixture",
+          "vaAllOrderNo",
+          "vaAllDatecode",
+          "vaAllSerial",
+          "vaAllOperator",
+          "vaDatecodeFixture",
+          "vaDatecodeOrderNo",
+          "vaDatecodeDatecode",
+          "vaDatecodeOperator",
+          "vaSerialFixture",
+          "vaSerialOrderNo",
+          "vaSerialSerial",
+          "vaSerialOperator",
+        ];
+        clearIds.forEach((id) => {
+          const el = document.getElementById(id);
+          if (el) el.value = "";
+        });
+
+        const hasValue = (value) => {
+          const v = String(value ?? "").trim();
+          return !!v && v !== "-" && v !== "null" && v !== "undefined";
+        };
+
+        const setValue = (id, value) => {
+          if (!hasValue(value)) return;
+          const el = document.getElementById(id);
+          if (el) el.value = value;
+        };
+
+        if (targetMode === "datecode") {
+          setValue("vaDatecodeFixture", fixture_id);
+          setValue("vaDatecodeOrderNo", order_no);
+          setValue("vaDatecodeDatecode", datecode);
+        } else {
+          setValue("vaAllFixture", fixture_id);
+          setValue("vaAllOrderNo", order_no);
+          setValue("vaAllDatecode", datecode);
+        }
+
+        loadTransactionViewAll(1);
+      }, 0);
+    };
+
     window.goToInventoryByFixture = function (fixture_id) {
       if (!fixture_id) return;
 

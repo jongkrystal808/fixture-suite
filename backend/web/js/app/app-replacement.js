@@ -14,7 +14,6 @@ const repFxInput       = document.getElementById("replaceAddFixture");
 const repLevelSelect   = document.getElementById("replaceAddLevel");
 const repSerialsInput  = document.getElementById("replaceAddSerials");
 const repOperatorInput = document.getElementById("replaceAddExecutor");
-const repDateInput     = document.getElementById("replaceAddDate");
 const repNoteInput     = document.getElementById("replaceAddNote");
 const repTableBody     = document.getElementById("replaceTable");
 let currentLifecycleMode = null;
@@ -31,7 +30,7 @@ function fmtDate(v) {
 }
 
 /* ============================================================ */
-/* 預設登入者 + 今天 */
+/* 預設登入者 */
 /* ============================================================ */
 
 function initReplacementDefaults() {
@@ -43,9 +42,6 @@ function initReplacementDefaults() {
       "";
   }
 
-  if (repDateInput && !repDateInput.value) {
-    repDateInput.value = new Date().toISOString().slice(0, 10);
-  }
 }
 
 /* ============================================================ */
@@ -55,7 +51,6 @@ function initReplacementDefaults() {
 function toggleReplacementSerialInputs() {
   const level = repLevelSelect?.value;
 
-  repFxInput?.addEventListener("blur", detectFixtureLifecycle);
   document
     .getElementById("replaceSerialSingleField")
     ?.classList.toggle("hidden", level !== "serial");
@@ -70,6 +65,7 @@ function toggleReplacementSerialInputs() {
 }
 
 repLevelSelect?.addEventListener("change", toggleReplacementSerialInputs);
+repFxInput?.addEventListener("blur", detectFixtureLifecycle);
 document
   .getElementById("replaceAddEventType")
   ?.addEventListener("change", toggleReplacementSerialInputs);
@@ -139,15 +135,15 @@ async function submitReplacementLog() {
 
     payload.scrap_qty = qty;
 
-    const datecode = document
-      .getElementById("replaceAddDatecode")
-      ?.value.trim();
-
-    if (!datecode) {
-      return toast("請輸入 datecode", "warning");
+    const datecode = document.getElementById("replaceAddDatecode")?.value.trim();
+    if (currentLifecycleMode === "fixture") {
+      if (!datecode) {
+        return toast("此治具需輸入 datecode", "warning");
+      }
+      payload.datecode = datecode;
+    } else if (datecode) {
+      payload.datecode = datecode;
     }
-
-    payload.datecode = datecode;
   }
 
   try {
@@ -252,7 +248,7 @@ function renderReplacementTable(rows) {
   if (!Array.isArray(rows) || rows.length === 0) {
     repTableBody.innerHTML = `
       <tr>
-        <td colspan="7" class="text-center text-gray-400 py-3">沒有資料</td>
+        <td colspan="8" class="text-center text-gray-400 py-3">沒有資料</td>
       </tr>
     `;
     return;
@@ -260,21 +256,26 @@ function renderReplacementTable(rows) {
 
   rows.forEach((r) => {
     const tr = document.createElement("tr");
+    const fixtureId = r.fixture_id ?? "-";
+    const fixtureLink = typeof window.toDrawerLinkHtml === "function"
+      ? window.toDrawerLinkHtml(fixtureId, "fixture")
+      : fixtureId;
 
-    // v6 相容
-    let serialText = "-";
-    if (r.serial_number) {
-      serialText = r.serial_number;
-    } else if (r.serial_start && r.serial_end) {
-      serialText = `${r.serial_start} ~ ${r.serial_end}`;
-    } else if (Array.isArray(r.serials)) {
-      serialText = r.serials.join(", ");
-    }
+    const serialText = r.serial_number || "-";
+    const eventTypeMap = {
+      maintenance: "送修",
+      scrap: "報廢",
+      normal_replacement: "正常更換",
+      premature_failure: "提前失效",
+      manual_scrap: "手動報廢",
+    };
+    const eventTypeLabel = eventTypeMap[r.event_type] || (r.event_type ?? "-");
 
     tr.innerHTML = `
       <td class="py-2 pr-4">${fmtDate(r.occurred_at)}</td>
-      <td class="py-2 pr-4">${r.fixture_id ?? "-"}</td>
+      <td class="py-2 pr-4">${fixtureLink}</td>
       <td class="py-2 pr-4">${renderReplacementLevelBadge(r)}</td>
+      <td class="py-2 pr-4">${eventTypeLabel}</td>
       <td class="py-2 pr-4">${r.scrap_qty ?? "-"}</td>
       <td class="py-2 pr-4">${serialText}</td>
       <td class="py-2 pr-4">${r.note ?? "-"}</td>
@@ -507,8 +508,6 @@ async function detectFixtureLifecycle() {
   }
 }
 function applyLifecycleUI() {
-  const level = repLevelSelect?.value;
-
   const isSerialMode = currentLifecycleMode === "serial";
   const isFixtureMode = currentLifecycleMode === "fixture";
 
@@ -546,4 +545,5 @@ function applyLifecycleUI() {
 
   // Unknown
   repLevelSelect.disabled = false;
+  toggleReplacementSerialInputs();
 }

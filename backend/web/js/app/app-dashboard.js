@@ -16,6 +16,13 @@ onUserReady(() => {
   }
 });
 
+function fixtureDrawerLinkHtml(fixtureId, className = "") {
+  if (typeof window.toDrawerLinkHtml === "function") {
+    return window.toDrawerLinkHtml(fixtureId, "fixture", className);
+  }
+  return fixtureId ?? "-";
+}
+
 /* ============================================================
  * Dashboard 主流程
  * ============================================================ */
@@ -38,7 +45,7 @@ async function loadDashboard() {
       (todayIn.items || []).forEach(r => {
         const div = document.createElement("div");
         div.className = "text-sm text-gray-700";
-        div.textContent = `${r.fixture_id} +${r.qty}`;
+        div.innerHTML = `${fixtureDrawerLinkHtml(r.fixture_id)} +${r.qty ?? 0}`;
         todayInList.appendChild(div);
       });
     }
@@ -56,7 +63,7 @@ async function loadDashboard() {
       (todayOut.items || []).forEach(r => {
         const div = document.createElement("div");
         div.className = "text-sm text-gray-700";
-        div.textContent = `${r.fixture_id} -${r.qty}`;
+        div.innerHTML = `${fixtureDrawerLinkHtml(r.fixture_id)} -${r.qty ?? 0}`;
         todayOutList.appendChild(div);
       });
     }
@@ -83,7 +90,7 @@ async function loadDashboard() {
 
           div.innerHTML = `
             <span>
-              ${r.fixture_id}
+              ${fixtureDrawerLinkHtml(r.fixture_id)}
               ${r.datecode ? `(${r.datecode})` : ""}
               <span class="text-xs text-gray-500 ml-1">
                 ${r.lifecycle_mode}
@@ -237,7 +244,7 @@ function renderLifecycleAlerts(rows) {
 
     tr.innerHTML = `
       <td class="py-2 pr-4">${r.entity_type}</td>
-      <td class="py-2 pr-4">${r.fixture_id}</td>
+      <td class="py-2 pr-4">${fixtureDrawerLinkHtml(r.fixture_id)}</td>
       <td class="py-2 pr-4">${r.serial_number ?? "-"}</td>
       <td class="py-2 pr-4 ${statusColor}">${r.lifecycle_status}</td>
       <td class="py-2 pr-4">${r.actual_value ?? "-"}</td>
@@ -269,7 +276,7 @@ function renderLifecycleAnomalies(rows) {
     div.className = "flex justify-between py-1";
 
     div.innerHTML = `
-      <span>${r.fixture_id}</span>
+      <span>${fixtureDrawerLinkHtml(r.fixture_id)}</span>
       <span class="text-red-600 font-semibold">${r.premature_count}</span>
     `;
 

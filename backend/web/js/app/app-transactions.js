@@ -235,8 +235,41 @@ async function loadRecentTransactions() {
       return;
     }
 
+    const toTxSearchLink = (label, payload) => {
+      const text = String(label ?? "").trim();
+      if (!text || text === "-" || text === "null" || text === "undefined") {
+        return "-";
+      }
+      const safeText = text.replace(/[&<>"']/g, (ch) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      }[ch]));
+      const encoded = encodeURIComponent(JSON.stringify(payload));
+      return `
+        <button
+          type="button"
+          class="text-indigo-600 font-bold hover:underline cursor-pointer"
+          onclick="if(window.goToTransactionRecordSearch){window.goToTransactionRecordSearch(JSON.parse(decodeURIComponent('${encoded}')))}">
+          ${safeText}
+        </button>
+      `.trim();
+    };
+
     tbody.innerHTML = transactions.map(t => {
       const typeLabel = t.transaction_type === 'receipt' ? '收料' : '退料';
+      const fixtureId = t.fixture_id || '-';
+      const fixtureLink = typeof window.toDrawerLinkHtml === "function"
+        ? window.toDrawerLinkHtml(fixtureId, "fixture")
+        : fixtureId;
+      const orderNoRaw = formatOrderNo(t.order_no);
+      const orderNoLink = toTxSearchLink(orderNoRaw, {
+        fixture_id: fixtureId,
+        order_no: orderNoRaw,
+        mode: "all",
+      });
       const recordTypeLabel = {
         batch: '批量',
         individual: '個別',
@@ -246,20 +279,30 @@ async function loadRecentTransactions() {
       // 日期格式化
       const dateStr = t.created_at || t.transaction_date || '';
 
+      const datecodeRaw = t.datecode || '-';
+      const hasDatecode = !!datecodeRaw && datecodeRaw !== '-';
+      const quantityText =
+        t.record_type === 'datecode'
+          ? `${datecodeRaw} (${t.quantity || t.display_quantity_text || '-'})`
+          : (t.quantity || t.display_quantity_text || '-');
+      const quantityDisplay =
+        t.record_type === 'datecode' && hasDatecode
+          ? toTxSearchLink(quantityText, {
+              fixture_id: fixtureId,
+              order_no: orderNoRaw,
+              datecode: datecodeRaw,
+              mode: "datecode",
+            })
+          : quantityText;
+
       return `
         <tr>
           <td class="py-2 pr-4">${formatDate(dateStr)}</td>
           <td class="py-2 pr-4">${typeLabel}</td>
-          <td class="py-2 pr-4">${t.fixture_id || '-'}</td>
-          <td class="py-2 pr-4">${t.order_no || '-'}</td>
+          <td class="py-2 pr-4">${fixtureLink}</td>
+          <td class="py-2 pr-4">${orderNoLink}</td>
           <td class="py-2 pr-4">${recordTypeLabel}</td>
-          <td class="py-2 pr-4">
-              ${    
-                t.record_type === 'datecode'
-                  ? `${t.datecode || '-'} (${t.quantity || t.display_quantity_text || '-'})`
-                  : (t.quantity || t.display_quantity_text || '-')
-              }
-            </td>
+          <td class="py-2 pr-4">${quantityDisplay}</td>
           <td class="py-2 pr-4">${t.source_type || '-'}</td>  
           <td class="py-2 pr-4">${t.operator || '-'}</td>
         </tr>

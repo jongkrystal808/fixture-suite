@@ -113,6 +113,9 @@ async function loadInventoryOverview(page = 1) {
 
     tbody.innerHTML = items.map(row => {
       const fixtureId = row.id || row.fixture_id || "-";
+      const fixtureLink = typeof window.toDrawerLinkHtml === "function"
+        ? window.toDrawerLinkHtml(fixtureId, "fixture", "font-mono")
+        : escapeHtml(fixtureId);
 
       const inStock   = row.in_stock_qty ?? 0;
       const supplied  = row.customer_supplied_qty ?? 0;
@@ -122,7 +125,7 @@ async function loadInventoryOverview(page = 1) {
       return `
         <tr class="hover:bg-gray-50">
           <td class="px-3 py-2 font-mono whitespace-nowrap">
-            ${escapeHtml(fixtureId)}
+            ${fixtureLink}
           </td>
     
           <td class="px-3 py-2 break-all">

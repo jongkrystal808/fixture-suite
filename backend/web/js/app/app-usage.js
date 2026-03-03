@@ -13,6 +13,7 @@ const usagePageSize = 20;
  * ============================================================ */
 
 const modelInput     = document.getElementById("usageAddModel");
+const modelSuggestBox = document.getElementById("usageModelSuggest");
 const stationInput   = document.getElementById("usageAddStation");
 const countInput     = document.getElementById("usageAddCount");
 const operatorInput  = document.getElementById("usageAddOperator");
@@ -32,9 +33,200 @@ function fmtDate(v) {
   return d.toISOString().slice(0, 10);
 }
 
+function escapeHtml(str) {
+  return String(str ?? "").replace(/[&<>"']/g, (ch) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }[ch]));
+}
+
 if (usedAtInput && !usedAtInput.value) {
   const today = new Date().toISOString().slice(0, 10);
   usedAtInput.value = today;
+}
+
+let usageModelSearchTimer = null;
+let usageModelSuggestItems = [];
+let usageModelActiveIndex = -1;
+let usageModelAutocompleteBound = false;
+let usageModelCache = null;
+
+function hideUsageModelSuggest() {
+  if (!modelSuggestBox) return;
+  modelSuggestBox.classList.add("hidden");
+  modelSuggestBox.innerHTML = "";
+  usageModelSuggestItems = [];
+  usageModelActiveIndex = -1;
+}
+
+function normalizeModelList(resp) {
+  if (Array.isArray(resp)) return resp;
+  if (Array.isArray(resp?.rows)) return resp.rows;
+  if (Array.isArray(resp?.items)) return resp.items;
+  if (Array.isArray(resp?.models)) return resp.models;
+  if (Array.isArray(resp?.data)) return resp.data;
+  return [];
+}
+
+function normalizeModelRows(rows) {
+  const uniq = new Map();
+  (rows || []).forEach((m) => {
+    const id = String(m?.id || m?.model_id || "").trim();
+    if (!id || uniq.has(id)) return;
+    uniq.set(id, {
+      id,
+      name: String(m?.model_name || m?.name || "").trim(),
+    });
+  });
+  return Array.from(uniq.values());
+}
+
+async function getUsageModelCache() {
+  if (Array.isArray(usageModelCache)) return usageModelCache;
+
+  const resp = typeof apiListMachineModels === "function"
+    ? await apiListMachineModels({ search: "", limit: 500, skip: 0 })
+    : await api("/models", { params: { limit: 500, skip: 0 } });
+
+  usageModelCache = normalizeModelRows(normalizeModelList(resp));
+  return usageModelCache;
+}
+
+function selectUsageModel(modelId) {
+  if (!modelInput || !modelId) return;
+  modelInput.value = modelId;
+  hideUsageModelSuggest();
+  loadStationsByModel(modelId);
+}
+
+function renderUsageModelSuggest(list) {
+  if (!modelSuggestBox) return;
+
+  usageModelSuggestItems = list;
+  usageModelActiveIndex = -1;
+
+  if (!list.length) {
+    modelSuggestBox.innerHTML = `<div class="px-3 py-2 text-xs text-gray-400">找不到機種</div>`;
+    modelSuggestBox.classList.remove("hidden");
+    return;
+  }
+
+  modelSuggestBox.innerHTML = list.map((m, idx) => `
+    <button
+      type="button"
+      class="w-full px-3 py-2 text-left hover:bg-gray-50 ${idx === 0 ? "bg-gray-50" : ""}"
+      onclick="selectUsageModel(decodeURIComponent('${encodeURIComponent(m.id)}'))">
+      <div class="font-mono text-sm">${escapeHtml(m.id)}</div>
+      <div class="text-xs text-gray-500 truncate">${escapeHtml(m.name || "-")}</div>
+    </button>
+  `).join("");
+
+  modelSuggestBox.classList.remove("hidden");
+}
+
+async function searchUsageModelSuggest(keyword) {
+  const kw = String(keyword || "").trim();
+  clearTimeout(usageModelSearchTimer);
+
+  if (!kw || kw.length < 1) {
+    hideUsageModelSuggest();
+    return;
+  }
+
+  if (modelSuggestBox) {
+    modelSuggestBox.innerHTML = `<div class="px-3 py-2 text-xs text-gray-400">搜尋中...</div>`;
+    modelSuggestBox.classList.remove("hidden");
+  }
+
+  usageModelSearchTimer = setTimeout(async () => {
+    try {
+      const resp = typeof apiListMachineModels === "function"
+        ? await apiListMachineModels({
+            search: kw,
+            limit: 12,
+            skip: 0,
+          })
+        : await api("/models", {
+            params: { q: kw, limit: 12, skip: 0 },
+          });
+
+      const direct = normalizeModelRows(normalizeModelList(resp));
+      if (direct.length > 0) {
+        renderUsageModelSuggest(direct);
+        return;
+      }
+
+      const cache = await getUsageModelCache();
+      const needle = kw.toLowerCase();
+      const fallback = cache
+        .filter((m) => (
+          m.id.toLowerCase().includes(needle) ||
+          m.name.toLowerCase().includes(needle)
+        ))
+        .slice(0, 12);
+
+      renderUsageModelSuggest(fallback);
+    } catch (err) {
+      console.error(err);
+      hideUsageModelSuggest();
+    }
+  }, 180);
+}
+
+function bindUsageModelAutocomplete() {
+  if (!modelInput) return;
+  if (usageModelAutocompleteBound) return;
+  usageModelAutocompleteBound = true;
+
+  modelInput.addEventListener("input", (e) => {
+    searchUsageModelSuggest(e.target.value);
+  });
+
+  modelInput.addEventListener("keydown", (e) => {
+    if (!modelSuggestBox || modelSuggestBox.classList.contains("hidden")) return;
+    if (!usageModelSuggestItems.length) return;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      usageModelActiveIndex = (usageModelActiveIndex + 1) % usageModelSuggestItems.length;
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      usageModelActiveIndex =
+        (usageModelActiveIndex - 1 + usageModelSuggestItems.length) % usageModelSuggestItems.length;
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const idx = usageModelActiveIndex >= 0 ? usageModelActiveIndex : 0;
+      const selected = usageModelSuggestItems[idx];
+      if (selected?.id) selectUsageModel(selected.id);
+      return;
+    } else if (e.key === "Escape") {
+      hideUsageModelSuggest();
+      return;
+    } else {
+      return;
+    }
+
+    const buttons = Array.from(modelSuggestBox.querySelectorAll("button"));
+    buttons.forEach((btn, idx) => {
+      if (idx === usageModelActiveIndex) {
+        btn.classList.add("bg-gray-100");
+      } else {
+        btn.classList.remove("bg-gray-100");
+      }
+    });
+  });
+
+  modelInput.addEventListener("blur", () => {
+    setTimeout(hideUsageModelSuggest, 120);
+  });
+
+  modelInput.addEventListener("focus", () => {
+    const val = modelInput.value.trim();
+    if (val.length >= 1) searchUsageModelSuggest(val);
+  });
 }
 
 /* ============================================================
@@ -71,6 +263,8 @@ modelInput?.addEventListener("change", () => {
   const modelId = modelInput.value.trim();
   if (modelId) loadStationsByModel(modelId);
 });
+
+window.selectUsageModel = selectUsageModel;
 
 /* ============================================================
  * 預覽（核心）
@@ -189,9 +383,12 @@ function renderPreview(data) {
 
       const row = document.createElement("div");
       row.className = "flex items-center justify-between mb-3";
+      const editableFixtureLink = typeof window.toDrawerLinkHtml === "function"
+        ? window.toDrawerLinkHtml(fx.fixture_id, "fixture", "font-medium")
+        : (fx.fixture_id ?? "-");
 
       row.innerHTML = `
-        <div class="font-medium w-24">${fx.fixture_id}</div>
+        <div class="w-24">${editableFixtureLink}</div>
         <div class="w-10 text-center">${fx.use_count}</div>
 
         <input
@@ -218,10 +415,13 @@ function renderPreview(data) {
 
         const row = document.createElement("div");
         row.className = "flex items-center justify-between";
+        const readonlyFixtureLink = typeof window.toDrawerLinkHtml === "function"
+          ? window.toDrawerLinkHtml(fx.fixture_id, "fixture", "font-medium")
+          : (fx.fixture_id ?? "-");
 
         row.innerHTML = `
           <div>
-            <div class="font-medium">${fx.fixture_id}</div>
+            <div>${readonlyFixtureLink}</div>
             <div class="text-sm text-gray-500">
               使用數量：${fx.use_count}
             </div>
@@ -424,6 +624,15 @@ function renderUsageTable(rows) {
   rows.forEach(r => {
 
     const tr = document.createElement("tr");
+    const fixtureId = r.fixture_id ?? "-";
+    const fixtureLink = typeof window.toDrawerLinkHtml === "function"
+      ? window.toDrawerLinkHtml(fixtureId, "fixture")
+      : fixtureId;
+    const modelIdForDrawer = r.model_id ?? r.model_name ?? "-";
+    const modelLabel = r.model_name ?? r.model_id ?? "-";
+    const modelLink = typeof window.toDrawerLinkHtml === "function"
+      ? window.toDrawerLinkHtml(modelIdForDrawer, "model", "", modelLabel)
+      : modelLabel;
 
     const serialText =
       r.serial_number ??
@@ -432,10 +641,10 @@ function renderUsageTable(rows) {
 
     tr.innerHTML = `
       <td class="py-2 pr-4">${fmtDate(r.used_at)}</td>
-      <td class="py-2 pr-4">${r.fixture_id ?? "-"}</td>
+      <td class="py-2 pr-4">${fixtureLink}</td>
       <td class="py-2 pr-4">${serialText}</td>
       <td class="py-2 pr-4">${r.station_name ?? r.station_id ?? "-"}</td>
-      <td class="py-2 pr-4">${r.model_name ?? r.model_id ?? "-"}</td>
+      <td class="py-2 pr-4">${modelLink}</td>
       <td class="py-2 pr-4">${r.use_count ?? "-"}</td>
       <td class="py-2 pr-4">${r.operator ?? "-"}</td>
       <td class="py-2 pr-4">${r.note ?? "-"}</td>
@@ -484,8 +693,13 @@ function toggleUsageAdd(show) {
 
 onUserReady?.(() => {
   onCustomerReady?.(() => {
+    bindUsageModelAutocomplete();
     loadUsageLogs();
   });
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+  bindUsageModelAutocomplete();
 });
 
 window.toggleUsageAdd = toggleUsageAdd;

@@ -419,12 +419,15 @@ function renderSerialDetailDrawer(data) {
   const usageBody = $("sdUsages");
   if (usageBody) {
     usageBody.innerHTML = "";
-    (data?.usages || []).forEach((u) => {
-      const dt = fmtDateTime(u.used_at);
-      const modelId = escapeHtml(u.model_id || "-");
-      const stationId = escapeHtml(u.station_id || "-");
-      const cnt = escapeHtml(u.use_count ?? "-");
-      const op = escapeHtml(u.operator || "-");
+	    (data?.usages || []).forEach((u) => {
+	      const dt = fmtDateTime(u.used_at);
+	      const modelIdRaw = u.model_id || "-";
+	      const modelId = typeof window.toDrawerLinkHtml === "function"
+	        ? window.toDrawerLinkHtml(modelIdRaw, "model")
+	        : escapeHtml(modelIdRaw);
+	      const stationId = escapeHtml(u.station_id || "-");
+	      const cnt = escapeHtml(u.use_count ?? "-");
+	      const op = escapeHtml(u.operator || "-");
       const note = escapeHtml(u.note || "-");
 
       usageBody.innerHTML += `

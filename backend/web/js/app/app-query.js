@@ -305,7 +305,7 @@ function renderFixturesTable(rows) {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td class="py-2 px-4">
-        <span class="text-indigo-600 underline cursor-pointer"
+        <span class="text-indigo-600 font-bold hover:underline cursor-pointer"
               onclick="openFixtureDetail('${fixtureId}')">
           ${fixtureId}
         </span>
@@ -467,7 +467,7 @@ function renderModelsQueryTable(list) {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td class="py-2 px-4">
-        <span class="text-indigo-600 underline cursor-pointer"
+        <span class="text-indigo-600 font-bold hover:underline cursor-pointer"
               onclick="openModelDetail('${modelId}')">
           ${modelId}
         </span>
@@ -931,11 +931,11 @@ function renderCapacitySection(capacity, requirements) {
                          </td>`
                       : "";
 
-                    return `
-                      <tr class="border-t">
-                        ${stationCell}
-                        <td class="px-3 py-2 border">${fixtureId}</td>
-                        <td class="px-3 py-2 border text-right tabular-nums">${reqQty}</td>
+	                    return `
+	                      <tr class="border-t">
+	                        ${stationCell}
+	                        <td class="px-3 py-2 border">${window.toDrawerLinkHtml ? window.toDrawerLinkHtml(fixtureId, "fixture") : fixtureId}</td>
+	                        <td class="px-3 py-2 border text-right tabular-nums">${reqQty}</td>
                         <td class="px-3 py-2 border text-right tabular-nums">
                           <span class="${shortage ? 'text-red-600 font-semibold' : ''}">
                             ${stockQty}
