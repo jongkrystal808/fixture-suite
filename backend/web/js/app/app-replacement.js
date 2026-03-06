@@ -511,39 +511,14 @@ function applyLifecycleUI() {
   const isSerialMode = currentLifecycleMode === "serial";
   const isFixtureMode = currentLifecycleMode === "fixture";
 
-  // Serial lifecycle
-  if (isSerialMode) {
-    document.getElementById("replaceSerialSingleField")
-      ?.classList.remove("hidden");
-
-    document.getElementById("replaceDatecodeField")
-      ?.classList.add("hidden");
-
-    document.getElementById("replaceScrapQtyField")
-      ?.classList.add("hidden");
-
-    repLevelSelect.value = "serial";
-    repLevelSelect.disabled = true;
+  // 不再依治具型態自動改寫更換層級，只保留 lifecycle 供送出驗證使用
+  // UI 欄位顯示完全跟隨使用者手動選擇的 record_level
+  if (isSerialMode || isFixtureMode) {
+    repLevelSelect.disabled = false;
+    toggleReplacementSerialInputs();
     return;
   }
 
-  // Fixture lifecycle (datecode)
-  if (isFixtureMode) {
-    document.getElementById("replaceSerialSingleField")
-      ?.classList.add("hidden");
-
-    document.getElementById("replaceDatecodeField")
-      ?.classList.remove("hidden");
-
-    document.getElementById("replaceScrapQtyField")
-      ?.classList.remove("hidden");
-
-    repLevelSelect.value = "fixture";
-    repLevelSelect.disabled = true;
-    return;
-  }
-
-  // Unknown
   repLevelSelect.disabled = false;
   toggleReplacementSerialInputs();
 }

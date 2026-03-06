@@ -277,10 +277,11 @@
                         </div>
 
                         <!-- 批量：流水號起訖 -->
-                        <div id="transactionBatchArea" class="grid md:grid-cols-5 gap-3">
+                        <div id="transactionBatchArea" class="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div class="field">
                             <label class="text-base font-semibold">序號起始 *</label>
                             <input id="transactionAddStart" class="input" placeholder="SN001">
+                            <p class="mt-1 text-xs text-slate-500">* 純數字序號請使用四位補零格式（15→0015、204→0204）</p>
                           </div>
                           <div class="field">
                             <label class="text-base font-semibold">序號結尾 *</label>
@@ -293,6 +294,7 @@
                           <div class="field md:col-span-5">
                             <label class="text-base font-semibold">序號 (逗號分隔) *</label>
                             <input id="transactionAddSerials" class="input" placeholder="例如: SN001, SN002, SN003">
+                            <p class="mt-1 text-xs text-slate-500">* 純數字序號請使用四位補零格式（15→0015、204→0204）</p>
                           </div>
                         </div>
 

@@ -1,0 +1,343 @@
+# Fixture-M UI 圖文操作手冊（詳細版）
+
+版本：v1.1（詳細圖文版模板）  
+更新日期：2026-03-06  
+適用角色：操作員、線長、工程師、管理員
+
+本版比一般版多了：
+- 每一步的「輸入欄位定義」
+- 每一步的「完成判斷」
+- 常見錯誤訊息與排除方式
+- 現場日常作業檢核表
+
+> 截圖檔名仍沿用 `docs/screenshots/README.md` 規範。
+
+---
+
+## 0. 文件使用方式
+1. 先看「第 1~3 章」完成登入與基礎資料。
+2. 日常作業依「第 4 章」操作中心流程執行。
+3. 若資料異常，先看「第 8 章 錯誤排除」。
+4. 每日收工前用「第 9 章 日結檢核表」。
+
+---
+
+## 1. 登入與客戶情境
+
+### 1.1 登入
+畫面：
+![image-20260306112615721](C:\Users\user\PycharmProjects\Fixture-M\docs\assets\image-20260306112615721.png)
+
+步驟：
+1. 於帳號欄輸入 `username`。
+2. 於密碼欄輸入 `password`。
+3. 點擊「登入」。
+
+完成判斷：
+- 右上角顯示使用者名稱。
+- 登入按鈕消失，登出按鈕顯示。
+- 可進入首頁總覽。
+
+失敗判斷與處置：
+- `帳號或密碼錯誤`：重新確認輸入。
+- `Token 無效或過期`：重新登入。
+- 無法登入且無帳號：請管理員建立使用者。
+
+### 1.2 選擇客戶（Customer Context）
+畫面：
+![image-20260306112644638](C:\Users\user\PycharmProjects\Fixture-M\docs\assets\image-20260306112644638.png)
+
+步驟：
+1. 點右上客戶下拉。
+2. 選擇目標客戶。
+3. 確認切換。
+
+完成判斷：
+- 頂部顯示目前客戶。
+- 各頁列表刷新為該客戶資料。
+
+常見錯誤：
+- `尚未選擇客戶`：請先切換客戶後再操作。
+- `無權限切換到該客戶`：此帳號未被授權該客戶。
+
+---
+
+## 2. 首頁總覽（Dashboard）
+http://172.17.11.72/web/index.html?inv_page=1&inv_page_size=10#dashboard
+
+畫面：
+![image-20260306112700169](C:\Users\user\PycharmProjects\Fixture-M\docs\assets\image-20260306112700169.png)
+
+解讀重點：
+- 今日收料：當日 receipt 事件數與摘要。
+- 今日退料：當日 return 事件數與摘要。
+- 即將更換治具：接近或進入警示/到期狀態。
+
+用途：
+- 每日開工快速確認是否有高風險治具需優先處理。
+
+---
+
+## 3. 主資料準備（首次導入必做）
+
+### 3.1 站點管理
+http://172.17.11.72/web/index.html?inv_page=1&inv_page_size=10#admin/station_mt
+
+畫面：
+![image-20260306112732769](C:\Users\user\PycharmProjects\Fixture-M\docs\assets\image-20260306112732769.png)
+
+步驟：
+1. 新增站點代碼與站點名稱。
+2. 儲存。
+
+完成判斷：
+- 站點可在使用記錄中被選到。
+
+### 3.2 機種管理
+http://172.17.11.72/web/index.html?inv_page=1&inv_page_size=10#admin/model_mt
+
+畫面：
+![image-20260306112753775](C:\Users\user\PycharmProjects\Fixture-M\docs\assets\image-20260306112753775.png)
+
+![image-20260306112901126](C:\Users\user\PycharmProjects\Fixture-M\docs\assets\image-20260306112901126.png)
+
+步驟：
+1. 新增機種（model_id / model_name）。
+2. 綁定站點。
+3. 設定該站點需要的治具與數量（required_qty）。
+
+完成判斷：
+- 查詢中心可看到機種。
+- 使用「最大可開站數」可計算合理值。
+
+### 3.3 治具管理
+
+http://172.17.11.72/web/index.html?inv_page=1&inv_page_size=10#admin/fixture_mt
+
+畫面：
+![image-20260306112934412](C:\Users\user\PycharmProjects\Fixture-M\docs\assets\image-20260306112934412.png)
+
+![image-20260306112957652](C:\Users\user\PycharmProjects\Fixture-M\docs\assets\image-20260306112957652.png)
+
+建議先填：
+- `id`（治具 ID）
+- `fixture_name`
+- `fixture_type`
+- `storage_location`
+- `replacement_cycle`
+- `cycle_unit`（uses/days）
+
+完成判斷：
+- 可在收退料與使用記錄被搜尋到。
+
+### 3.4 負責人管理
+http://172.17.11.72/web/index.html?inv_page=1&inv_page_size=10#admin/owner_mt
+
+畫面：![image-20260306113034673](C:\Users\user\PycharmProjects\Fixture-M\docs\assets\image-20260306113034673.png)
+
+用途：
+- 治具責任歸屬、後續通知與追蹤。
+
+---
+
+## 4. 操作中心（每日主流程）
+
+### 4.1 收料/退料登錄
+畫面入口：
+![image-20260306113118824](C:\Users\user\PycharmProjects\Fixture-M\docs\assets\image-20260306113118824.png)
+
+表單畫面：
+![image-20260306113134828](C:\Users\user\PycharmProjects\Fixture-M\docs\assets\image-20260306113134828.png)
+
+#### 4.1.1 欄位說明
+- `transaction_type`：`receipt` / `return`（必填）
+- `fixture_id`：治具編號（必填）
+- `record_type`：`batch` / `individual` / `datecode`
+- `source_type`：`customer_supplied` / `self_purchased`（必填）
+- `order_no`：單號（建議填）
+- `note`：備註（選填）
+
+依記錄類型：
+- `batch`：需 `serial_start` + `serial_end`
+- `individual`：需 `serials`（逗號分隔）
+- `datecode`：需 `datecode` + `quantity > 0`
+
+#### 4.1.2 操作步驟
+1. 選交易類型（收/退）。
+2. 輸入治具 ID。
+3. 選記錄類型。
+4. 依類型填序號或 datecode 資料。
+5. 選來源類型。
+6. 點提交。
+
+#### 4.1.3 完成判斷
+- 右下角提示成功。
+- 「最近登記 10 筆」出現新資料。
+
+#### 4.1.4 其他方式
+
+- 點擊下載匯入範本, 填寫表單, 填寫指示在instruction sheet內.
+- 點擊匯入, 即可完成匯入
+
+#### 4.1.5 常見錯誤
+- `請輸入治具 ID`：治具欄未填。
+- `batch 模式需填 serial_start / serial_end`：區間缺值。
+- `datecode 模式需提供 datecode 與 quantity > 0`：補齊 datecode 與數量。
+- `治具不存在或不屬於此客戶`：確認客戶切換與治具主檔。
+
+### 4.2 收退料查詢
+畫面：
+
+全部查詢:
+
+![image-20260306113243560](C:\Users\user\PycharmProjects\Fixture-M\docs\assets\image-20260306113243560.png)
+
+
+
+操作步驟：
+1. 切到「收/退料總檢視」。
+2. 依需求填條件：治具、單號、日期、操作者、序號、datecode。
+3. 查詢結果點擊可連動到其他頁面做追查。
+4. 先在查詢欄輸入資訊, 點擊匯出摘要, 會生成相關資訊摘要excel(純數量追蹤);  點擊匯出詳細, 會生成相關資訊詳細excel(數量追蹤且包含序號/datecode).
+
+完成判斷：
+- 查詢結果數量與條件一致。
+
+---
+
+序號查詢:
+![image-20260306113320523](C:\Users\user\PycharmProjects\Fixture-M\docs\assets\image-20260306113320523.png)
+
+操作步驟：
+
+1. 切到「收/退料總檢視」-序號查詢。
+2. 依需求填條件：治具、單號、日期、操作者、序號。
+3. 查詢結果點擊可連動到其他頁面做追查。
+
+完成判斷：
+
+- 查詢結果數量與條件一致。
+
+### 4.3 記錄治具使用
+畫面：
+![image-20260306113719621](C:\Users\user\PycharmProjects\Fixture-M\docs\assets\image-20260306113719621.png)
+
+![image-20260306113739639](C:\Users\user\PycharmProjects\Fixture-M\docs\assets\image-20260306113739639.png)
+
+必要條件：
+- `fixture_id`、`model_id`、`station_id`
+- `use_count > 0`
+
+重要規則：
+- Datecode 模式治具無需寫 usage。
+- uses 模式僅接受序號層級。
+
+步驟：
+1. 選治具、機種、站點。
+2. 輸入開站次數。
+3. 選 站點填入治具序號。
+4. 提交。
+
+完成判斷：
+- 使用記錄列表可查到新資料。
+
+### 4.4 記錄治具更換
+畫面：
+![image-20260306113932968](C:\Users\user\PycharmProjects\Fixture-M\docs\assets\image-20260306113932968.png)
+
+![image-20260306113945940](C:\Users\user\PycharmProjects\Fixture-M\docs\assets\image-20260306113945940.png)
+
+必要欄位：
+- `fixture_id`
+- `record_level`：serial / fixture
+- `event_type`：scrap / maintenance
+
+依層級規則：
+- 若治具為 序號模式：必填 `serial_number
+- 若治具為 Datecode 模式：必填 `datecode`,`scrap_qty > 0`
+
+完成判斷：
+- 回傳 inserted_count > 0。
+- 更換記錄列表可查到該筆。
+
+---
+
+## 5. 庫存與壽命監控
+
+### 5.1 在庫總覽
+畫面：
+![image-20260306114625390](C:\Users\user\PycharmProjects\Fixture-M\docs\assets\image-20260306114625390.png)
+
+用途：
+- 盤點在庫量、部署量、維修量、報廢量。
+- 快速發現數量不合理治具。
+- 點擊查看可追溯來源
+
+### 5.2 壽命分析
+畫面：
+![image-20260306114812576](C:\Users\user\PycharmProjects\Fixture-M\docs\assets\image-20260306114812576.png)
+
+用途：
+- 看 normal / warning / expired。
+- 排定預防性更換。
+
+---
+
+## 6. 查詢中心
+畫面：
+![image-20260306114843805](C:\Users\user\PycharmProjects\Fixture-M\docs\assets\image-20260306114843805.png)
+
+功能：
+- 治具查詢
+- 機種查詢
+- 關聯反查（治具 -> 機種、機種 -> 治具）
+- 點擊 ID 開抽屜查看詳情
+
+建議：
+- 先用關鍵字縮小範圍，再做關聯追查。
+
+---
+
+## 7. 匯入作業標準
+
+### 7.1 共通原則
+- 一律先下載對應範本。
+- 保留標題列，不要改欄位名稱。
+- 序號欄位以文字格式維持前導零。
+- 先小批測試匯入，再大量匯入。
+
+### 7.2 匯入後驗證
+- 檢查 success/failed 筆數。
+- 若 failed > 0，先按列號修正再重匯。
+
+---
+
+## 8. 錯誤訊息對照表（現場版）
+| 錯誤訊息 | 原因 | 處理方式 |
+|---|---|---|
+| 尚未選擇客戶 | 沒有 customer context | 先切換客戶 |
+| Token 無效或過期 | 登入過期 | 重新登入 |
+| 需要管理員權限 | 權限不足 | 改 admin 帳號 |
+| 治具不存在或不屬於此客戶 | 主檔不存在或客戶錯誤 | 檢查治具 ID 與客戶 |
+| use_count 必須 > 0 | 使用次數輸入錯誤 | 輸入正整數 |
+| serial 模式需提供 serial_number | serial 欄位空白 | 補序號 |
+| fixture 模式必須提供 scrap_qty | fixture 更換缺數量 | 補正整數數量 |
+| datecode 模式必須提供 datecode | Datecode 更換缺資料 | 補 datecode |
+
+---
+
+## 9. 每日日結檢核表
+1. 今日收料是否全數登錄。
+2. 今日退料是否全數登錄。
+3. 當日使用記錄是否補齊。
+4. 異常治具是否已做更換/維修記錄。
+5. 壽命 warning/expired 清單是否已確認。
+6. 是否輸出必要報表並存檔。
+
+---
+
+## 10. 管理者每週檢核
+1. 權限與客戶綁定是否正確。
+2. 主資料（機種/站點/治具需求）是否更新。
+3. 匯入錯誤是否有重複模式（教育訓練需求）。
+4. 壽命到期治具是否有處置紀錄。
