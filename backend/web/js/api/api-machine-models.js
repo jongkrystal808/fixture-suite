@@ -108,14 +108,14 @@ function apiDeleteMachineModel(modelId) {
  * - customer scope 由後端 token / header 決定
  */
 function apiExportModelsXlsx() {
-  window.open("/api/v2/models/export", "_blank");
+  window.open(apiURL("/models/export"), "_blank");
 }
 
 /**
  * 下載機種匯入樣本（XLSX）
  */
 function apiDownloadModelsTemplate() {
-  window.open("/api/v2/models/template", "_blank");
+  window.open(apiURL("/models/template"), "_blank");
 }
 
 /**

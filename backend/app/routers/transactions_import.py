@@ -242,11 +242,16 @@ def read_transactions_excel(content: bytes) -> pd.DataFrame:
 
             if "record_type" not in df.columns:
                 df["record_type"] = "datecode"
+            df["__sheet_name"] = str(sheet_name)
+            # df.index 仍對應原始 Excel 列（0-based），+1 轉為 Excel 顯示列號
+            df["__excel_row"] = df.index.astype(int) + 1
             merged.append(df)
 
         elif "serial" in name:
             required = ["transaction_type", "fixture_id", "record_type", "source_type"]
             df = _sheet_to_df(df_raw, required_cols=required)
+            df["__sheet_name"] = str(sheet_name)
+            df["__excel_row"] = df.index.astype(int) + 1
             merged.append(df)
 
         else:
@@ -254,6 +259,8 @@ def read_transactions_excel(content: bytes) -> pd.DataFrame:
             required = ["transaction_type", "fixture_id", "record_type", "source_type"]
             try:
                 df = _sheet_to_df(df_raw, required_cols=required)
+                df["__sheet_name"] = str(sheet_name)
+                df["__excel_row"] = df.index.astype(int) + 1
                 merged.append(df)
             except Exception:
                 # 不是資料 sheet 就跳過
@@ -268,8 +275,9 @@ def read_transactions_excel(content: bytes) -> pd.DataFrame:
     out = out[~((out.get("transaction_type", "") == "") & (out.get("fixture_id", "") == ""))]
 
     # 忽略示例列
+    data_columns = [c for c in out.columns if not str(c).startswith("__")]
     out = out[
-        ~out.apply(
+        ~out[data_columns].apply(
             lambda r: any(
                 str(v).lower() in ("example", "示例", "範例", "test")
                 for v in r
@@ -279,6 +287,21 @@ def read_transactions_excel(content: bytes) -> pd.DataFrame:
     ]
 
     return out
+
+
+def _format_row_label(row: pd.Series, fallback_row_no: int) -> str:
+    row_no = fallback_row_no
+    raw_row_no = row.get("__excel_row")
+    if raw_row_no is not None and str(raw_row_no).strip() != "":
+        try:
+            row_no = int(float(raw_row_no))
+        except Exception:
+            row_no = fallback_row_no
+
+    sheet_name = read_str_optional(row.get("__sheet_name"))
+    if sheet_name:
+        return f"{sheet_name} 第 {row_no} 行"
+    return f"第 {row_no} 行"
 
 
 # ============================================================
@@ -314,7 +337,8 @@ async def import_transactions(
     warnings: list[str] = []
 
     for idx, row in df.iterrows():
-        row_no = idx + 2  # 合併後 row_no 僅作提示用
+        row_no = idx + 2
+        row_label = _format_row_label(row, row_no)
         try:
             tx_type = normalize_tx_type(row.get("transaction_type"))
             fixture_id = read_str_optional(row.get("fixture_id"))
@@ -352,7 +376,7 @@ async def import_transactions(
 
                 # 🔍 異常區間警告（不阻擋）
                 if size > WARNING_BATCH_SIZE:
-                    warnings.append(f"第 {row_no} 行：batch 區間偏大（{size} 筆），請確認是否為預期操作")
+                    warnings.append(f"{row_label}：batch 區間偏大（{size} 筆），請確認是否為預期操作")
 
                 serials_csv = ",".join(serial_list)
                 quantity = size
@@ -404,7 +428,7 @@ async def import_transactions(
             msg = str(e)
             if isinstance(e, pymysql.MySQLError) and getattr(e, "args", None) and len(e.args) >= 2:
                 msg = e.args[1]
-            errors.append(f"第 {row_no} 行：{msg}")
+            errors.append(f"{row_label}：{msg}")
 
     return {
         "count": total_created,

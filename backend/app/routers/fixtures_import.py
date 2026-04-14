@@ -104,6 +104,9 @@ async def import_fixtures_xlsx(
         "errors": [],
     }
 
+    # 記錄成功列的 row_no → fixture_id，供第 6️⃣ 步 cache 重建使用
+    imported_fixtures: dict[int, str] = {}
+
     conn = db.get_conn()
     cursor = conn.cursor()
 
@@ -111,18 +114,20 @@ async def import_fixtures_xlsx(
         # =================================================
         # 4️⃣ 逐行處理
         # =================================================
-        for row_no, row in enumerate(
-            ws.iter_rows(min_row=2, values_only=True),
-            start=2
-        ):
+        # 使用 values_only=False，從 cell 物件取得 Excel 真實行號
+        for row in ws.iter_rows(min_row=2, values_only=False):
+            row_no = row[0].row  # ← 直接取 Excel 真實行號，不依賴 enumerate
+            row_values = tuple(cell.value for cell in row)
+
             try:
-                if not row:
+                # 全部欄位皆為 None → 真正的空行
+                if not any(row_values):
                     result["fixtures"]["skipped"] += 1
                     result["fixtures"]["skipped_rows"].append(row_no)
                     continue
 
-                fixture_id = str(row[idx["id"]] or "").strip()
-                fixture_name = str(row[idx["fixture_name"]] or "").strip()
+                fixture_id = str(row_values[idx["id"]] or "").strip()
+                fixture_name = str(row_values[idx["fixture_name"]] or "").strip()
 
                 if not fixture_id or not fixture_name:
                     result["fixtures"]["skipped"] += 1
@@ -130,32 +135,32 @@ async def import_fixtures_xlsx(
                     continue
 
                 fixture_type = (
-                    str(row[idx["fixture_type"]]).strip()
-                    if "fixture_type" in idx and row[idx["fixture_type"]] is not None
+                    str(row_values[idx["fixture_type"]]).strip()
+                    if "fixture_type" in idx and row_values[idx["fixture_type"]] is not None
                     else ""
                 )
 
                 storage_location = (
-                    str(row[idx["storage_location"]]).strip()
-                    if "storage_location" in idx and row[idx["storage_location"]] is not None
+                    str(row_values[idx["storage_location"]]).strip()
+                    if "storage_location" in idx and row_values[idx["storage_location"]] is not None
                     else ""
                 )
 
                 replacement_cycle = (
-                    int(row[idx["replacement_cycle"]])
-                    if "replacement_cycle" in idx and row[idx["replacement_cycle"]] is not None
+                    int(row_values[idx["replacement_cycle"]])
+                    if "replacement_cycle" in idx and row_values[idx["replacement_cycle"]] is not None
                     else None
                 )
 
                 cycle_unit_raw = (
-                    str(row[idx["cycle_unit"]]).strip().lower()
-                    if "cycle_unit" in idx and row[idx["cycle_unit"]] is not None
+                    str(row_values[idx["cycle_unit"]]).strip().lower()
+                    if "cycle_unit" in idx and row_values[idx["cycle_unit"]] is not None
                     else "uses"
                 )
 
                 note = (
-                    str(row[idx["note"]]).strip()
-                    if "note" in idx and row[idx["note"]] is not None
+                    str(row_values[idx["note"]]).strip()
+                    if "note" in idx and row_values[idx["note"]] is not None
                     else ""
                 )
 
@@ -224,6 +229,7 @@ async def import_fixtures_xlsx(
 
                 result["fixtures"]["imported"] += 1
                 result["fixtures"]["success_rows"].append(row_no)
+                imported_fixtures[row_no] = fixture_id  # ← 記錄供 cache 重建用
 
             except Exception as e:
                 result["errors"].append(f"第 {row_no} 行：{str(e)}")
@@ -259,9 +265,9 @@ async def import_fixtures_xlsx(
 
         # =================================================
         # 6️⃣ v6：重建 cache
+        # 直接用 imported_fixtures dict，不再重新讀 worksheet
         # =================================================
-        for row_no in result["fixtures"]["success_rows"]:
-            fixture_id = str(ws[row_no][idx["id"]].value).strip()
+        for fixture_id in imported_fixtures.values():
             cursor.execute(
                 "CALL sp_rebuild_fixture_quantities_v6(%s, %s)",
                 (customer_id, fixture_id)

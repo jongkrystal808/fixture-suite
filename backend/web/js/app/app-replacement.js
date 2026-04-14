@@ -379,7 +379,7 @@ window.handleReplacementImport = async function (input) {
     const formData = new FormData();
     formData.append("file", file);
 
-    const res = await fetch("/api/v2/replacement/import", {
+    const res = await fetch(apiURL("/replacement/import"), {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${token}`,
@@ -441,7 +441,7 @@ window.downloadReplaceTemplate = async function () {
       return;
     }
 
-    const res = await fetch("/api/v2/replacement/template", {
+    const res = await fetch(apiURL("/replacement/template"), {
       method: "GET",
       headers: {
         "Authorization": `Bearer ${token}`,

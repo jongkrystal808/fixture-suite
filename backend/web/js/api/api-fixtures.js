@@ -146,14 +146,14 @@ function apiGetFixtureStatisticsSummary() {
  * - customer context 由後端 token / header 決定
  */
 function apiExportFixturesXlsx() {
-  window.open("/api/v2/fixtures/export", "_blank");
+  window.open(apiURL("/fixtures/export"), "_blank");
 }
 
 /**
  * 下載治具匯入樣本（XLSX）
  */
 function apiDownloadFixturesTemplate() {
-  window.open("/api/v2/fixtures/template", "_blank");
+  window.open(apiURL("/fixtures/template"), "_blank");
 }
 
 /**
@@ -216,4 +216,3 @@ window.apiExportFixturesXlsx = apiExportFixturesXlsx;
 window.apiDownloadFixturesTemplate = apiDownloadFixturesTemplate;
 window.apiImportFixturesXlsx = apiImportFixturesXlsx;
 window.apiSearchFixtures = apiSearchFixtures;
-
